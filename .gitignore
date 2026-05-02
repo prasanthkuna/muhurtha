@@ -9,6 +9,7 @@
 # OS
 .DS_Store
 Thumbs.db
+*.zip
 
 # Supabase
 supabase/.temp/
