@@ -1,0 +1,26 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+**/*.freezed.dart
+**/*.g.dart
+
+# IDE
+.idea/
+*.iml
+
+# iOS/macOS
+**/Pods/
+**/DerivedData/
+
+# Android
+**/android/.gradle/
+**/android/local.properties
+**/*.jks
+
+# Env (if you add real keys locally)
+.env
+.env.*
+
+# Flutter: compile-time defines (copy from dart_defines.example.json)
+dart_defines.json

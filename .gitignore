@@ -1,0 +1,32 @@
+# IDE
+.vscode/
+.idea/
+.cursor/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Supabase
+supabase/.temp/
+
+# Flutter (from app subfolder)
+app/.dart_tool/
+app/.packages
+app/build/
+app/dart_defines.json
+app/android/.gradle/
+app/android/local.properties
+app/android/app/build/
+app/android/app/src/main/res/values/google-services.json
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/flutter_export_environment.sh
+app/ios/Runner/GoogleService-Info.plist
+app/windows/flutter/ephemeral/
+
+# Env
+.env
+.env.*
