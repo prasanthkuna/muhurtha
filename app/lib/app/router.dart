@@ -5,14 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/config/env.dart';
-import '../core/data/muhurtha_engine_api.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/home/home_shell.dart';
 import '../features/onboarding/accuracy_screen.dart';
 import '../features/onboarding/birth_basics_screen.dart';
+import '../features/onboarding/concern_screen.dart';
 import '../features/onboarding/nakshatra_screen.dart';
 import '../features/onboarding/time_bucket_screen.dart';
-import '../features/onboarding/quick_proof_screen.dart';
 import '../features/profile/profile_tune_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/welcome/welcome_screen.dart';
@@ -65,31 +64,26 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const NakshatraScreen(),
       ),
       GoRoute(
+        path: '/onboarding/concern',
+        builder: (context, state) => const ConcernScreen(),
+      ),
+      GoRoute(
         path: '/onboarding/accuracy',
         builder: (context, state) => const AccuracyScreen(),
       ),
       GoRoute(
-        path: '/onboarding/quick-proof',
-        builder: (context, state) {
-          final extra = state.extra;
-          if (extra is List<QuickProofCard>) {
-            return QuickProofScreen(initialCards: extra);
-          }
-          if (extra is List) {
-            try {
-              return QuickProofScreen(
-                initialCards: extra.cast<QuickProofCard>(),
-              );
-            } catch (_) {
-              return const QuickProofScreen();
-            }
-          }
-          return const QuickProofScreen();
-        },
-      ),
-      GoRoute(
         path: '/home',
-        builder: (context, state) => const HomeShell(),
+        builder: (context, state) {
+          final tab = state.uri.queryParameters['tab'];
+          final initialIndex = switch (tab) {
+            'life_map' || 'journey' => 1,
+            'today' || 'remedies' => 2,
+            'timing' => 3,
+            'ask' || 'purpose' => 4,
+            _ => 0,
+          };
+          return HomeShell(initialIndex: initialIndex);
+        },
       ),
       GoRoute(
         path: '/profile',

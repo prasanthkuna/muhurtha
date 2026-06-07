@@ -82,9 +82,12 @@ export function vimshottariMahadashas(
   birthDate: Date,
   nakshatraIdx: number,
   pada: number | null,
+  fractionThroughNakshatra: number | null = null,
 ): MdSegment[] {
   const padaN = Math.min(4, Math.max(1, pada ?? 2));
-  const thruNak = (padaN - 0.5) / 4;
+  const thruNak = fractionThroughNakshatra != null
+    ? Math.min(0.999999, Math.max(0, fractionThroughNakshatra))
+    : (padaN - 0.5) / 4;
   let lordIdx = nakshatraIdx % 9;
   let cursor = new Date(birthDate.getTime());
   const segments: MdSegment[] = [];

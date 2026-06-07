@@ -32,14 +32,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authPhone => 'Mobile number';
 
   @override
-  String get authPhoneHint =>
-      'E.164 (+country code). Tap the field to pick your number when offered.';
+  String get authPhoneHint => 'Include country code, e.g. +91…';
 
   @override
   String get authSendCode => 'Send code';
 
   @override
+  String get authPickingNumber => 'Choose your number in the popup…';
+
+  @override
+  String get authSendingCode => 'Sending verification code…';
+
+  @override
+  String get authWaitingForSms =>
+      'Waiting for your SMS — code will fill automatically.';
+
+  @override
+  String get authVerifying => 'Signing you in…';
+
+  @override
   String get authOtpLabel => 'Verification code';
+
+  @override
+  String get authOtpAutoHint =>
+      'When Android asks, tap Allow once to read the code. No typing needed.';
 
   @override
   String get authVerify => 'Verify';
@@ -138,7 +154,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navToday => 'Today';
 
   @override
-  String get navPurpose => 'Purpose';
+  String get navPurpose => 'Ask';
 
   @override
   String get navJourney => 'Journey';
@@ -340,4 +356,229 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileSaved => 'Timing refreshed for all tabs.';
+
+  @override
+  String get luckyTitle => 'Your natal luck';
+
+  @override
+  String get luckyNumbers => 'Lucky numbers';
+
+  @override
+  String get luckyDays => 'Lucky days';
+
+  @override
+  String get luckyColours => 'Lucky colours';
+
+  @override
+  String get locationDetectAction => 'Detect location';
+
+  @override
+  String get locationDetectedHint =>
+      'City and language detected from your location. You can edit either.';
+
+  @override
+  String get concernTitle => 'What matters most?';
+
+  @override
+  String get concernSubtitle =>
+      'Pick what you want Muhūrta to focus on first. This shapes your personalised copy.';
+
+  @override
+  String get concernMainLabel => 'Main concern';
+
+  @override
+  String get concernRoleLabel => 'Life role';
+
+  @override
+  String get concernLifeStuck => 'Why life feels stuck';
+
+  @override
+  String get concernCareerTiming => 'Career timing';
+
+  @override
+  String get concernMoneyGrowth => 'Money growth';
+
+  @override
+  String get concernMarriage => 'Marriage / relationship';
+
+  @override
+  String get concernFamilyPressure => 'Family pressure';
+
+  @override
+  String get concernBusiness => 'Business direction';
+
+  @override
+  String get concernHealth => 'Health / routine';
+
+  @override
+  String get concernGoodBadTiming => 'Good / bad time today';
+
+  @override
+  String get roleStudent => 'Student / fresher';
+
+  @override
+  String get roleEarlyCareer => 'Early career (job)';
+
+  @override
+  String get roleManager => 'Manager / senior IC';
+
+  @override
+  String get roleBusinessOwner => 'Business owner';
+
+  @override
+  String get roleHomemaker => 'Homemaker / family-first';
+
+  @override
+  String get roleBetweenJobs => 'Between jobs / pivoting';
+
+  @override
+  String get errorAskLimitReached =>
+      'You\'ve used today\'s free question. Come back tomorrow or upgrade for more.';
+
+  @override
+  String get loadingOpening => 'Opening Muhurtha...';
+
+  @override
+  String get loadingDecode => 'Preparing your Decode...';
+
+  @override
+  String get loadingToday => 'Preparing today...';
+
+  @override
+  String get loadingProfile => 'Loading your profile...';
+
+  @override
+  String get loadingTodayWindows => 'Checking today\'s useful windows...';
+
+  @override
+  String get loadingTimingPlan => 'Building your timing plan...';
+
+  @override
+  String get loadingLifeMap => 'Building your Life Map...';
+
+  @override
+  String get loadingBoot => 'Opening your timing space...';
+
+  @override
+  String get loadingAuth => 'Checking your profile...';
+
+  @override
+  String get loadingGenerate => 'Preparing your life timing map...';
+
+  @override
+  String get loadingAsk => 'Reading your question with your timing map...';
+
+  @override
+  String get loadingShare => 'Creating your share card...';
+
+  @override
+  String get loadingCompact => 'Reading the timing...';
+
+  @override
+  String get loadingScreen => 'Reading your Moon rhythm...';
+
+  @override
+  String get loadingBootSub => 'Moon sign, phase, and today are lining up.';
+
+  @override
+  String get loadingAuthSub => 'Keeping your decode ready.';
+
+  @override
+  String get loadingGenerateSub => 'This can take a moment the first time.';
+
+  @override
+  String get loadingAskSub => 'One clean answer, not a long horoscope.';
+
+  @override
+  String get loadingShareSub => 'Branding it before it leaves the app.';
+
+  @override
+  String get loadingScreenSub => 'Good windows and cautions are being checked.';
+
+  @override
+  String get v3DecodeTitle => 'Your Decode';
+
+  @override
+  String get v3DecodeSub =>
+      'First it should feel like \"okay, this is me\". Then timing earns trust.';
+
+  @override
+  String get v3MoonLabel => 'Moon-led reading';
+
+  @override
+  String get v3MoonExplainer =>
+      'Indian astrology reads your mind, timing, and life rhythm mainly from your birth Moon. Sun sign is just the familiar anchor.';
+
+  @override
+  String get v3SunSign => 'Sun sign';
+
+  @override
+  String get v3ThisSounds => 'This sounds like you';
+
+  @override
+  String get v3Strengths => 'Strengths';
+
+  @override
+  String get v3Watchouts => 'Watchouts';
+
+  @override
+  String get v3WorkMoney => 'Work / money pattern';
+
+  @override
+  String get v3Relationship => 'Relationship pattern';
+
+  @override
+  String get v3TodayTitle => 'Today';
+
+  @override
+  String get v3TodaySub => 'One main line, one useful window, one caution.';
+
+  @override
+  String get v3MainAdvice => 'Main advice today';
+
+  @override
+  String get v3GoodWindow => 'Use this window';
+
+  @override
+  String get v3CautionWindow => 'Keep this light';
+
+  @override
+  String get v3BetterFor => 'Better for';
+
+  @override
+  String get v3CarefulWith => 'Be careful with';
+
+  @override
+  String get v3TimingTitle => 'Your Timing Plan';
+
+  @override
+  String get v3TimingSub => 'Week focus, month strategy, and what to use now.';
+
+  @override
+  String get v3Week => 'This week';
+
+  @override
+  String get v3Month => 'This month';
+
+  @override
+  String get v3CurrentPhase => 'Current phase';
+
+  @override
+  String get v3LifeTitle => 'Life Map';
+
+  @override
+  String get v3LifeSub =>
+      'Check the past first, then understand the chapter you are in now.';
+
+  @override
+  String get v3PastCheck => 'Past check';
+
+  @override
+  String get v3Coming => 'Coming chapters';
+
+  @override
+  String get v3Ask => 'Ask';
+
+  @override
+  String get v3ShareFailed => 'Share failed';
 }

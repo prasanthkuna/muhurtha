@@ -1,0 +1,66 @@
+/// Localized display labels for the 27 Janma nakshatras (DB keys stay English).
+String localizeNakshatra(String languageCode, String key) {
+  if (languageCode == 'te') return _te[key] ?? key;
+  if (languageCode == 'hi') return _hi[key] ?? key;
+  return key;
+}
+
+const _te = <String, String>{
+  'Ashwini': 'అశ్విని',
+  'Bharani': 'భరణి',
+  'Krittika': 'కృత్తిక',
+  'Rohini': 'రోహిణి',
+  'Mrigashira': 'మృగశిర',
+  'Ardra': 'ఆర్ద్ర',
+  'Punarvasu': 'పునర్వసు',
+  'Pushya': 'పుష్య',
+  'Ashlesha': 'ఆశ్లేష',
+  'Magha': 'మఘ',
+  'Purva Phalguni': 'పూర్వ ఫల్గుణి',
+  'Uttara Phalguni': 'ఉత్తర ఫల్గుణి',
+  'Hasta': 'హస్త',
+  'Chitra': 'చిత్ర',
+  'Swati': 'స్వాతి',
+  'Vishakha': 'విశాఖ',
+  'Anuradha': 'అనురాధ',
+  'Jyeshtha': 'జ్యేష్ఠ',
+  'Mula': 'మూల',
+  'Purva Ashadha': 'పూర్వాషాఢ',
+  'Uttara Ashadha': 'ఉత్తరాషాఢ',
+  'Shravana': 'శ్రవణ',
+  'Dhanishta': 'ధనిష్ఠ',
+  'Shatabhisha': 'శతభిష',
+  'Purva Bhadrapada': 'పూర్వ భాద్రపద',
+  'Uttara Bhadrapada': 'ఉత్తర భాద్రపద',
+  'Revati': 'రేవతి',
+};
+
+const _hi = <String, String>{
+  'Ashwini': 'अश्विनी',
+  'Bharani': 'भरणी',
+  'Krittika': 'कृत्तिका',
+  'Rohini': 'रोहिणी',
+  'Mrigashira': 'मृगशिरा',
+  'Ardra': 'आर्द्रा',
+  'Punarvasu': 'पुनर्वसु',
+  'Pushya': 'पुष्य',
+  'Ashlesha': 'आश्लेषा',
+  'Magha': 'मघा',
+  'Purva Phalguni': 'पूर्व फाल्गुनी',
+  'Uttara Phalguni': 'उत्तर फाल्गुनी',
+  'Hasta': 'हस्त',
+  'Chitra': 'चित्रा',
+  'Swati': 'स्वाति',
+  'Vishakha': 'विशाखा',
+  'Anuradha': 'अनुराधा',
+  'Jyeshtha': 'ज्येष्ठा',
+  'Mula': 'मूल',
+  'Purva Ashadha': 'पूर्वाषाढ़ा',
+  'Uttara Ashadha': 'उत्तराषाढ़ा',
+  'Shravana': 'श्रवण',
+  'Dhanishta': 'धनिष्ठा',
+  'Shatabhisha': 'शतभिषा',
+  'Purva Bhadrapada': 'पूर्व भाद्रपद',
+  'Uttara Bhadrapada': 'उत्तर भाद्रपद',
+  'Revati': 'रेवती',
+};

@@ -1,7 +1,16 @@
-# Flutter/Dart
+# Flutter/Dart — see repo root .gitignore for full policy.
+# Patterns here apply when working inside app/ only.
+
 .dart_tool/
 .packages
+.pub-cache/
+.pub/
 build/
+coverage/
+.flutter-plugins-dependencies
+.fvm/
+.fvmrc
+
 **/*.freezed.dart
 **/*.g.dart
 
@@ -12,15 +21,20 @@ build/
 # iOS/macOS
 **/Pods/
 **/DerivedData/
+**/Flutter/ephemeral/
+**/Runner/GoogleService-Info.plist
 
 # Android
-**/android/.gradle/
-**/android/local.properties
+**/.gradle/
+**/local.properties
+**/.cxx/
+**/captures/
+**/*.keystore
 **/*.jks
+**/key.properties
+**/google-services.json
 
-# Env (if you add real keys locally)
+# Secrets
 .env
 .env.*
-
-# Flutter: compile-time defines (copy from dart_defines.example.json)
 dart_defines.json

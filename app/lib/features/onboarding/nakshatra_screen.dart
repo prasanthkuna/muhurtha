@@ -10,11 +10,16 @@ import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 import 'birth_draft_notifier.dart';
 
-class NakshatraScreen extends ConsumerWidget {
+class NakshatraScreen extends ConsumerStatefulWidget {
   const NakshatraScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NakshatraScreen> createState() => _NakshatraScreenState();
+}
+
+class _NakshatraScreenState extends ConsumerState<NakshatraScreen> {
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final draft = ref.watch(birthDraftProvider);
@@ -98,7 +103,7 @@ class NakshatraScreen extends ConsumerWidget {
                       );
                       return;
                     }
-                    context.push('/onboarding/accuracy');
+                    context.push('/onboarding/concern');
                   },
                 ),
               ),

@@ -1,0 +1,31 @@
+# Normalize line endings (Windows dev, LF in repo)
+* text=auto eol=lf
+
+# Source
+*.dart text diff=dart
+*.yaml text
+*.yml text
+*.json text
+*.md text diff=markdown
+*.arb text
+*.sql text
+*.ts text
+*.kt text
+*.kts text
+*.gradle text
+*.xml text
+*.ps1 text
+*.sh text
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.svg text
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.jar binary

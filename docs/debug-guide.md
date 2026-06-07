@@ -1,10 +1,37 @@
 # Muhūrta — Android debug & build guide
 
-Windows / PowerShell. The Flutter app lives in **`app/`**. Supabase keys are read from **`app/dart_defines.json`** (copy from `dart_defines.example.json` if needed; that file is gitignored when it contains real keys). **Every `flutter run` / `flutter build` that should talk to your project must pass** `--dart-define-from-file=dart_defines.json` (or equivalent `--dart-define=...` pairs).
+Windows / PowerShell. The Flutter app lives in **`app/`**.
+
+### Client config (compile-time — required)
+
+Supabase **URL + anon/publishable key** are baked into the APK at build time from **`app/dart_defines.json`** (copy from `dart_defines.example.json` if needed; gitignored when it contains real keys). This is standard for Flutter + Supabase — the app cannot “fetch” these from Supabase on first launch.
+
+**Every** `flutter run` / `flutter build` that should talk to your project **must** pass:
+
+```powershell
+--dart-define-from-file=dart_defines.json
+```
+
+when your shell is already in **`app/`**, or use **`.\scripts\run-app.ps1`** from the repo root (recommended).
+
+**Do not** run bare `flutter run -d <device>` from a terminal — defines will be empty and the app will show *“Configure Supabase URL and anon key”*.
+
+After changing `dart_defines.json`, do a **full restart** (`R` in `flutter run`, or stop and start). Hot reload does **not** pick up new defines.
+
+### Server secrets (Supabase dashboard / CLI — already on project)
+
+LLM keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`, …), `SUPABASE_SERVICE_ROLE_KEY`, etc. live in **Supabase Edge Function secrets**, not in the Flutter app. Check with:
+
+```powershell
+cd c:\Users\PrashanthKuna\muhurtha
+supabase secrets list --project-ref kdngizqrybkrckvphyin
+```
+
+---
 
 ## Before you run
 
-1. **Local defines:** Ensure `app\dart_defines.json` exists with `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+1. **Local defines:** Ensure `app\dart_defines.json` exists with `SUPABASE_URL` and `SUPABASE_ANON_KEY` (legacy JWT `eyJ…` or publishable `sb_publishable_…` from **Dashboard → Project Settings → API**).
 
 2. **Phone over USB:** On the device, enable **Developer options** → **USB debugging**. When prompted, allow this computer. Use a data-capable USB cable (some cables are charge-only).
 
@@ -96,11 +123,26 @@ adb devices
    flutter run -d emulator-5554 --dart-define-from-file=dart_defines.json
    ```
 
-**From Cursor / VS Code:** Use the **muhurta** launch configuration or ensure `dart.flutterRunAdditionalArgs` includes `--dart-define-from-file=dart_defines.json` (already set in `.vscode/settings.json` for this repo).
+**From Cursor / VS Code (workspace root = `muhurtha`):** `.vscode/settings.json` sets:
+
+```json
+"dart.flutterRunAdditionalArgs": ["--dart-define-from-file=app/dart_defines.json"]
+```
+
+Path is relative to the **repo root**, not `app/`. If you open only the `app/` folder as the workspace, change that to `dart_defines.json`.
 
 ---
 
 ## Run on a physical phone (USB)
+
+**Recommended (repo root):**
+
+```powershell
+cd c:\Users\PrashanthKuna\muhurtha
+.\scripts\run-app.ps1 -Device 10BF441Y76003GL
+```
+
+Replace the id with your phone’s serial from `flutter devices` (not the marketing name).
 
 1. Connect the phone; confirm it appears:
 
@@ -110,48 +152,43 @@ adb devices
 
    You should see a serial with `device`, not `offline` or `unauthorized`.
 
-2. List devices with **names and IDs** (use the ID column after the bullet with `flutter run -d`):
+2. List devices with **names and IDs** (use the id with `flutter run -d` or `run-app.ps1 -Device`):
 
    ```powershell
    cd c:\Users\PrashanthKuna\muhurtha\app
    flutter devices
    ```
 
-   Example line: `I2401 (mobile) • 10BF441Y76003GL • android-arm64` → device id is **`10BF441Y76003GL`**.
+   Example: `I2401 (mobile) • 10BF441Y76003GL • android-arm64` → id is **`10BF441Y76003GL`**.
 
-3. **If only the phone is connected**, this is enough:
-
-   ```powershell
-   flutter run --dart-define-from-file=dart_defines.json
-   ```
-
-   **If an emulator is also running**, Flutter may pick the wrong target — always pass **`-d`**:
+3. **Manual equivalent** (must be in **`app/`** and **must** include defines):
 
    ```powershell
+   cd c:\Users\PrashanthKuna\muhurtha\app
    flutter run --dart-define-from-file=dart_defines.json -d 10BF441Y76003GL
    ```
 
-   Replace the id with whatever `flutter devices` prints for your phone.
+   If only the phone is connected, `-d` is optional but still fine. If an emulator is also running, **always** pass **`-d <phone-id>`**.
 
 ---
 
 ## Helper script (repo)
 
-From **repository root**:
+From **repository root** (wraps `flutter run` with defines from `app/dart_defines.json`):
 
 ```powershell
 cd c:\Users\PrashanthKuna\muhurtha
 .\scripts\run-app.ps1
 ```
 
-Optional: pin device:
+Pin device:
 
 ```powershell
 .\scripts\run-app.ps1 -Device emulator-5554
 .\scripts\run-app.ps1 -Device 10BF441Y76003GL
 ```
 
-Use the device id from `flutter devices` (serial), not necessarily the marketing model name.
+Use the device id from `flutter devices` (serial), not the marketing model name.
 
 ---
 
@@ -228,6 +265,26 @@ Use the same **`flutter build ... --dart-define-from-file=dart_defines.json`** (
 
 ---
 
+## Verify Supabase connectivity (optional)
+
+From PowerShell (reads keys from `app/dart_defines.json` without printing them):
+
+```powershell
+$defines = Get-Content c:\Users\PrashanthKuna\muhurtha\app\dart_defines.json -Raw | ConvertFrom-Json
+Invoke-RestMethod -Uri "$($defines.SUPABASE_URL)/auth/v1/health" -Headers @{ apikey = $defines.SUPABASE_ANON_KEY }
+```
+
+Expect a healthy response (empty JSON or 200). Edge function without a logged-in user returns **401** — that is normal.
+
+Deploy / check edge function:
+
+```powershell
+cd c:\Users\PrashanthKuna\muhurtha
+supabase functions deploy muhurtha-api --project-ref kdngizqrybkrckvphyin
+```
+
+---
+
 ## Useful debugging commands
 
 Verbosity and observability:
@@ -235,6 +292,12 @@ Verbosity and observability:
 ```powershell
 cd c:\Users\PrashanthKuna\muhurtha\app
 flutter run --dart-define-from-file=dart_defines.json -d <device-id> -v
+```
+
+Or from repo root:
+
+```powershell
+.\scripts\run-app.ps1 -Device <device-id>
 ```
 
 View device logs (Android):
@@ -253,15 +316,66 @@ flutter attach -d <device-id>
 
 ---
 
+## Supabase fresh-test reset
+
+Use this when you want the app to behave like a brand-new install/user again. It removes Auth users, OTP/session state, profiles, birth inputs, generated packs, notifications, chat, and logs. It keeps static product data such as `public.remedy_catalog`.
+
+From the repository root (V4 schema — orphan tables like `timing_windows`, `daily_narrative_cache`, `share_cards` were dropped):
+
+```powershell
+cd c:\Users\PrashanthKuna\muhurtha
+supabase db query --linked "begin; truncate table public.app_logs, public.ask_usage, public.birth_inputs, public.birth_intelligence_packs, public.chart_runs, public.chat_messages, public.chat_sessions, public.notification_schedule, public.profiles, public.subscriptions restart identity cascade; truncate table auth.flow_state, auth.one_time_tokens restart identity cascade; delete from auth.users; commit;"
+```
+
+Verify the reset:
+
+```powershell
+supabase db query --linked "select 'auth.users' as table_name, count(*)::int as rows from auth.users union all select 'public.profiles', count(*)::int from public.profiles union all select 'public.birth_inputs', count(*)::int from public.birth_inputs union all select 'public.birth_intelligence_packs', count(*)::int from public.birth_intelligence_packs union all select 'public.notification_schedule', count(*)::int from public.notification_schedule union all select 'public.remedy_catalog', count(*)::int from public.remedy_catalog order by table_name;"
+```
+
+Expected: user/generated tables should be `0`; `public.remedy_catalog` should still have rows.
+
+---
+
+## Phone OTP autofill (Android)
+
+The sign-in screen (`PhoneAuthScreen`) uses **`otp_autofill`** (SMS User Consent + Retriever). Default Supabase/Twilio SMS **does not** include the Android app hash, so the old `sms_autofill` Retriever-only listener never fired (spinner forever).
+
+**Expected flow after rebuild:**
+
+1. Screen opens → system **phone picker** appears (one tap to choose your number).
+2. App sends OTP automatically → OTP step shows with status text.
+3. When SMS arrives, Android may show **Allow app to read this message?** — tap **Allow once** (User Consent API). Code fills and verify runs without typing.
+
+**Fully silent (zero extra taps)** requires the SMS body to end with your 11-char app hash. Steps:
+
+1. Run a **debug build** on a physical device; check logcat / `flutter run` for  
+   `Android SMS Retriever hash (append to OTP SMS for silent read): …`
+2. Deploy the **`send-sms`** edge function (`supabase/functions/send-sms/`) and wire it in **Dashboard → Authentication → Hooks → Send SMS**.
+3. Set secrets: `SEND_SMS_HOOK_SECRET`, `TWILIO_*`, and optionally `ANDROID_SMS_APP_HASH` (release keystore hash differs from debug).
+4. Disable built-in Twilio SMS in the hook path so only the hook sends messages.
+
+The app also passes `android_app_hash` in `signInWithOtp` user metadata when available.
+
+**Test OTP on emulator:**
+
+```powershell
+adb emu sms send 900 "Your Muhurtha code is 123456"
+```
+
+---
+
 ## Common issues
 
 | Symptom | What to try |
 |--------|-------------|
-| “Supabase URL and anon key” in the app | Defines not compiled in: use `--dart-define-from-file=dart_defines.json` or IDE **Flutter run** args; do a **full restart** (`R` in `flutter run` or stop and start), not only hot reload. |
+| “Supabase URL and anon key” in the app | App was built **without** defines. Use `.\scripts\run-app.ps1` or `flutter run --dart-define-from-file=dart_defines.json` from **`app/`**; then **full restart** (`R` or stop/start), not hot reload. |
+| API / auth errors right after resume | Project may have been paused (logs show **521**). Wait a minute and retry; confirm [dashboard](https://supabase.com/dashboard/project/kdngizqrybkrckvphyin) is active. |
 | Phone not listed | USB debugging on, **file-transfer USB mode**, data cable, try another USB port (prefer motherboard/USB 2). `adb kill-server` then `adb start-server`. In **Device Manager**, fix “Unknown device” with OEM/Vivo USB drivers if needed. |
-| `unauthorized` | Unlock phone, accept **Allow USB debugging?** and “Always allow”. **Developer options → Revoke USB debugging authorizations**, unplug/replug, accept again. |
-| Wrong app target / runs on emulator | Emulator and phone both connected: always `flutter run -d <phone-id>` from `flutter devices`. |
+| `unauthorized` (ADB) | Unlock phone, accept **Allow USB debugging?** and “Always allow”. **Developer options → Revoke USB debugging authorizations**, unplug/replug, accept again. |
+| Wrong app target / runs on emulator | Emulator and phone both connected: always `-d <phone-id>` or `.\scripts\run-app.ps1 -Device <phone-id>`. |
 | Gradle busy / stuck | Close other builds; `cd android`; `.\gradlew --stop` (in **Git Bash** or WSL you can use `./gradlew`). |
+| OTP spinner, code never fills | Rebuild app with latest auth screen. On Android, tap **Allow** on the SMS consent sheet when prompted. For silent read, enable the **Send SMS hook** with app hash (see above). |
 
 ### iQOO / vivo / Funtouch OS (extra toggles)
 

@@ -32,13 +32,29 @@ class AppLocalizationsHi extends AppLocalizations {
   String get authPhone => 'मोबाइल नंबर';
 
   @override
-  String get authPhoneHint => 'E.164 (+ देश कोड)। संकेत मिले तो नंबर चुनें।';
+  String get authPhoneHint => 'देश कोड सहित, जैसे +91…';
 
   @override
   String get authSendCode => 'कोड भेजें';
 
   @override
+  String get authPickingNumber => 'पॉपअप में अपना नंबर चुनें…';
+
+  @override
+  String get authSendingCode => 'सत्यापन कोड भेजा जा रहा है…';
+
+  @override
+  String get authWaitingForSms => 'SMS की प्रतीक्षा — कोड अपने आप भर जाएगा।';
+
+  @override
+  String get authVerifying => 'साइन इन हो रहा है…';
+
+  @override
   String get authOtpLabel => 'सत्यापन कोड';
+
+  @override
+  String get authOtpAutoHint =>
+      'Android पूछे तो Allow दबाएँ — टाइप करने की जरूरत नहीं।';
 
   @override
   String get authVerify => 'सत्यापित करें';
@@ -135,7 +151,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get navToday => 'आज';
 
   @override
-  String get navPurpose => 'कार्य';
+  String get navPurpose => 'पूछें';
 
   @override
   String get navJourney => 'यात्रा';
@@ -337,4 +353,228 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get profileSaved => 'समय जानकारी अपडेट हो गई।';
+
+  @override
+  String get luckyTitle => 'आपका जन्म भाग्य';
+
+  @override
+  String get luckyNumbers => 'शुभ अंक';
+
+  @override
+  String get luckyDays => 'शुभ दिन';
+
+  @override
+  String get luckyColours => 'शुभ रंग';
+
+  @override
+  String get locationDetectAction => 'स्थान पहचानें';
+
+  @override
+  String get locationDetectedHint =>
+      'शहर और भाषा आपके स्थान से भरी गई। आप बदल सकते हैं।';
+
+  @override
+  String get concernTitle => 'सबसे ज़रूरी क्या है?';
+
+  @override
+  String get concernSubtitle => 'बताएँ Muhūrta को पहले किस पर ध्यान देना है।';
+
+  @override
+  String get concernMainLabel => 'मुख्य चिंता';
+
+  @override
+  String get concernRoleLabel => 'जीवन की भूमिका';
+
+  @override
+  String get concernLifeStuck => 'जीवन अटका क्यों लगता है';
+
+  @override
+  String get concernCareerTiming => 'करियर का समय';
+
+  @override
+  String get concernMoneyGrowth => 'पैसे की बढ़त';
+
+  @override
+  String get concernMarriage => 'विवाह / रिश्ता';
+
+  @override
+  String get concernFamilyPressure => 'परिवार का दबाव';
+
+  @override
+  String get concernBusiness => 'व्यापार की दिशा';
+
+  @override
+  String get concernHealth => 'स्वास्थ्य / दिनचर्या';
+
+  @override
+  String get concernGoodBadTiming => 'आज अच्छा / बुरा समय';
+
+  @override
+  String get roleStudent => 'छात्र / नौसिखिया';
+
+  @override
+  String get roleEarlyCareer => 'शुरुआती करियर';
+
+  @override
+  String get roleManager => 'मैनेजर / सीनियर';
+
+  @override
+  String get roleBusinessOwner => 'व्यापारी';
+
+  @override
+  String get roleHomemaker => 'गृहिणी / परिवार-प्रथम';
+
+  @override
+  String get roleBetweenJobs => 'नौकरी बदल / पिवट';
+
+  @override
+  String get errorAskLimitReached =>
+      'आज का मुफ्त सवाल इस्तेमाल हो गया। कल वापस आएं या और के लिए अपग्रेड करें।';
+
+  @override
+  String get loadingOpening => 'मुहूर्त खोल रहे हैं...';
+
+  @override
+  String get loadingDecode => 'आपका डिकोड तैयार कर रहे हैं...';
+
+  @override
+  String get loadingToday => 'आज तैयार कर रहे हैं...';
+
+  @override
+  String get loadingProfile => 'प्रोफाइल लोड हो रही है...';
+
+  @override
+  String get loadingTodayWindows => 'आज के उपयोगी समय देख रहे हैं...';
+
+  @override
+  String get loadingTimingPlan => 'टाइमिंग प्लान बना रहे हैं...';
+
+  @override
+  String get loadingLifeMap => 'लाइफ मैप बना रहे हैं...';
+
+  @override
+  String get loadingBoot => 'आपकी timing जगह खोल रहे हैं...';
+
+  @override
+  String get loadingAuth => 'प्रोफाइल देख रहे हैं...';
+
+  @override
+  String get loadingGenerate => 'लाइफ टाइमिंग मैप तैयार कर रहे हैं...';
+
+  @override
+  String get loadingAsk => 'सवाल को टाइमिंग मैप से पढ़ रहे हैं...';
+
+  @override
+  String get loadingShare => 'शेयर कार्ड बना रहे हैं...';
+
+  @override
+  String get loadingCompact => 'टाइमिंग पढ़ रहे हैं...';
+
+  @override
+  String get loadingScreen => 'चंद्र लय पढ़ रहे हैं...';
+
+  @override
+  String get loadingBootSub => 'चंद्र राशि, दौर और आज लाइन हो रहे हैं.';
+
+  @override
+  String get loadingAuthSub => 'डिकोड तैयार रख रहे हैं.';
+
+  @override
+  String get loadingGenerateSub => 'पहली बार थोड़ा समय लग सकता है.';
+
+  @override
+  String get loadingAskSub => 'एक साफ जवाब — लंबा राशिफल नहीं.';
+
+  @override
+  String get loadingShareSub => 'ऐप से जाने से पहले ब्रांड कर रहे हैं.';
+
+  @override
+  String get loadingScreenSub => 'अच्छे/सावधानी समय चेक हो रहे हैं.';
+
+  @override
+  String get v3DecodeTitle => 'आपका डिकोड';
+
+  @override
+  String get v3DecodeSub =>
+      'पहले \"यह तो मैं हूं\" लगे. फिर timing map भरोसा कमाता है.';
+
+  @override
+  String get v3MoonLabel => 'चंद्र राशि से';
+
+  @override
+  String get v3MoonExplainer =>
+      'भारतीय ज्योतिष में मन, timing और life rhythm जन्म की चंद्र राशि से पढ़ते हैं. Sun sign बस familiar anchor है.';
+
+  @override
+  String get v3SunSign => 'सन साइन';
+
+  @override
+  String get v3ThisSounds => 'यह आप जैसा है';
+
+  @override
+  String get v3Strengths => 'ताकत';
+
+  @override
+  String get v3Watchouts => 'ध्यान रखें';
+
+  @override
+  String get v3WorkMoney => 'काम / पैसे का पैटर्न';
+
+  @override
+  String get v3Relationship => 'रिश्तों का पैटर्न';
+
+  @override
+  String get v3TodayTitle => 'आज';
+
+  @override
+  String get v3TodaySub => 'एक main बात, एक काम का time, एक caution.';
+
+  @override
+  String get v3MainAdvice => 'आज की main बात';
+
+  @override
+  String get v3GoodWindow => 'काम का समय';
+
+  @override
+  String get v3CautionWindow => 'हल्का रखने का समय';
+
+  @override
+  String get v3BetterFor => 'इसके लिए बेहतर';
+
+  @override
+  String get v3CarefulWith => 'इसमें ध्यान';
+
+  @override
+  String get v3TimingTitle => 'आपका टाइमिंग प्लान';
+
+  @override
+  String get v3TimingSub => 'हफ्ते का focus, महीने की strategy, और अभी का use.';
+
+  @override
+  String get v3Week => 'यह हफ्ता';
+
+  @override
+  String get v3Month => 'यह महीना';
+
+  @override
+  String get v3CurrentPhase => 'अभी का दौर';
+
+  @override
+  String get v3LifeTitle => 'लाइफ मैप';
+
+  @override
+  String get v3LifeSub =>
+      'Past match होता है या नहीं देखिए, फिर अभी की दिशा समझिए.';
+
+  @override
+  String get v3PastCheck => 'Past check';
+
+  @override
+  String get v3Coming => 'आने वाले दौर';
+
+  @override
+  String get v3Ask => 'पूछें';
+
+  @override
+  String get v3ShareFailed => 'Share नहीं हुआ';
 }

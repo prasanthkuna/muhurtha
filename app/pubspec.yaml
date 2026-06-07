@@ -11,12 +11,21 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  cross_file: ^0.3.4+2
   intl: any
   flutter_riverpod: ^2.6.1
   go_router: ^14.6.2
   supabase_flutter: ^2.12.4
   google_fonts: ^6.2.1
+  path_provider: ^2.1.5
+  screenshot: ^3.0.0
+  share_plus: ^10.1.4
   sms_autofill: ^2.4.1
+  flutter_local_notifications: ^21.0.0
+  timezone: ^0.11.0
+  geolocator: ^13.0.2
+  flutter_svg: ^2.0.17
+  otp_autofill: ^4.1.0
 
 dev_dependencies:
   flutter_test:
@@ -26,3 +35,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    - assets/icons/whatsapp.svg

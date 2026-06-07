@@ -3,9 +3,11 @@
   "specifiers": {
     "jsr:@supabase/functions-js@*": "2.105.1",
     "npm:astronomy-engine@2.1.19": "2.1.19",
+    "npm:luxon@*": "3.4.4",
     "npm:luxon@3.4.4": "3.4.4",
     "npm:openai@^4.52.5": "4.104.0",
-    "npm:suncalc@1.9.0": "1.9.0"
+    "npm:suncalc@1.9.0": "1.9.0",
+    "npm:tz-lookup@6.1.25": "6.1.25"
   },
   "jsr": {
     "@supabase/functions-js@2.105.1": {
@@ -211,6 +213,9 @@
     "tr46@0.0.3": {
       "integrity": "sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw=="
     },
+    "tz-lookup@6.1.25": {
+      "integrity": "sha512-fFewT9o1uDzsW1QnUU1ValqaihFnwiUiiHr1S79/fxOzKXYYvX+EHeRnpvQJ9B3Qg67wPXT6QF2Esc4pFOrvLg=="
+    },
     "undici-types@5.26.5": {
       "integrity": "sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA=="
     },
@@ -235,7 +240,8 @@
     "dependencies": [
       "npm:astronomy-engine@2.1.19",
       "npm:luxon@3.4.4",
-      "npm:suncalc@1.9.0"
+      "npm:suncalc@1.9.0",
+      "npm:tz-lookup@6.1.25"
     ]
   }
 }

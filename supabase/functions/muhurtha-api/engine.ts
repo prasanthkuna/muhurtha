@@ -1,48 +1,83 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { DateTime } from "luxon";
-import { phaseCardCopy, plainPeriodLabel, antardashaFallbackCopy } from "./copy.ts";
-import {
-  goodAndCautionWindows,
-  sunriseSunset,
-  divideDaylight,
-} from "./solar.ts";
+import { antardashaFallbackCopy, plainPeriodLabel } from "./copy.ts";
+import { resolveBirthPlace, resolveCoordinates } from "./geo_resolver.ts";
+import { attachNatalLuckToContent, buildNatalLuck } from "./natal_luck.ts";
+import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
 import {
   allAntardashasFromMahadashas,
-  nakshatraIndex,
+  type MdSegment,
   recentAntardashasClipped,
-  recentMahadashas,
   segmentAt,
   vimshottariLordsAt,
   vimshottariMahadashas,
-  type MdSegment,
 } from "./vimshottari.ts";
 import {
   moonSiderealLongitudeDeg,
   nakshatraPadaFromSiderealLon,
   siderealMetaFromNameOrMoon,
+  sunTropicalLongitudeDeg,
 } from "./ephemeris.ts";
-import { generateJourneyLlmCards } from "./journey_llm.ts";
+import { generateJourneyLlmCards, generateProofLlmCards } from "./journey_llm.ts";
 import {
+  CONTENT_PROMPT_VERSION,
+  generateNarrativeCopy,
   generatePurposeCopy,
-  generateRemedyCopy,
-  generateTodayCopy,
 } from "./content_llm.ts";
+import { ASK_PROMPT_VERSION } from "./ask_llm.ts";
 import {
+  BIRTH_PACK_VERSION,
+  type BirthIntelligencePackContent,
+  generateBirthIntelligencePack,
+  type PackJourneyPhase,
+  type PackRangeCard,
+  type PackTimingWindowCopy,
+  type PackTodayCard,
+  validateBirthPackContent,
+} from "./birth_intelligence_pack.ts";
+import { fallbackPackStrings } from "./fallback_pack_copy.ts";
+import {
+  buildFactSignature,
+  buildPhasePlan,
+  buildPurposePlan,
+  buildRangePlan,
+  buildTodayPlan,
+  type GenerationProvenance,
+  type PhasePlan,
+  PLANNER_VERSION,
+} from "./planner.ts";
+import {
+  buildPersonalizationKernel,
+  KERNEL_VERSION,
+  type PersonalizationKernel,
+} from "./personalization_kernel.ts";
+import { buildShareCard } from "./share_copy.ts";
+import {
+  type AppLocale,
   normalizeLocale,
   rashiDisplay,
   rashiKeyFromSiderealLon,
-  type AppLocale,
+  westernSignDisplayFromTropicalLon,
 } from "./vedic_labels.ts";
 
-const ENGINE_V = "v1";
+const ENGINE_V = "v5";
 const JOURNEY_LOOKBACK_YEARS = 15;
 const DEFAULT_LAT = 19.076;
 const DEFAULT_LNG = 72.8777;
+const NARRATIVE_CACHE_VERSION = 11;
+const PACK_DAILY_DAYS = 30;
+const PACK_WEEKLY_WEEKS = 8;
+const PACK_MONTHLY_MONTHS = 12;
+const FREE_ASKS_PER_DAY = 1;
+const PACK_GENERATION_STALE_MS = 10 * 60 * 1000;
+const PACK_GENERATION_WAIT_MS = 120_000;
+const PACK_GENERATION_POLL_MS = 1_500;
 
 type BioRow = {
   id: string;
   profile_id: string;
   date_of_birth: string;
+  birth_place: string | null;
   birth_input_mode: string;
   exact_birth_time: string | null;
   time_bucket: string | null;
@@ -61,10 +96,33 @@ type ProfRow = {
   current_lng: number | null;
   display_name: string | null;
   language_code: string | null;
+  explanation_mode: string | null;
 };
+
+class ActionError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ActionError";
+  }
+}
 
 function requestLocale(body: Record<string, unknown>, prof: ProfRow): AppLocale {
   return normalizeLocale(String(body.locale ?? prof.language_code ?? "en"));
+}
+
+function requireProfile(prof: ProfRow | null, action: string): ProfRow {
+  if (prof == null) {
+    throw new ActionError(
+      "profile_required",
+      `Profile required for action: ${action}`,
+      409,
+    );
+  }
+  return prof;
 }
 
 /** Small deterministic spread so different purposes rarely tie on the same day. */
@@ -98,6 +156,13 @@ export function todayInTimezone(tz: string): string {
   return DateTime.now().setZone(tz).toISODate()!;
 }
 
+export function calculateAge(dob: string): number {
+  const birth = DateTime.fromISO(dob);
+  const now = DateTime.now();
+  const diff = now.diff(birth, "years").years;
+  return Math.floor(diff);
+}
+
 /** JS Sunday=0 .. Saturday=6 from calendar date in zone. */
 function jsWeekday(dateStr: string, tz: string): number {
   const wd = DateTime.fromISO(dateStr, { zone: tz }).weekday; // 1 Mon .. 7 Sun
@@ -110,6 +175,1644 @@ function zonedNoonJsDate(dateStr: string, tz: string): Date {
     .toJSDate();
 }
 
+function parseDateAsUtcInstant(dateStr: string, tz: string): Date {
+  return DateTime.fromISO(dateStr, { zone: tz })
+    .set({ hour: 12, minute: 0, second: 0, millisecond: 0 })
+    .toUTC()
+    .toJSDate();
+}
+
+function moonRashiAt(utc: Date): { key: string } {
+  const siderealLon = moonSiderealLongitudeDeg(utc);
+  return { key: rashiKeyFromSiderealLon(siderealLon) };
+}
+
+function moonNakshatraAt(utc: Date): { name: string; pada: number } {
+  const siderealLon = moonSiderealLongitudeDeg(utc);
+  const meta = nakshatraPadaFromSiderealLon(siderealLon);
+  return { name: meta.name, pada: meta.pada };
+}
+
+function sunSignAt(utc: Date, locale: AppLocale) {
+  return westernSignDisplayFromTropicalLon(sunTropicalLongitudeDeg(utc), locale);
+}
+
+function birthMoonDetails(
+  bi: BioRow | null,
+  profileTimezone: string,
+  locale: AppLocale,
+): {
+  sign: ReturnType<typeof rashiDisplay>;
+  nakshatra: string;
+  pada: number;
+} | null {
+  if (!bi) return null;
+  const zone = resolveBirthZone(bi, profileTimezone);
+  const birthUtc = birthInstantUtc(bi, zone);
+  if (!birthUtc) return null;
+  const siderealLon = moonSiderealLongitudeDeg(birthUtc);
+  const sign = rashiDisplay(rashiKeyFromSiderealLon(siderealLon), locale);
+  const meta = nakshatraPadaFromSiderealLon(siderealLon);
+  return {
+    sign,
+    nakshatra: meta.name,
+    pada: meta.pada,
+  };
+}
+
+function birthSunDetails(
+  bi: BioRow | null,
+  profileTimezone: string,
+  locale: AppLocale,
+) {
+  if (!bi) return null;
+  const zone = resolveBirthZone(bi, profileTimezone);
+  const birthUtc = birthInstantUtc(bi, zone) ??
+    DateTime.fromISO(String(bi.date_of_birth).slice(0, 10), { zone })
+      .set({ hour: 12, minute: 0, second: 0, millisecond: 0 })
+      .toUTC()
+      .toJSDate();
+  return sunSignAt(birthUtc, locale);
+}
+
+function planetLabel(lord: string | null | undefined, loc: AppLocale): string {
+  const map: Record<string, Record<AppLocale, string>> = {
+    Rahu: { en: "Rahu", te: "రాహు", hi: "राहु" },
+    Ketu: { en: "Ketu", te: "కేతు", hi: "केतु" },
+    Jupiter: { en: "Jupiter", te: "గురు", hi: "गुरु" },
+    Saturn: { en: "Saturn", te: "శని", hi: "शनि" },
+    Mercury: { en: "Mercury", te: "బుధుడు", hi: "बुध" },
+    Venus: { en: "Venus", te: "శుక్రుడు", hi: "शुक्र" },
+    Mars: { en: "Mars", te: "కుజుడు", hi: "मंगल" },
+    Moon: { en: "Moon", te: "చంద్రుడు", hi: "चंद्र" },
+    Sun: { en: "Sun", te: "సూర్యుడు", hi: "सूर्य" },
+  };
+  return map[lord ?? ""]?.[loc] ?? lord ?? "";
+}
+
+function lifeChapterInfo(
+  kernel: PersonalizationKernel | undefined,
+  loc: AppLocale,
+) {
+  if (!kernel) return null;
+  const md = planetLabel(kernel.period.mahadashaLord, loc);
+  const ad = planetLabel(kernel.period.antardashaLord, loc);
+  const next = planetLabel(kernel.period.nextMahadashaLord, loc);
+  const months = kernel.period.remainingMonths ?? null;
+  const phaseSpan = kernel.period.startLabel && kernel.period.endLabel
+    ? `${kernel.period.startLabel} - ${kernel.period.endLabel}`
+    : "";
+  const closeLineEn = months != null && months <= 18
+    ? `${phaseSpan ? `${phaseSpan}. ` : ""}About ${
+      Math.max(1, Math.round(months))
+    } months of this chapter are left.`
+    : "This chapter is still active.";
+  if (loc === "te") {
+    const left = months != null && months <= 18
+      ? `${phaseSpan ? `${phaseSpan}. ` : ""}ఇంకా దాదాపు ${
+        Math.max(1, Math.round(months))
+      } నెలలు మాత్రమే ఉన్నాయి.`
+      : "ఈ దశ ఇంకా కొనసాగుతోంది.";
+    return {
+      title: `${md} అధ్యాయం ముగింపు దశలో ఉంది`,
+      summary:
+        `${md} దశ మీ జీవితంలో ఒక పెద్ద అధ్యాయం. ఇప్పుడు అది ముగింపు వైపు వెళ్తోంది; తర్వాత ${next} దశ మొదలవుతుంది. ఇది మంచి/చెడు అని ఒక్క మాటలో చెప్పడం కంటే, పాత పనులు పూర్తి చేసే సమయం అని చూడాలి.`,
+      qualityLabel: "మార్పు దశ",
+      timelineLabel: left,
+      currentChapterLabel: `${md} పెద్ద అధ్యాయం`,
+      currentEpisodeLabel: `${ad} ప్రస్తుత భాగం`,
+      nextChapterLabel: next ? `${next} తర్వాతి అధ్యాయం` : "",
+      actionLine: "కొత్త పెద్ద పనికంటే ముందు, పెండింగ్ విషయాలు క్లియర్ చేయండి.",
+      traditionalWhy: kernel.period.line,
+    };
+  }
+  if (loc === "hi") {
+    const left = months != null && months <= 18
+      ? `${phaseSpan ? `${phaseSpan}. ` : ""}लगभग ${Math.max(1, Math.round(months))} महीने बचे हैं।`
+      : "यह अध्याय अभी चल रहा है।";
+    return {
+      title: `${md} chapter closing`,
+      summary:
+        `${md} आपके जीवन का बड़ा अध्याय है। यह अब समाप्ति की तरफ है; अगला अध्याय ${next} है। इसे सिर्फ अच्छा/बुरा न मानें. अभी पुराने काम साफ करने का समय है।`,
+      qualityLabel: "बदलाव का समय",
+      timelineLabel: left,
+      currentChapterLabel: `${md} बड़ा अध्याय`,
+      currentEpisodeLabel: `${ad} अभी का हिस्सा`,
+      nextChapterLabel: next ? `${next} अगला अध्याय` : "",
+      actionLine: "नई बड़ी छलांग से पहले अधूरे काम साफ करें।",
+      traditionalWhy: kernel.period.line,
+    };
+  }
+  return {
+    title: `${md} chapter is closing`,
+    summary:
+      `${md} has been the big chapter shaping this part of life. It is now moving toward closure; ${next} comes next. This is not simply good or bad. Treat it as a transition: close old loops before chasing one more big move.`,
+    qualityLabel: "Transition phase",
+    timelineLabel: closeLineEn,
+    currentChapterLabel: `${md} big chapter`,
+    currentEpisodeLabel: `${ad} current episode`,
+    nextChapterLabel: next ? `${next} next chapter` : "",
+    actionLine: "Clear pending work before starting the next big thing.",
+    traditionalWhy: kernel.period.line,
+  };
+}
+
+function remedyCategoryKey(remedyKey: string, remedyType: string): string {
+  const keyMap: Record<string, string> = {
+    quiet_journal_10: "mind_reset",
+    simplify_one_commitment: "mind_reset",
+    breath_before_words: "speech_discipline",
+    walk_after_sunrise: "body_reset",
+    early_sleep_window: "body_reset",
+    small_charity_food: "quiet_seva",
+  };
+  if (keyMap[remedyKey]) return keyMap[remedyKey]!;
+  if (remedyType === "discipline") return "body_reset";
+  if (remedyType === "charity") return "quiet_seva";
+  return "mind_reset";
+}
+
+function remedyCategoryLabel(categoryKey: string, locale: AppLocale): string {
+  const labels = {
+    en: {
+      mind_reset: "Mind reset",
+      speech_discipline: "Speech discipline",
+      body_reset: "Body reset",
+      quiet_seva: "Quiet seva",
+      fallback: "Daily remedy",
+    },
+    te: {
+      mind_reset: "\u0c2e\u0c28\u0c38\u0c41 \u0c38\u0c30\u0c4d\u0c26\u0c41\u0c2c\u0c3e\u0c1f\u0c41",
+      speech_discipline: "\u0c2e\u0c3e\u0c1f \u0c1c\u0c3e\u0c17\u0c4d\u0c30\u0c24\u0c4d\u0c24",
+      body_reset: "\u0c36\u0c30\u0c40\u0c30 \u0c30\u0c40\u0c38\u0c46\u0c1f\u0c4d",
+      quiet_seva: "\u0c28\u0c3f\u0c36\u0c4d\u0c36\u0c2c\u0c4d\u0c26 \u0c38\u0c47\u0c35",
+      fallback: "\u0c30\u0c4b\u0c1c\u0c41 \u0c2a\u0c30\u0c3f\u0c39\u0c3e\u0c30\u0c02",
+    },
+    hi: {
+      mind_reset: "\u092e\u0928 \u0938\u0902\u0924\u0941\u0932\u0928",
+      speech_discipline: "\u0935\u093e\u0923\u0940 \u0938\u0902\u092f\u092e",
+      body_reset: "\u0936\u0930\u0940\u0930 \u0930\u0940\u0938\u0947\u091f",
+      quiet_seva: "\u0936\u093e\u0902\u0924 \u0938\u0947\u0935\u093e",
+      fallback: "\u0926\u0948\u0928\u093f\u0915 \u0909\u092a\u093e\u092f",
+    },
+  } as const;
+  const row = labels[locale] ?? labels.en;
+  return row[categoryKey as keyof typeof row] ?? row.fallback;
+}
+
+function remedyTypeLabel(remedyType: string, locale: AppLocale): string {
+  const labels = {
+    en: {
+      behavioral: "Mind reset",
+      discipline: "Body reset",
+      charity: "Quiet seva",
+      fallback: "Daily remedy",
+    },
+    te: {
+      behavioral: "మనసు సర్దుబాటు",
+      discipline: "శరీర రీసెట్",
+      charity: "నిశ్శబ్ద సేవ",
+      fallback: "రోజు పరిహారం",
+    },
+    hi: {
+      behavioral: "मन संतुलन",
+      discipline: "शरीर रीसेट",
+      charity: "शांत सेवा",
+      fallback: "दैनिक उपाय",
+    },
+  } as const;
+  const row = labels[locale] ?? labels.en;
+  return row[remedyType as keyof typeof row] ?? row.fallback;
+}
+
+function remedyWhyNow(remedyType: string, activeLord: string, locale: AppLocale): string {
+  const lordText = activeLord
+    ? locale === "te"
+      ? `${activeLord} దశ`
+      : locale === "hi"
+      ? `${activeLord} चरण`
+      : `${activeLord} period`
+    : locale === "te"
+    ? "ప్రస్తుత లయ"
+    : locale === "hi"
+    ? "मौजूदा लय"
+    : "current rhythm";
+  switch (remedyType) {
+    case "behavioral":
+      return locale === "te"
+        ? `${lordText}లో పెద్ద చర్యల కంటే చిన్న మానసిక సర్దుబాట్లు ఇప్పుడు ఎక్కువ ఉపయోగపడతాయి.`
+        : locale === "hi"
+        ? `${lordText} में इस समय बड़े कदमों से ज्यादा छोटे मानसिक सुधार काम आते हैं।`
+        : `This fits the ${lordText} because small mindset corrections help more than dramatic action right now.`;
+    case "discipline":
+      return locale === "te"
+        ? `${lordText}లో నిద్ర, శరీర లయ, పని వేగం నిలకడగా ఉంటే తప్పించగల పొరపాట్లు తగ్గుతాయి.`
+        : locale === "hi"
+        ? `${lordText} में नींद, शरीर की लय और काम की गति स्थिर रखने से टाली जा सकने वाली गलतियां कम होती हैं।`
+        : `This fits the ${lordText} because steadier sleep, pace, and body rhythm will reduce avoidable mistakes.`;
+    case "charity":
+      return locale === "te"
+        ? `${lordText}లో నిశ్శబ్దంగా ఇచ్చే సహాయం అతిగా పట్టుకోవాలనే భావాన్ని చల్లబరచి దృష్టిని సమతుల్యం చేస్తుంది.`
+        : locale === "hi"
+        ? `${lordText} में शांत दान पकड़ और लालसा को ठंडा करके नजरिया वापस संतुलित करता है।`
+        : `This fits the ${lordText} because quiet giving helps cool excess grasping and brings perspective back.`;
+    default:
+      return locale === "te"
+        ? `${lordText}లో ఎక్కువ ఆలోచన కంటే సరళమైన స్థిర చర్యలు ఇప్పుడు బాగా పనిచేస్తాయి.`
+        : locale === "hi"
+        ? `${lordText} में ज्यादा सोचने से बेहतर अभी सरल और स्थिर कदम काम करते हैं।`
+        : `This fits the ${lordText} because simple grounded actions work better than overthinking right now.`;
+  }
+}
+
+function remedyKeepSimple(remedyType: string, locale: AppLocale): string {
+  switch (remedyType) {
+    case "behavioral":
+      return locale === "te"
+        ? "పది నిమిషాల నిశ్శబ్ద సమయం చాలుతుంది. దాన్ని పర్ఫెక్ట్‌గా కాకుండా సాదాసీదాగా చేయండి."
+        : locale === "hi"
+        ? "दस शांत मिनट काफी हैं। इसे परफेक्ट नहीं, बस सादगी से करें।"
+        : "Ten calm minutes is enough. Do it plainly, not perfectly.";
+    case "discipline":
+      return locale === "te"
+        ? "మూడు రోజులు చిన్నగా, మళ్లీ చేయగలిగినట్టుగా ఉంచండి. దీనిని చాలా క్లిష్టం చేయాల్సిన అవసరం లేదు."
+        : locale === "hi"
+        ? "इसे तीन दिन छोटा और दोहराने लायक रखें। इसे जरूरत से ज्यादा जटिल न बनाएं।"
+        : "Keep it small and repeatable for three days. No need to over-engineer it.";
+    case "charity":
+      return locale === "te"
+        ? "నిశ్శబ్దంగా, నిజాయితీగా చేస్తే చాలు. దీన్ని ప్రదర్శనగా మార్చకండి."
+        : locale === "hi"
+        ? "शांत और सच्चे मन से करना काफी है। इसे दिखावे में मत बदलें।"
+        : "Quiet and sincere is enough. Do not turn it into performance.";
+    default:
+      return locale === "te"
+        ? "దాన్ని సులభంగా, ఉపయోగకరంగా ఉంచండి. ఒక్కసారి తీవ్రంగా చేయడం కంటే చిన్న స్థిరత్వం ముఖ్యం."
+        : locale === "hi"
+        ? "इसे सरल और व्यावहारिक रखें। एक बार बहुत करने से ज्यादा छोटी निरंतरता काम आती है।"
+        : "Keep it simple and practical. Small consistency matters more than intensity.";
+  }
+}
+
+function formatAskWindow(
+  window: { start: string; end: string; label?: string },
+  includeLabel = false,
+): string {
+  const label = includeLabel && window.label ? ` (${window.label})` : "";
+  return `${window.start} - ${window.end}${label}`;
+}
+
+function askFallbackCopy(
+  locale: AppLocale,
+  good: { start: string; end: string; label?: string }[],
+  caution: { start: string; end: string; label?: string }[],
+) {
+  const best = good[0] ? formatAskWindow(good[0]) : "";
+  const careful = caution[0] ? formatAskWindow(caution[0], true) : "";
+  if (locale === "te") {
+    return {
+      direct_answer: best ? "ఇది చేయొచ్చు, కానీ మాటను సింపుల్‌గా ఉంచండి." : "ఇది చేయొచ్చు, కానీ చిన్న స్టెప్‌గా ఉంచండి.",
+      best_time: best ? `మంచి సమయం: ${best}` : "మంచి సమయం స్పష్టంగా లేదు. చిన్నగా మొదలుపెట్టండి.",
+      caution_time: careful ? `జాగ్రత్త సమయం: ${careful}` : "రాహు కాలం ఉంటే పెద్ద నిర్ణయం పెట్టొద్దు.",
+      better_option: "ముందు పాయింట్లు రాసుకోండి, తరువాత మాట్లాడండి.",
+      simple_why: "ఈరోజు టైమింగ్‌లో స్పష్టత కంటే క్రమం ముఖ్యం.",
+      action_line: "పని చిన్నది, మాట సూటిగా, నిర్ణయం ప్రశాంతంగా ఉంచండి.",
+      share_hook: "ఈరోజు తొందర కాదు; సరైన సమయం చూసి అడుగు వేయండి.",
+    };
+  }
+  if (locale === "hi") {
+    return {
+      direct_answer: best ? "कर सकते हैं, बस बात साफ और छोटी रखें." : "कर सकते हैं, लेकिन कदम छोटा रखें.",
+      best_time: best ? `अच्छा समय: ${best}` : "अच्छा समय साफ नहीं है. छोटा कदम रखें.",
+      caution_time: careful ? `सावधानी समय: ${careful}` : "राहु काल हो तो बड़ा फैसला न रखें.",
+      better_option: "पहले पॉइंट्स लिखें, फिर बात करें.",
+      simple_why: "आज जल्दबाजी से ज्यादा साफ क्रम काम आएगा.",
+      action_line: "काम छोटा, बात सीधी, फैसला शांत रखें.",
+      share_hook: "आज जल्दबाजी नहीं; सही समय देखकर कदम बढ़ाएं.",
+    };
+  }
+  return {
+    direct_answer: best
+      ? "You can do it, but keep the ask clear and small."
+      : "You can move, but keep it as a small first step.",
+    best_time: best ? `Good time: ${best}` : "No strong good window is clear. Start small.",
+    caution_time: careful
+      ? `Caution time: ${careful}`
+      : "Avoid placing the biggest decision in Rahu Kalam.",
+    better_option: "Write the points first, then speak or act.",
+    simple_why: "Today rewards clean sequencing more than force.",
+    action_line: "Keep the work small, the words direct, and the decision calm.",
+    share_hook: "Do not rush today; choose the cleaner window and move lightly.",
+  };
+}
+
+function buildProvenance(
+  input: Omit<GenerationProvenance, "engineVersion" | "plannerVersion">,
+): GenerationProvenance {
+  return {
+    engineVersion: ENGINE_V,
+    plannerVersion: PLANNER_VERSION,
+    ...input,
+  };
+}
+
+function narrativeCacheOk(
+  cached: Record<string, unknown> | null,
+  birthInputId: string | null,
+  factSignature: string,
+  promptVersion: string,
+) {
+  if (!cached) return false;
+  if ((cached.birthInputId ?? null) !== birthInputId) return false;
+  const provenance = cached.provenance as Record<string, unknown> | undefined;
+  if (!provenance) return false;
+  return provenance.engineVersion === ENGINE_V &&
+    provenance.plannerVersion === PLANNER_VERSION &&
+    provenance.promptVersion === promptVersion &&
+    provenance.factSignature === factSignature;
+}
+
+type BirthPackRow = {
+  id: string;
+  content: BirthIntelligencePackContent;
+  provider: string;
+  model: string;
+  status?: string;
+  fact_signature: string;
+  generated_for_date: string;
+  expires_on: string | null;
+};
+
+type DailyTimingFact = {
+  date: string;
+  good: { start: string; end: string; label: string }[];
+  caution: { start: string; end: string; label: string }[];
+};
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+function safeString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isoDateOrUndefined(value: unknown): string | undefined {
+  const text = safeString(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : undefined;
+}
+
+function weekCardKey(dateStr: string, tz: string): string {
+  return DateTime.fromISO(dateStr, { zone: tz }).startOf("week").toISODate()!;
+}
+
+function monthCardKey(dateStr: string): string {
+  return String(dateStr).slice(0, 7);
+}
+
+function packRangeCard(
+  pack: BirthPackRow | null,
+  scope: "weekly" | "monthly",
+  dateStr: string,
+  tz: string,
+): PackRangeCard | null {
+  const cards = scope === "weekly"
+    ? asArray<PackRangeCard>(pack?.content.weekly_cards)
+    : asArray<PackRangeCard>(pack?.content.monthly_cards);
+  const key = scope === "weekly" ? weekCardKey(dateStr, tz) : monthCardKey(dateStr);
+  return cards.find((c) => safeString(c.key) === key) ?? cards[0] ?? null;
+}
+
+function packTodayCard(pack: BirthPackRow | null, dateStr: string): PackTodayCard | null {
+  const cards = asArray<PackTodayCard>(pack?.content.today_cards);
+  return cards.find((c) => safeString(c.key) === dateStr) ?? cards[0] ?? null;
+}
+
+function normalizeWindowCopy(
+  note: PackTimingWindowCopy | undefined,
+  fallbackLabel: string,
+  windowType: "good" | "caution",
+) {
+  return {
+    category: safeString(note?.category) ||
+      (windowType === "good" ? "Useful window" : fallbackLabel || "Caution"),
+    why: safeString(note?.why_it_works),
+    bestFor: asArray<string>(note?.best_for).map((s) => String(s).trim()).filter(Boolean),
+    avoidFor: asArray<string>(note?.avoid_for).map((s) => String(s).trim()).filter(Boolean),
+    shareLine: safeString(note?.share_line),
+  };
+}
+
+function decorateWindows(
+  windows: { start: string; end: string; label: string }[],
+  notes: PackTimingWindowCopy[] | undefined,
+  windowType: "good" | "caution",
+) {
+  return windows.map((w, i) => {
+    const copy = normalizeWindowCopy(notes?.[i], w.label, windowType);
+    return {
+      start: w.start,
+      end: w.end,
+      label: copy.category || w.label,
+      originalLabel: w.label,
+      category: copy.category,
+      whyItWorks: copy.why,
+      bestFor: copy.bestFor,
+      avoidFor: copy.avoidFor,
+      shareLine: copy.shareLine,
+      confidence: windowType === "good" ? "medium" : "high",
+    };
+  });
+}
+
+async function saveNarrativeCache(
+  _supabase: SupabaseClient,
+  _profileId: string,
+  _targetDate: string,
+  _locale: AppLocale,
+  _narrativeType: string,
+  _content: Record<string, unknown>,
+) {
+  // V4: daily_narrative_cache table removed — narratives are computed live.
+}
+
+function dailyTimingFacts(
+  profile: ProfRow,
+  startDate: string,
+  days: number,
+  tz: string,
+): DailyTimingFact[] {
+  const lat = Number(profile.current_lat ?? DEFAULT_LAT);
+  const lng = Number(profile.current_lng ?? DEFAULT_LNG);
+  return Array.from({ length: days }, (_, idx) => {
+    const date = DateTime.fromISO(startDate, { zone: tz }).plus({ days: idx }).toISODate()!;
+    const ref = parseDateAsUtcInstant(date, tz);
+    const sun = sunriseSunset(ref, lat, lng);
+    const slices = divideDaylight(sun, jsWeekday(date, tz));
+    const { good, caution } = goodAndCautionWindows(slices, tz);
+    return {
+      date,
+      good: good.map((w) => ({ start: w.start, end: w.end, label: w.label })),
+      caution: caution.map((w) => ({ start: w.start, end: w.end, label: w.label })),
+    };
+  });
+}
+
+function buildPackPhasePlans(
+  bi: BioRow,
+  profile: ProfRow,
+  locale: AppLocale,
+  refInstant: Date,
+  kernel: PersonalizationKernel | undefined,
+): PhasePlan[] {
+  const { segments, nk } = computeTimeline(bi, profile.current_timezone ?? "Asia/Kolkata");
+  if (nk === null || !segments.length) return [];
+  const ads = allAntardashasFromMahadashas(segments);
+  const recent = recentAntardashasClipped(ads, refInstant, JOURNEY_LOOKBACK_YEARS);
+  const future = ads
+    .filter((seg) => seg.start.getTime() > refInstant.getTime())
+    .slice(0, 16);
+  const seen = new Set<string>();
+  const merged = [...recent, ...future].filter((seg) => {
+    const key = `${seg.mdLord}-${seg.adLord}-${seg.start.toISOString()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return merged.map((seg, idx) => {
+    const fallback = antardashaFallbackCopy(
+      seg.mdLord,
+      seg.adLord,
+      seg.start,
+      seg.end,
+      idx,
+      locale,
+    );
+    return buildPhasePlan(seg, idx, locale, {
+      now: refInstant,
+      previous: idx > 0 ? merged[idx - 1] ?? null : null,
+      confidenceLabel: resolveEngineMode(bi) === "full_chart" ? "high" : "medium",
+      periodLabel: plainPeriodLabel(seg.start, seg.end),
+      fallbackTitle: fallback.title,
+      fallbackSentences: fallback.sentences,
+      kernel,
+    });
+  });
+}
+
+function fallbackTodayCard(
+  day: DailyTimingFact,
+  locale: AppLocale,
+  facts: {
+    kernel?: PersonalizationKernel;
+    lifeChapter: ReturnType<typeof lifeChapterInfo>;
+    oneLine: string;
+    copy: ReturnType<typeof fallbackPackStrings>;
+    dayIndex: number;
+  },
+): PackTodayCard {
+  const lens = facts.kernel?.screenLenses.today?.[facts.dayIndex % 3];
+  return {
+    key: day.date,
+    title: facts.copy.todayTitle(day.date),
+    body: facts.lifeChapter?.actionLine || facts.oneLine,
+    one_line: facts.oneLine,
+    share_hook: facts.oneLine,
+    better_for: lens?.actions?.length
+      ? lens.actions
+      : facts.kernel?.screenLenses.today?.[0]?.actions ?? [],
+    be_careful: lens?.cautions?.length
+      ? lens.cautions
+      : facts.kernel?.screenLenses.today?.[0]?.cautions ?? [],
+    good_window_notes: day.good.map(() => ({
+      category: facts.copy.goodCategory,
+      why_it_works: facts.copy.goodWhy,
+      best_for: facts.copy.goodBestFor,
+      avoid_for: facts.copy.goodAvoid,
+      share_line: facts.oneLine,
+    })),
+    caution_window_notes: day.caution.map((w) => ({
+      category: w.label,
+      why_it_works: facts.copy.cautionWhy,
+      best_for: facts.copy.cautionBestFor,
+      avoid_for: facts.copy.cautionAvoid,
+      share_line: facts.copy.cautionShare,
+    })),
+  };
+}
+
+function fallbackPackContent(
+  locale: AppLocale,
+  facts: {
+    profile: ProfRow;
+    bi: BioRow;
+    dateStr: string;
+    kernel?: PersonalizationKernel;
+    phasePlans: PhasePlan[];
+    timing: DailyTimingFact[];
+    lifeChapter: ReturnType<typeof lifeChapterInfo>;
+    weeklyKeys: string[];
+    monthlyKeys: string[];
+  },
+): BirthIntelligencePackContent {
+  const copy = fallbackPackStrings(locale);
+  const oneLine = facts.kernel?.shareSeed || copy.oneLine;
+  const weeklyLens = facts.kernel?.screenLenses.weekly ?? [];
+  const monthlyLens = facts.kernel?.screenLenses.monthly ?? [];
+  const weeklyCards: PackRangeCard[] = facts.weeklyKeys.map((key, idx) => ({
+    key,
+    title: copy.weeklyTitle,
+    body: facts.lifeChapter?.summary || oneLine,
+    share_hook: oneLine,
+    better_for: weeklyLens[idx % weeklyLens.length]?.actions ??
+      weeklyLens[0]?.actions ?? [],
+    be_careful: weeklyLens[idx % weeklyLens.length]?.cautions ??
+      weeklyLens[0]?.cautions ?? [],
+  }));
+  const monthlyCards: PackRangeCard[] = facts.monthlyKeys.map((key, idx) => ({
+    key,
+    title: copy.monthlyTitle,
+    body: facts.lifeChapter?.summary || oneLine,
+    share_hook: oneLine,
+    better_for: monthlyLens[idx % monthlyLens.length]?.actions ??
+      monthlyLens[0]?.actions ?? [],
+    be_careful: monthlyLens[idx % monthlyLens.length]?.cautions ??
+      monthlyLens[0]?.cautions ?? [],
+  }));
+  const firstWeekly = weeklyCards[0];
+  const firstMonthly = monthlyCards[0];
+  return {
+    me_profile: {
+      title: facts.kernel?.natal.archetype.key || "Your pattern",
+      summary: facts.kernel?.natal.archetype.core || "Your reading is based on your birth rhythm.",
+      share_hook: oneLine,
+      strengths: facts.kernel ? [facts.kernel.natal.archetype.strength] : [],
+      watchouts: facts.kernel ? [facts.kernel.natal.archetype.shadow] : [],
+      daily_style: facts.kernel?.natal.archetype.resetStyle,
+      characteristics: facts.kernel
+        ? [
+          facts.kernel.natal.archetype.workStyle,
+          facts.kernel.natal.archetype.speechStyle,
+          facts.kernel.natal.archetype.relationshipStyle,
+        ]
+        : [],
+      relationship_pattern: facts.kernel?.natal.archetype.relationshipStyle,
+      work_money_pattern: facts.kernel?.natal.archetype.workStyle,
+      stress_reset_pattern: facts.kernel?.natal.archetype.resetStyle,
+    },
+    likely_life_events: facts.phasePlans.slice(0, 8).map((plan) => ({
+      period_label: plan.periodLabel,
+      event_theme: plan.activeDomains.slice(0, 2).join(" / "),
+      why_it_may_fit: plan.evidenceLine,
+      confidence: "soft" as const,
+      pro_locked: false,
+    })),
+    current_phase: facts.lifeChapter
+      ? {
+        title: facts.lifeChapter.title,
+        summary: facts.lifeChapter.summary,
+        quality_label: facts.lifeChapter.qualityLabel,
+        timeline_label: facts.lifeChapter.timelineLabel,
+        action_line: facts.lifeChapter.actionLine,
+        share_hook: oneLine,
+      }
+      : undefined,
+    today_cards: facts.timing.map((day, idx) =>
+      fallbackTodayCard(day, locale, {
+        kernel: facts.kernel,
+        lifeChapter: facts.lifeChapter,
+        oneLine,
+        copy,
+        dayIndex: idx,
+      })
+    ),
+    weekly_cards: weeklyCards,
+    monthly_cards: monthlyCards,
+    horizons: {
+      week: {
+        headline: firstWeekly?.title ?? copy.weeklyTitle,
+        action_focus: firstWeekly?.body ?? oneLine,
+        caution: firstWeekly?.be_careful?.[0] ?? "",
+        share_line: firstWeekly?.share_hook ?? oneLine,
+      },
+      month: {
+        headline: firstMonthly?.title ?? copy.monthlyTitle,
+        strategy: firstMonthly?.body ?? oneLine,
+        caution: firstMonthly?.be_careful?.[0] ?? "",
+        share_line: firstMonthly?.share_hook ?? oneLine,
+      },
+    },
+    journey_phases: facts.phasePlans.map((plan) => ({
+      sortOrder: plan.id,
+      periodLabel: plan.periodLabel,
+      mahadashaLord: plan.mahadashaLord,
+      antardashaLord: plan.antardashaLord,
+      title: plan.fallbackTitle,
+      highlight: plan.evidenceLine,
+      sentences: plan.fallbackSentences.slice(0, 2),
+      focusAreas: plan.activeDomains,
+      tone: plan.supportThemes,
+      pressureThemes: plan.pressureThemes,
+      phasePulse: plan.phasePulse,
+      transitionNote: plan.transitionNote,
+      evidenceLine: plan.evidenceLine,
+      shareHook: plan.shareHook,
+      kernelSignals: plan.kernelSignals,
+      domainLenses: plan.domainLenses,
+      proLocked: false,
+      subPhases: [],
+    })),
+    ask_knowledge: {
+      compact_summary: facts.lifeChapter?.summary || oneLine,
+      common_answers: [],
+      boundaries: copy.boundaries,
+    },
+    pro_teasers: copy.proTeasers,
+  };
+}
+
+function countTodayCards(content: Record<string, unknown> | BirthIntelligencePackContent): number {
+  return asArray<PackTodayCard>((content as BirthIntelligencePackContent).today_cards).length;
+}
+
+function mergeBirthPackWithFallback(
+  partial: BirthIntelligencePackContent,
+  fallback: BirthIntelligencePackContent,
+  keys: {
+    dailyKeys: string[];
+    weeklyKeys: string[];
+    monthlyKeys: string[];
+  },
+): BirthIntelligencePackContent {
+  const todayMap = new Map(
+    asArray<PackTodayCard>(partial.today_cards)
+      .filter((card) => safeString(card.key))
+      .map((card) => [safeString(card.key), card]),
+  );
+  const weeklyMap = new Map(
+    asArray<PackRangeCard>(partial.weekly_cards)
+      .filter((card) => safeString(card.key))
+      .map((card) => [safeString(card.key), card]),
+  );
+  const monthlyMap = new Map(
+    asArray<PackRangeCard>(partial.monthly_cards)
+      .filter((card) => safeString(card.key))
+      .map((card) => [safeString(card.key), card]),
+  );
+  const fbToday = asArray<PackTodayCard>(fallback.today_cards);
+  const fbWeekly = asArray<PackRangeCard>(fallback.weekly_cards);
+  const fbMonthly = asArray<PackRangeCard>(fallback.monthly_cards);
+
+  return {
+    ...fallback,
+    ...partial,
+    today_cards: keys.dailyKeys.map((key, idx) =>
+      todayMap.get(key) ?? fbToday[idx] ?? fbToday[0]
+    ),
+    weekly_cards: keys.weeklyKeys.map((key, idx) =>
+      weeklyMap.get(key) ?? fbWeekly[idx] ?? fbWeekly[0]
+    ),
+    monthly_cards: keys.monthlyKeys.map((key, idx) =>
+      monthlyMap.get(key) ?? fbMonthly[idx] ?? fbMonthly[0]
+    ),
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isStaleGeneration(updatedAt: string | null | undefined): boolean {
+  if (!updatedAt) return true;
+  const ts = Date.parse(updatedAt);
+  if (!Number.isFinite(ts)) return true;
+  return Date.now() - ts > PACK_GENERATION_STALE_MS;
+}
+
+async function fetchPackByFactSignature(
+  supabase: SupabaseClient,
+  profileId: string,
+  birthInputId: string,
+  locale: AppLocale,
+  factSignature: string,
+  dateStr: string,
+): Promise<BirthPackRow | null> {
+  const { data, error } = await supabase
+    .from("birth_intelligence_packs")
+    .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on, updated_at")
+    .eq("profile_id", profileId)
+    .eq("birth_input_id", birthInputId)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("engine_version", ENGINE_V)
+    .eq("fact_signature", factSignature)
+    .in("status", ["ready", "fallback", "generating"])
+    .gte("expires_on", dateStr)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data as BirthPackRow | null;
+}
+
+async function waitForPackCompletion(
+  supabase: SupabaseClient,
+  profileId: string,
+  birthInputId: string,
+  locale: AppLocale,
+  factSignature: string,
+  dateStr: string,
+): Promise<BirthPackRow | null> {
+  const deadline = Date.now() + PACK_GENERATION_WAIT_MS;
+  while (Date.now() < deadline) {
+    const row = await fetchPackByFactSignature(
+      supabase,
+      profileId,
+      birthInputId,
+      locale,
+      factSignature,
+      dateStr,
+    );
+    if (row && (row.status === "ready" || row.status === "fallback")) {
+      return row;
+    }
+    if (!row || row.status !== "generating" || isStaleGeneration(
+      (row as BirthPackRow & { updated_at?: string }).updated_at,
+    )) {
+      break;
+    }
+    await sleep(PACK_GENERATION_POLL_MS);
+  }
+  return findBestExistingPack(supabase, profileId, birthInputId, locale);
+}
+
+async function clearStalePackGenerations(
+  supabase: SupabaseClient,
+  profileId: string,
+  birthInputId: string,
+  locale: AppLocale,
+) {
+  const staleBefore = new Date(Date.now() - PACK_GENERATION_STALE_MS).toISOString();
+  await supabase
+    .from("birth_intelligence_packs")
+    .delete()
+    .eq("profile_id", profileId)
+    .eq("birth_input_id", birthInputId)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("status", "generating")
+    .lt("updated_at", staleBefore);
+}
+
+async function tryClaimPackGeneration(
+  supabase: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow,
+  locale: AppLocale,
+  dateStr: string,
+  factSignature: string,
+  expiresOn: string,
+): Promise<boolean> {
+  await clearStalePackGenerations(supabase, profile.id, bi.id, locale);
+
+  const { data: inFlight, error: inFlightError } = await supabase
+    .from("birth_intelligence_packs")
+    .select("id, updated_at")
+    .eq("profile_id", profile.id)
+    .eq("birth_input_id", bi.id)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("status", "generating")
+    .maybeSingle();
+  if (inFlightError) throw inFlightError;
+  if (inFlight && !isStaleGeneration(inFlight.updated_at as string)) {
+    return false;
+  }
+
+  const nowIso = new Date().toISOString();
+  const { error: insertError } = await supabase
+    .from("birth_intelligence_packs")
+    .insert({
+      profile_id: profile.id,
+      birth_input_id: bi.id,
+      locale,
+      pack_version: BIRTH_PACK_VERSION,
+      engine_version: ENGINE_V,
+      planner_version: PLANNER_VERSION,
+      kernel_version: KERNEL_VERSION,
+      provider: "pending",
+      model: "pending",
+      status: "generating",
+      fact_signature: factSignature,
+      content: {},
+      generated_for_date: dateStr,
+      expires_on: expiresOn,
+      updated_at: nowIso,
+    });
+  if (insertError) {
+    if (insertError.code === "23505") return false;
+    throw insertError;
+  }
+  return true;
+}
+
+/** Read cached pack only — never starts OpenAI / Groq generation. */
+async function loadBirthPack(
+  supabase: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow | null,
+  locale: AppLocale,
+  dateStr: string,
+): Promise<BirthPackRow | null> {
+  if (!bi) return null;
+  const best = await findBestExistingPack(supabase, profile.id, bi.id, locale);
+  if (best) {
+    attachNatalLuckToContent(
+      best.content as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      locale,
+    );
+    return best;
+  }
+  return null;
+}
+
+async function findBestExistingPack(
+  supabase: SupabaseClient,
+  profileId: string,
+  birthInputId: string,
+  locale: AppLocale,
+): Promise<BirthPackRow | null> {
+  const { data, error } = await supabase
+    .from("birth_intelligence_packs")
+    .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on")
+    .eq("profile_id", profileId)
+    .eq("birth_input_id", birthInputId)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .in("status", ["ready", "fallback"])
+    .order("created_at", { ascending: false })
+    .limit(8);
+  if (error) throw error;
+  const rows = (data ?? []) as BirthPackRow[];
+  const readyFull = rows.find((row) =>
+    row.status === "ready" && countTodayCards(row.content) >= PACK_DAILY_DAYS
+  );
+  if (readyFull) return readyFull;
+  return rows.find((row) => countTodayCards(row.content) >= PACK_DAILY_DAYS) ?? null;
+}
+
+async function pruneStalePacks(
+  supabase: SupabaseClient,
+  profileId: string,
+  birthInputId: string,
+  locale: AppLocale,
+  keepId: string,
+) {
+  await supabase
+    .from("birth_intelligence_packs")
+    .delete()
+    .eq("profile_id", profileId)
+    .eq("birth_input_id", birthInputId)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .neq("id", keepId);
+}
+
+function phasePlanLifeMapChapter(plan: PhasePlan, locked = false): Record<string, unknown> {
+  return {
+    period: plan.periodLabel,
+    theme: plan.fallbackTitle,
+    career: plan.activeDomains.slice(0, 2).join(" / "),
+    money: plan.supportThemes[0] ?? plan.evidenceLine,
+    family_relationship: plan.domainLenses?.slice(0, 2).join(" / ") ||
+      plan.kernelSignals?.slice(0, 2).join(" / ") ||
+      plan.evidenceLine,
+    avoid: plan.pressureThemes.slice(0, 2).join(" / "),
+    share_line: plan.shareHook ?? plan.evidenceLine,
+    locked,
+  };
+}
+
+function ensureLifeMapCoverage(
+  content: BirthIntelligencePackContent,
+  phasePlans: PhasePlan[],
+  locale: AppLocale,
+) {
+  const currentLifeMap = typeof content.life_map === "object" && content.life_map
+    ? content.life_map as Record<string, unknown>
+    : {};
+  const existingPast = asArray<Record<string, unknown>>(currentLifeMap.past_chapters);
+  const existingFuture = asArray<Record<string, unknown>>(currentLifeMap.future_chapters);
+  const existingCurrent = typeof currentLifeMap.current_chapter === "object" &&
+      currentLifeMap.current_chapter
+    ? currentLifeMap.current_chapter as Record<string, unknown>
+    : undefined;
+
+  const byPeriod = (rows: Record<string, unknown>[]) =>
+    new Map(rows.map((row) => [safeString(row.period), row]));
+  const pastByPeriod = byPeriod(existingPast);
+  const futureByPeriod = byPeriod(existingFuture);
+  const pastPlans = phasePlans.filter((plan) => plan.tense === "past");
+  const futurePlans = phasePlans.filter((plan) => plan.tense === "future");
+  const currentPlan = phasePlans.find((plan) => plan.tense === "current");
+
+  content.life_map = {
+    ...currentLifeMap,
+    past_chapters: pastPlans.map((plan) =>
+      pastByPeriod.get(plan.periodLabel) ?? phasePlanLifeMapChapter(plan)
+    ),
+    current_chapter: existingCurrent && Object.keys(existingCurrent).length > 0
+      ? existingCurrent
+      : currentPlan
+      ? {
+        ...phasePlanLifeMapChapter(currentPlan),
+        use_it_for: currentPlan.activeDomains.slice(0, 3).join(" / "),
+      }
+      : currentLifeMap.current_chapter,
+    future_chapters: fillLifeMapFutureGaps(
+      futurePlans.map((plan) =>
+        futureByPeriod.get(plan.periodLabel) ?? phasePlanLifeMapChapter(plan, false)
+      ),
+      locale,
+    ),
+  };
+}
+
+function parsePeriodEndMonth(period: string): DateTime | null {
+  const parts = period.split(" - ");
+  const tail = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+  const dt = DateTime.fromFormat(tail.trim(), "LLL yyyy");
+  return dt.isValid ? dt.endOf("month") : null;
+}
+
+function parsePeriodStartMonth(period: string): DateTime | null {
+  const head = period.split(" - ")[0]?.trim() ?? period;
+  const dt = DateTime.fromFormat(head, "LLL yyyy");
+  return dt.isValid ? dt.startOf("month") : null;
+}
+
+function fillLifeMapFutureGaps(
+  chapters: Record<string, unknown>[],
+  locale: AppLocale,
+): Record<string, unknown>[] {
+  if (chapters.length < 2) return chapters;
+  const bridgeCopy: Record<AppLocale, { theme: string; career: string; avoid: string }> = {
+    en: {
+      theme: "Transition stretch",
+      career: "Finish loose ends before the next major phase opens.",
+      avoid: "Forcing a big new start before rhythm settles.",
+    },
+    te: {
+      theme: "మధ్యలో ఉన్న కాలం",
+      career: "తర్వాతి పెద్ద దశ ముందు పెండింగ్ పనులు ముగించు.",
+      avoid: "రిథమ్ సెట్టిల్ కాకముందే పెద్ద కొత్త స్టార్ట్ ఫోర్స్ చేయకు.",
+    },
+    hi: {
+      theme: "बीच का समय",
+      career: "अगले बड़े दौर से पहले pending काम पूरे करें.",
+      avoid: "लय बैठने से पहले बड़ी नई शुरुआत ज़बरदस्ती न करें.",
+    },
+  };
+  const copy = bridgeCopy[locale] ?? bridgeCopy.en;
+  const out: Record<string, unknown>[] = [];
+  for (let i = 0; i < chapters.length; i++) {
+    out.push(chapters[i]);
+    const next = chapters[i + 1];
+    if (!next) continue;
+    const end = parsePeriodEndMonth(safeString(chapters[i].period));
+    const start = parsePeriodStartMonth(safeString(next.period));
+    if (!end || !start) continue;
+    const gapMonths = start.diff(end, "months").months;
+    if (gapMonths >= 4) {
+      const bridgeStart = end.plus({ months: 1 }).toFormat("LLL yyyy");
+      const bridgeEnd = start.minus({ months: 1 }).toFormat("LLL yyyy");
+      out.push({
+        period: `${bridgeStart} - ${bridgeEnd}`,
+        theme: copy.theme,
+        career: copy.career,
+        money: copy.career,
+        family_relationship: copy.career,
+        avoid: copy.avoid,
+        share_line: copy.career,
+        locked: false,
+      });
+    }
+  }
+  return out;
+}
+
+async function persistNotificationSchedule(
+  supabase: SupabaseClient,
+  pack: BirthPackRow,
+  profile: ProfRow,
+  bi: BioRow,
+  locale: AppLocale,
+  timing: DailyTimingFact[],
+) {
+  const notifications = pack.content.notification_copy;
+  const notificationRows = timing.slice(0, 7).flatMap((day) => {
+    const date = DateTime.fromISO(day.date, {
+      zone: profile.current_timezone ?? "Asia/Kolkata",
+    });
+    const todayReady = notifications?.today_ready;
+    const rows: Record<string, unknown>[] = [{
+      profile_id: profile.id,
+      birth_input_id: bi.id,
+      pack_id: pack.id,
+      notification_key: `today-ready:${day.date}`,
+      notification_type: "today_ready",
+      scheduled_at: date.set({ hour: 6, minute: 30 }).toUTC().toISO(),
+      locale,
+      title: safeString(todayReady?.title) || "Today's card is ready",
+      body: safeString(todayReady?.body) || "Open your timing card before the day gets noisy.",
+      deep_link: "muhurtha://today",
+      payload: { date: day.date },
+      updated_at: new Date().toISOString(),
+    }];
+    const goodFirst = day.good[0];
+    if (goodFirst) {
+      const start = DateTime.fromISO(`${day.date}T${goodFirst.start}`, {
+        zone: profile.current_timezone ?? "Asia/Kolkata",
+      });
+      rows.push({
+        profile_id: profile.id,
+        birth_input_id: bi.id,
+        pack_id: pack.id,
+        notification_key: `good-start:${day.date}:${goodFirst.start}`,
+        notification_type: "good_time_start",
+        scheduled_at: start.toUTC().toISO(),
+        locale,
+        title: safeString(notifications?.good_time_start?.title) || "Good time starts now",
+        body: safeString(notifications?.good_time_start?.body) ||
+          "Use this window for one clean action.",
+        deep_link: "muhurtha://today",
+        payload: { date: day.date, window: goodFirst },
+        updated_at: new Date().toISOString(),
+      });
+    }
+    const cautionFirst = day.caution[0];
+    if (cautionFirst) {
+      const start = DateTime.fromISO(`${day.date}T${cautionFirst.start}`, {
+        zone: profile.current_timezone ?? "Asia/Kolkata",
+      });
+      rows.push({
+        profile_id: profile.id,
+        birth_input_id: bi.id,
+        pack_id: pack.id,
+        notification_key: `caution-start:${day.date}:${cautionFirst.start}`,
+        notification_type: "caution_start",
+        scheduled_at: start.toUTC().toISO(),
+        locale,
+        title: safeString(notifications?.caution_start?.title) || "Go lighter now",
+        body: safeString(notifications?.caution_start?.body) ||
+          "Avoid forcing a new start in this window.",
+        deep_link: "muhurtha://today",
+        payload: { date: day.date, window: cautionFirst },
+        updated_at: new Date().toISOString(),
+      });
+    }
+    return rows;
+  });
+  if (notificationRows.length) {
+    const { error } = await supabase.from("notification_schedule").upsert(
+      notificationRows,
+      { onConflict: "profile_id,notification_key,locale" },
+    );
+    if (error) throw error;
+  }
+}
+
+async function persistNotificationScheduleBestEffort(
+  supabase: SupabaseClient,
+  pack: BirthPackRow,
+  profile: ProfRow,
+  bi: BioRow,
+  locale: AppLocale,
+  timing: DailyTimingFact[],
+) {
+  try {
+    await persistNotificationSchedule(supabase, pack, profile, bi, locale, timing);
+  } catch (error) {
+    await logAppEvent(
+      supabase,
+      profile.id,
+      "birth_pack",
+      "warn",
+      errorMessage(error),
+      error instanceof Error ? error.stack : undefined,
+      {
+        stage: "persist_notification_schedule",
+        packId: pack.id,
+        locale,
+      },
+    );
+  }
+}
+
+async function ensureBirthPack(
+  supabase: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow | null,
+  locale: AppLocale,
+  dateStr: string,
+): Promise<BirthPackRow | null> {
+  if (!bi) return null;
+  const tz = profile.current_timezone ?? "Asia/Kolkata";
+  const refInstant = parseDateAsUtcInstant(dateStr, tz);
+  const { segments } = computeTimeline(bi, tz);
+  const currentLords = segments.length ? vimshottariLordsAt(segments, refInstant) : null;
+  const kernel = buildKernelForBirthInput(
+    bi,
+    profile,
+    locale,
+    refInstant,
+    currentLords?.mdLord,
+    currentLords?.adLord,
+  );
+  const timing = dailyTimingFacts(profile, dateStr, PACK_DAILY_DAYS, tz);
+  const phasePlans = buildPackPhasePlans(bi, profile, locale, refInstant, kernel);
+  const factSignature = buildFactSignature([
+    profile.id,
+    bi.id,
+    locale,
+    BIRTH_PACK_VERSION,
+    ENGINE_V,
+    PLANNER_VERSION,
+    KERNEL_VERSION,
+    currentLords?.mdLord,
+    currentLords?.adLord,
+    kernel?.natal.archetype.key,
+    kernel?.period.line,
+    phasePlans.map((p) => `${p.periodLabel}:${p.mahadashaLord}-${p.antardashaLord}:${p.tense}`)
+      .join("|"),
+  ]);
+
+  const { data: existing, error: existingError } = await supabase
+    .from("birth_intelligence_packs")
+    .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on")
+    .eq("profile_id", profile.id)
+    .eq("birth_input_id", bi.id)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("engine_version", ENGINE_V)
+    .eq("fact_signature", factSignature)
+    .eq("status", "ready")
+    .gte("expires_on", dateStr)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) {
+    const pack = existing as BirthPackRow;
+    attachNatalLuckToContent(
+      pack.content as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      locale,
+    );
+    await persistNotificationScheduleBestEffort(supabase, pack, profile, bi, locale, timing);
+    return pack;
+  }
+
+  const cached = await findBestExistingPack(supabase, profile.id, bi.id, locale);
+  if (cached && countTodayCards(cached.content) >= PACK_DAILY_DAYS) {
+    attachNatalLuckToContent(
+      cached.content as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      locale,
+    );
+    await persistNotificationScheduleBestEffort(supabase, cached, profile, bi, locale, timing);
+    return cached;
+  }
+
+  const lifeChapter = lifeChapterInfo(kernel, locale);
+  const packFacts = {
+    profile: {
+      display_name: profile.display_name,
+      current_city: profile.current_city,
+      language_code: profile.language_code,
+      explanation_mode: profile.explanation_mode,
+    },
+    birth: {
+      date_of_birth: bi.date_of_birth,
+      birth_place: bi.birth_place,
+      birth_input_mode: bi.birth_input_mode,
+      has_exact_time: bi.exact_birth_time != null,
+      janma_nakshatra: bi.janma_nakshatra,
+      nakshatra_pada: bi.nakshatra_pada,
+      timezone: bi.birth_timezone,
+      age: calculateAge(bi.date_of_birth),
+    },
+    locale,
+    generation_date: dateStr,
+    date_range: {
+      daily_days: PACK_DAILY_DAYS,
+      weekly_weeks: PACK_WEEKLY_WEEKS,
+      monthly_months: PACK_MONTHLY_MONTHS,
+    },
+    personalization_kernel: kernel,
+    current_life_chapter: lifeChapter,
+    daily_timing_facts: timing,
+    weekly_keys: Array.from({ length: PACK_WEEKLY_WEEKS }, (_, idx) =>
+      weekCardKey(
+        DateTime.fromISO(dateStr, { zone: tz }).plus({ weeks: idx }).toISODate()!,
+        tz,
+      )),
+    monthly_keys: Array.from(
+      { length: PACK_MONTHLY_MONTHS },
+      (_, idx) =>
+        monthCardKey(DateTime.fromISO(dateStr, { zone: tz }).plus({ months: idx }).toISODate()!),
+    ),
+    journey_phase_facts: phasePlans.map((p) => ({
+      sortOrder: p.id,
+      periodLabel: p.periodLabel,
+      mahadashaLord: p.mahadashaLord,
+      antardashaLord: p.antardashaLord,
+      tense: p.tense,
+      activeDomains: p.activeDomains,
+      supportThemes: p.supportThemes,
+      pressureThemes: p.pressureThemes,
+      phasePulse: p.phasePulse,
+      transitionNote: p.transitionNote,
+      evidenceLine: p.evidenceLine,
+      domainLenses: p.domainLenses,
+      kernelSignals: p.kernelSignals,
+      proLocked: false,
+    })),
+  };
+
+  const weeklyKeys = packFacts.weekly_keys as string[];
+  const monthlyKeys = packFacts.monthly_keys as string[];
+  const packValidationExpected = {
+    dailyCount: timing.length,
+    weeklyCount: weeklyKeys.length,
+    monthlyCount: monthlyKeys.length,
+    dailyKeys: timing.map((day) => day.date),
+    weeklyKeys,
+    monthlyKeys,
+  };
+
+  const fallbackBase = fallbackPackContent(locale, {
+    profile,
+    bi,
+    dateStr,
+    kernel,
+    phasePlans,
+    timing,
+    lifeChapter,
+    weeklyKeys,
+    monthlyKeys,
+  });
+
+  const expiresOn = DateTime.fromISO(dateStr, { zone: tz }).plus({ days: PACK_DAILY_DAYS - 1 })
+    .toISODate()!;
+
+  const exactRow = await fetchPackByFactSignature(
+    supabase,
+    profile.id,
+    bi.id,
+    locale,
+    factSignature,
+    dateStr,
+  );
+  if (exactRow?.status === "fallback" && countTodayCards(exactRow.content) >= PACK_DAILY_DAYS) {
+    attachNatalLuckToContent(
+      exactRow.content as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      locale,
+    );
+    await persistNotificationScheduleBestEffort(supabase, exactRow, profile, bi, locale, timing);
+    return exactRow;
+  }
+
+  const claimed = await tryClaimPackGeneration(
+    supabase,
+    profile,
+    bi,
+    locale,
+    dateStr,
+    factSignature,
+    expiresOn,
+  );
+  if (!claimed) {
+    const waited = await waitForPackCompletion(
+      supabase,
+      profile.id,
+      bi.id,
+      locale,
+      factSignature,
+      dateStr,
+    );
+    if (waited) {
+      attachNatalLuckToContent(
+        waited.content as Record<string, unknown>,
+        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        locale,
+      );
+      await persistNotificationScheduleBestEffort(supabase, waited, profile, bi, locale, timing);
+      return waited;
+    }
+    const bestAfterWait = await findBestExistingPack(supabase, profile.id, bi.id, locale);
+    if (bestAfterWait && countTodayCards(bestAfterWait.content) >= PACK_DAILY_DAYS) {
+      attachNatalLuckToContent(
+        bestAfterWait.content as Record<string, unknown>,
+        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        locale,
+      );
+      await persistNotificationScheduleBestEffort(supabase, bestAfterWait, profile, bi, locale, timing);
+      return bestAfterWait;
+    }
+    ensureLifeMapCoverage(fallbackBase, phasePlans, locale);
+    attachNatalLuckToContent(
+      fallbackBase as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      locale,
+    );
+    return {
+      id: "",
+      content: fallbackBase,
+      provider: "deterministic",
+      model: "none",
+      status: "fallback",
+      fact_signature: factSignature,
+      generated_for_date: dateStr,
+      expires_on: expiresOn,
+    };
+  }
+
+  await logAppEvent(
+    supabase,
+    profile.id,
+    "birth_pack",
+    "info",
+    "birth_pack_llm_started",
+    undefined,
+    { locale, factSignature: factSignature.slice(0, 120) },
+  );
+
+  let generated = await generateBirthIntelligencePack(locale, packFacts, {
+    supabase,
+    profileId: profile.id,
+  });
+  if (generated) {
+    let validationError = validateBirthPackContent(
+      generated.data,
+      packValidationExpected,
+    );
+    if (validationError) {
+      console.warn(
+        `[birth-pack] validation failed locale=${locale} profile=${profile.id}: ${validationError} — merging fallback gaps`,
+      );
+      const merged = mergeBirthPackWithFallback(
+        generated.data,
+        fallbackBase,
+        {
+          dailyKeys: timing.map((day) => day.date),
+          weeklyKeys,
+          monthlyKeys,
+        },
+      );
+      validationError = validateBirthPackContent(merged, packValidationExpected);
+      if (!validationError) {
+        generated = { ...generated, data: merged };
+      } else {
+        console.error(
+          `[birth-pack] merge still invalid locale=${locale}: ${validationError}`,
+        );
+        generated = null;
+      }
+    }
+  }
+
+  let content: BirthIntelligencePackContent;
+  let status: "ready" | "fallback";
+  if (generated) {
+    content = generated.data;
+    status = "ready";
+  } else {
+    const bestExisting = await findBestExistingPack(supabase, profile.id, bi.id, locale);
+    if (bestExisting && countTodayCards(bestExisting.content) >= PACK_DAILY_DAYS) {
+      attachNatalLuckToContent(
+        bestExisting.content as Record<string, unknown>,
+        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        locale,
+      );
+      await persistNotificationScheduleBestEffort(
+        supabase,
+        bestExisting,
+        profile,
+        bi,
+        locale,
+        timing,
+      );
+      return bestExisting;
+    }
+    content = fallbackBase;
+    status = "fallback";
+  }
+
+  ensureLifeMapCoverage(content, phasePlans, locale);
+  attachNatalLuckToContent(
+    content as Record<string, unknown>,
+    birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+    locale,
+  );
+  const { data: saved, error: saveError } = await supabase
+    .from("birth_intelligence_packs")
+    .upsert({
+      profile_id: profile.id,
+      birth_input_id: bi.id,
+      locale,
+      pack_version: BIRTH_PACK_VERSION,
+      engine_version: ENGINE_V,
+      planner_version: PLANNER_VERSION,
+      kernel_version: KERNEL_VERSION,
+      provider: generated?.provider ?? "deterministic",
+      model: generated?.model ?? "none",
+      status,
+      fact_signature: factSignature,
+      content,
+      generated_for_date: dateStr,
+      expires_on: expiresOn,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: "profile_id,birth_input_id,locale,pack_version,fact_signature",
+    })
+    .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on")
+    .single();
+  if (saveError) throw saveError;
+  const pack = saved as BirthPackRow;
+  await pruneStalePacks(supabase, profile.id, bi.id, locale, pack.id);
+  await persistNotificationScheduleBestEffort(supabase, pack, profile, bi, locale, timing);
+  return pack;
+}
+
+async function isProProfile(supabase: SupabaseClient, profileId: string): Promise<boolean> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("plan_code, status, current_period_end")
+    .eq("profile_id", profileId)
+    .in("status", ["trialing", "active"])
+    .or(`current_period_end.is.null,current_period_end.gte.${nowIso}`)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    await logAppEvent(
+      supabase,
+      profileId,
+      "subscriptions",
+      "warn",
+      "Unable to read subscription status; treating as free",
+      undefined,
+      { error: error.message },
+    );
+    return false;
+  }
+  return Boolean(data && String(data.plan_code ?? "free") !== "free");
+}
+
+async function consumeAskQuota(
+  supabase: SupabaseClient,
+  profileId: string,
+  usageDate: string,
+  isPro: boolean,
+) {
+  if (isPro) return { planCode: "pro", remaining: null as number | null };
+  const { data: row, error: readError } = await supabase
+    .from("ask_usage")
+    .select("ask_count")
+    .eq("profile_id", profileId)
+    .eq("usage_date", usageDate)
+    .maybeSingle();
+  if (readError) throw readError;
+  const current = Number(row?.ask_count ?? 0);
+  if (current >= FREE_ASKS_PER_DAY) {
+    throw new ActionError(
+      "free_ask_limit_reached",
+      "Free plan includes 1 Ask per day. Upgrade to Pro for more questions.",
+      429,
+    );
+  }
+  const { error: writeError } = await supabase.from("ask_usage").upsert({
+    profile_id: profileId,
+    usage_date: usageDate,
+    plan_code: "free",
+    ask_count: current + 1,
+    llm_count: 0,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "profile_id,usage_date" });
+  if (writeError) throw writeError;
+  return { planCode: "free", remaining: Math.max(0, FREE_ASKS_PER_DAY - current - 1) };
+}
+
+function cachedAskAnswer(
+  pack: BirthPackRow | null,
+  question: string,
+  locale: AppLocale,
+  goodWindows: { start: string; end: string; label?: string }[],
+  cautionWindows: { start: string; end: string; label?: string }[],
+) {
+  const knowledge = pack?.content.ask_knowledge;
+  const compact = safeString(knowledge?.compact_summary);
+  const normalized = question.toLowerCase();
+  const templates = asArray<{
+    label?: string;
+    answer_frame?: string;
+    best_for?: string;
+    caution?: string;
+    share_line?: string;
+    free_sample?: boolean;
+  }>(pack?.content.ask_templates);
+  const template = templates.find((item) => {
+    const label = safeString(item.label).toLowerCase();
+    const bestFor = safeString(item.best_for).toLowerCase();
+    return (label && normalized.includes(label)) || (bestFor && normalized.includes(bestFor));
+  }) ?? templates.find((item) => safeString(item.free_sample)) ?? templates[0];
+  const common = asArray<{ topic?: string; answer?: string }>(knowledge?.common_answers)
+    .find((item) => {
+      const topic = safeString(item.topic).toLowerCase();
+      return topic && normalized.includes(topic);
+    });
+  const answer = safeString(common?.answer) || safeString(template?.answer_frame) || compact;
+  if (!answer) return null;
+  const fallback = askFallbackCopy(locale, goodWindows, cautionWindows);
+  return {
+    direct_answer: answer,
+    best_time: fallback.best_time,
+    caution_time: fallback.caution_time,
+    better_option: safeString(template?.best_for) || fallback.better_option,
+    simple_why: safeString(template?.caution) || fallback.simple_why,
+    action_line: safeString(template?.answer_frame) || fallback.action_line,
+    share_hook: safeString(template?.share_line) || pack?.content.me_profile?.share_hook ||
+      fallback.share_hook,
+  };
+}
+
+export async function logAppEvent(
+  supabase: SupabaseClient,
+  profileId: string | null,
+  service: string,
+  level: string,
+  message: string,
+  stack?: string,
+  context?: Record<string, unknown>,
+) {
+  try {
+    await supabase.from("app_logs").insert({
+      profile_id: profileId,
+      service,
+      level,
+      message,
+      stack_trace: stack,
+      context: context ?? {},
+    });
+  } catch (e) {
+    console.error("Failed to log to DB:", e);
+  }
+}
+
 async function getProfileForUser(
   supabase: SupabaseClient,
   user: User,
@@ -117,7 +1820,7 @@ async function getProfileForUser(
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code",
+      "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code, explanation_mode",
     )
     .eq("user_id", user.id)
     .single();
@@ -133,7 +1836,7 @@ async function getBirthInput(
   const { data, error } = await supabase
     .from("birth_inputs")
     .select(
-      "id, profile_id, date_of_birth, birth_input_mode, exact_birth_time, time_bucket, janma_nakshatra, nakshatra_pada, birth_timezone, birth_lat, birth_lng",
+      "id, profile_id, date_of_birth, birth_place, birth_input_mode, exact_birth_time, time_bucket, janma_nakshatra, nakshatra_pada, birth_timezone, birth_lat, birth_lng",
     )
     .eq("id", id)
     .single();
@@ -149,7 +1852,7 @@ async function getLatestBirthInput(
   const { data, error } = await supabase
     .from("birth_inputs")
     .select(
-      "id, profile_id, date_of_birth, birth_input_mode, exact_birth_time, time_bucket, janma_nakshatra, nakshatra_pada, birth_timezone, birth_lat, birth_lng",
+      "id, profile_id, date_of_birth, birth_place, birth_input_mode, exact_birth_time, time_bucket, janma_nakshatra, nakshatra_pada, birth_timezone, birth_lat, birth_lng",
     )
     .eq("profile_id", profileId)
     .order("created_at", { ascending: false })
@@ -189,7 +1892,7 @@ function vimshottariEpochUtc(bi: BioRow, zone: string): Date {
 function computeTimeline(
   bi: BioRow,
   profileTimezone: string,
-): { segments: MdSegment[]; nk: number | null } {
+): { segments: MdSegment[]; nk: number | null; moonFraction: number | null } {
   const zone = resolveBirthZone(bi, profileTimezone);
   const epoch = vimshottariEpochUtc(bi, zone);
   const moonUtc = birthInstantUtc(bi, zone);
@@ -199,11 +1902,84 @@ function computeTimeline(
     bi.nakshatra_pada,
     moonLon,
   );
-  if (!meta) return { segments: [], nk: null };
+  if (!meta) return { segments: [], nk: null, moonFraction: null };
   return {
-    segments: vimshottariMahadashas(epoch, meta.idx, meta.pada),
+    segments: vimshottariMahadashas(
+      epoch,
+      meta.idx,
+      meta.pada,
+      meta.withinFraction ?? null,
+    ),
     nk: meta.idx,
+    moonFraction: meta.withinFraction ?? null,
   };
+}
+
+async function ensureBirthPlacePrecision(
+  supabase: SupabaseClient,
+  bi: BioRow | null,
+): Promise<BioRow | null> {
+  if (!bi) return null;
+  if (bi.birth_lat != null && bi.birth_lng != null && bi.birth_timezone) {
+    return bi;
+  }
+  const resolved = await resolveBirthPlace(bi.birth_place);
+  if (!resolved) return bi;
+  await supabase.from("birth_inputs").update({
+    birth_lat: resolved.lat,
+    birth_lng: resolved.lng,
+    birth_timezone: resolved.timezone,
+    updated_at: new Date().toISOString(),
+  }).eq("id", bi.id);
+  return {
+    ...bi,
+    birth_lat: resolved.lat,
+    birth_lng: resolved.lng,
+    birth_timezone: resolved.timezone,
+  };
+}
+
+function nextMahadashaLord(
+  segments: MdSegment[],
+  current: MdSegment | null,
+): string | null {
+  if (!current) return null;
+  const idx = segments.findIndex((s) =>
+    s.start.getTime() === current.start.getTime() &&
+    s.end.getTime() === current.end.getTime() &&
+    s.lord === current.lord
+  );
+  return idx >= 0 ? segments[idx + 1]?.lord ?? null : null;
+}
+
+function buildKernelForBirthInput(
+  bi: BioRow | null,
+  profile: ProfRow,
+  locale: AppLocale,
+  refInstant: Date,
+  mdLord?: string | null,
+  adLord?: string | null,
+): PersonalizationKernel | undefined {
+  if (!bi) return undefined;
+  const tz = profile.current_timezone ?? "Asia/Kolkata";
+  const natalMoon = birthMoonDetails(bi, tz, locale);
+  const birthSun = birthSunDetails(bi, tz, locale);
+  const { segments } = computeTimeline(bi, tz);
+  const mdSeg = segments.length ? segmentAt(segments, refInstant) : null;
+  return buildPersonalizationKernel({
+    locale,
+    age: calculateAge(bi.date_of_birth),
+    birthMoonSign: natalMoon?.sign.label,
+    birthMoonNakshatra: natalMoon?.nakshatra ?? bi.janma_nakshatra,
+    nakshatraPada: natalMoon?.pada ?? bi.nakshatra_pada,
+    sunSign: birthSun?.label,
+    mahadashaLord: mdLord ?? mdSeg?.lord,
+    antardashaLord: adLord ?? mdLord ?? mdSeg?.lord,
+    mahadashaStart: mdSeg?.start ?? null,
+    mahadashaEnd: mdSeg?.end ?? null,
+    nextMahadashaLord: nextMahadashaLord(segments, mdSeg),
+    refDate: refInstant,
+  });
 }
 
 const purposeRules: Record<string, { favor: string[]; caution: string[] }> = {
@@ -227,22 +2003,125 @@ const purposeRules: Record<string, { favor: string[]; caution: string[] }> = {
   creative_public: { favor: ["Venus", "Mercury", "Moon"], caution: ["Rahu"] },
 };
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch (_e) {
+    return String(error);
+  }
+}
+
 export async function handleRequest(
   supabase: SupabaseClient,
   user: User,
   body: Record<string, unknown>,
+  loggingSupabase: SupabaseClient = supabase,
 ): Promise<unknown> {
   const action = body.action as string;
-  if (!action) throw new Error("Missing action");
+  if (!action) {
+    throw new ActionError("missing_action", "Missing action", 400);
+  }
 
-  const prof = await getProfileForUser(supabase, user);
+  let prof: ProfRow | null = null;
+  try {
+    prof = await getProfileForUser(supabase, user);
+  } catch (_e) {
+    // Some actions like chart_initialize might run before profile is fully hydrated
+    // but usually user is there.
+  }
+
+  if (action === "log_app_event") {
+    const service = (body.service as string) ?? "app";
+    const level = (body.level as string) ?? "info";
+    const message = (body.message as string) ?? "";
+    const stack = (body.stack_trace as string) ?? "";
+    const ctx = (body.context as Record<string, unknown>) ?? {};
+    await logAppEvent(loggingSupabase, prof?.id ?? null, service, level, message, stack, ctx);
+    return { success: true };
+  }
+
+  try {
+    return await _handleInternal(supabase, prof, body);
+  } catch (e) {
+    const msg = errorMessage(e);
+    const stack = e instanceof Error ? e.stack : "";
+    await logAppEvent(loggingSupabase, prof?.id ?? null, "api", "error", msg, stack, {
+      action,
+      body,
+    });
+    throw e;
+  }
+}
+
+async function _handleInternal(
+  supabase: SupabaseClient,
+  prof: ProfRow | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  const action = body.action as string;
+
+  const DEPRECATED_ACTIONS = new Set([
+    "quick_proof_generate",
+    "validation_submit",
+    "journey_get",
+    "weekly_get",
+    "monthly_get",
+    "purpose_check",
+    "share_card_generate",
+  ]);
+  if (DEPRECATED_ACTIONS.has(action)) {
+    throw new ActionError(
+      "action_deprecated",
+      `${action} is no longer available`,
+      410,
+    );
+  }
+
+  if (action === "birth_place_resolve") {
+    const lat = Number(body.lat);
+    const lng = Number(body.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      const resolved = await resolveCoordinates(lat, lng);
+      if (!resolved) {
+        throw new ActionError(
+          "birth_place_not_resolved",
+          "Could not resolve coordinates",
+          422,
+        );
+      }
+      return resolved;
+    }
+    const place = String(body.place ?? "").trim();
+    const resolved = await resolveBirthPlace(place);
+    if (!resolved) {
+      throw new ActionError(
+        "birth_place_not_resolved",
+        "Could not resolve birth place",
+        422,
+      );
+    }
+    return resolved;
+  }
 
   if (action === "chart_initialize") {
     const birthInputId = body.birth_input_id as string;
-    if (!birthInputId) throw new Error("birth_input_id required");
-    const bi = await getBirthInput(supabase, birthInputId, prof.id);
+    if (!birthInputId) {
+      throw new ActionError(
+        "missing_birth_input_id",
+        "birth_input_id required",
+        400,
+      );
+    }
+    const profile = requireProfile(prof, action);
+    const rawBi = await getBirthInput(supabase, birthInputId, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    if (!bi) {
+      throw new ActionError("birth_input_missing", "No birth input", 409);
+    }
     const engineMode = resolveEngineMode(bi);
-    const tz = resolveBirthZone(bi, prof.current_timezone ?? "Asia/Kolkata");
+    const tz = resolveBirthZone(bi, profile.current_timezone ?? "Asia/Kolkata");
     const moonUtc = birthInstantUtc(bi, tz);
     const moonLon = moonUtc != null ? moonSiderealLongitudeDeg(moonUtc) : null;
     const meta = siderealMetaFromNameOrMoon(
@@ -250,6 +2129,7 @@ export async function handleRequest(
       bi.nakshatra_pada,
       moonLon,
     );
+    const rashiKey = moonLon != null ? rashiKeyFromSiderealLon(moonLon) : null;
     const janmaOut = meta?.name ?? bi.janma_nakshatra;
     const padaOut = meta?.pada ?? bi.nakshatra_pada;
 
@@ -266,14 +2146,16 @@ export async function handleRequest(
       birth_input_mode: bi.birth_input_mode,
       resolved_engine_mode: engineMode,
       derived_from_ephemeris: !bi.janma_nakshatra && meta != null,
+      moon_fraction_within_nakshatra: meta?.withinFraction ?? null,
     };
     const { data: chart, error } = await supabase
       .from("chart_runs")
       .insert({
-        profile_id: prof.id,
+        profile_id: profile.id,
         birth_input_id: bi.id,
         engine_mode: engineMode,
         engine_version: ENGINE_V,
+        rashi: rashiKey,
         janma_nakshatra: janmaOut,
         nakshatra_pada: padaOut,
         raw_context: raw,
@@ -296,38 +2178,129 @@ export async function handleRequest(
     };
   }
 
+  const profile = requireProfile(prof, action);
+
+  if (action === "birth_pack_get") {
+    // Sole entry point for birth-pack LLM generation (one call per locale, lock-protected).
+    const locale = requestLocale(body, profile);
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
+    const dateStr = (body.date as string) ?? todayInTimezone(tz);
+    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    if (!bi) {
+      throw new ActionError("birth_input_missing", "No birth input", 409);
+    }
+    const pack = await ensureBirthPack(supabase, profile, bi, locale, dateStr);
+    if (!pack || !["ready", "fallback"].includes(pack.status ?? "ready")) {
+      throw new ActionError(
+        "birth_pack_not_ready",
+        "Birth pack is not ready yet",
+        503,
+      );
+    }
+
+    return {
+      date: dateStr,
+      locale,
+      displayName: profile.display_name,
+      locationLabel: profile.current_city ?? "India",
+      birthInputId: bi.id,
+      packVersion: BIRTH_PACK_VERSION,
+      provider: pack.provider,
+      model: pack.model,
+      status: pack.status,
+      content: pack.content,
+      natalLuck: buildNatalLuck(
+        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        locale,
+      ),
+    };
+  }
+
+  if (action === "notification_schedule_get") {
+    const locale = requestLocale(body, profile);
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
+    const dateStr = (body.date as string) ?? todayInTimezone(tz);
+    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    if (bi) {
+      await loadBirthPack(supabase, profile, bi, locale, dateStr);
+    }
+    const nowIso = new Date().toISOString();
+    const untilIso = DateTime.fromISO(dateStr, { zone: tz }).plus({ days: 7 }).toUTC().toISO();
+    const { data, error } = await supabase
+      .from("notification_schedule")
+      .select(
+        "id, notification_key, notification_type, scheduled_at, title, body, deep_link, payload",
+      )
+      .eq("profile_id", profile.id)
+      .eq("locale", locale)
+      .gte("scheduled_at", nowIso)
+      .lte("scheduled_at", untilIso)
+      .order("scheduled_at", { ascending: true })
+      .limit(32);
+    if (error) throw error;
+    return { notifications: data ?? [], locale };
+  }
+
   if (action === "quick_proof_generate") {
-    const bi = await getLatestBirthInput(supabase, prof.id);
-    if (!bi) throw new Error("No birth input");
+    const locale = requestLocale(body, profile);
+    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    if (!bi) {
+      throw new ActionError("birth_input_missing", "No birth input", 409);
+    }
 
     const { data: chart } = await supabase
       .from("chart_runs")
       .select("*")
-      .eq("profile_id", prof.id)
+      .eq("profile_id", profile.id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (!chart) throw new Error("Chart not initialized");
+    if (!chart) {
+      throw new ActionError(
+        "chart_not_initialized",
+        "Chart not initialized",
+        409,
+      );
+    }
 
     await supabase
       .from("phase_runs")
       .delete()
-      .eq("profile_id", prof.id)
+      .eq("profile_id", profile.id)
       .eq("run_type", "quick_proof");
 
     const engineMode = chart.engine_mode as string;
-    const { segments, nk } = computeTimeline(bi, prof.current_timezone ?? "Asia/Kolkata");
+    const { segments, nk } = computeTimeline(
+      bi,
+      profile.current_timezone ?? "Asia/Kolkata",
+    );
     let cards: unknown[] = [];
 
-    if (nk != null && segments.length > 0 && engineMode !== "window_chart" &&
-      engineMode !== "general_panchanga") {
+    if (
+      nk != null && segments.length > 0 && engineMode !== "window_chart" &&
+      engineMode !== "general_panchanga"
+    ) {
       const now = new Date();
-      const recent = recentMahadashas(segments, now, 22, 5);
+      const ads = allAntardashasFromMahadashas(segments);
+      const recent = recentAntardashasClipped(ads, now, JOURNEY_LOOKBACK_YEARS)
+        .slice(-5);
+      const currentLords = vimshottariLordsAt(segments, now);
+      const kernel = buildKernelForBirthInput(
+        bi,
+        profile,
+        locale,
+        now,
+        currentLords?.mdLord,
+        currentLords?.adLord,
+      );
       const { data: prun, error: e2 } = await supabase
         .from("phase_runs")
         .insert({
-          profile_id: prof.id,
+          profile_id: profile.id,
           chart_run_id: chart.id,
           engine_version: ENGINE_V,
           run_type: "quick_proof",
@@ -337,29 +2310,85 @@ export async function handleRequest(
         .single();
       if (e2) throw e2;
 
+      const confidenceLabel = engineMode === "full_chart" ? "high" : "medium";
+      const plans: PhasePlan[] = recent.map((seg, idx) => {
+        const fallback = antardashaFallbackCopy(
+          seg.mdLord,
+          seg.adLord,
+          seg.start,
+          seg.end,
+          idx,
+          locale,
+        );
+        return buildPhasePlan(seg, idx, locale, {
+          now,
+          previous: idx > 0 ? recent[idx - 1] ?? null : null,
+          confidenceLabel,
+          periodLabel: plainPeriodLabel(seg.start, seg.end),
+          fallbackTitle: fallback.title,
+          fallbackSentences: fallback.sentences,
+          kernel,
+        });
+      });
+      const age = bi ? calculateAge(bi.date_of_birth) : undefined;
+      const llmEnvelope = await generateProofLlmCards(plans, locale, age, {
+        supabase,
+        profileId: profile.id,
+      });
       let sort = 0;
       const rows: Record<string, unknown>[] = [];
-      for (const seg of recent) {
-        const cp = phaseCardCopy(seg.lord, seg.start, seg.end, sort);
+      for (const plan of plans) {
+        const llm = llmEnvelope?.cards.get(plan.id) ?? null;
+        const seg = recent[plan.id]!;
         const endInclusive = DateTime.fromJSDate(seg.end)
           .minus({ days: 1 })
           .toISODate()!;
         rows.push({
           phase_run_id: prun.id,
-          profile_id: prof.id,
+          profile_id: profile.id,
           start_date: seg.start.toISOString().slice(0, 10),
           end_date: endInclusive,
-          mahadasha_lord: seg.lord,
-          active_life_areas: cp.lifeAreas,
-          main_themes: cp.themes,
+          mahadasha_lord: seg.mdLord,
+          antardasha_lord: seg.adLord,
+          active_life_areas: plan.activeDomains,
+          main_themes: [...plan.supportThemes, ...plan.dailyTexture].slice(0, 3),
           caution_themes: [],
-          confidence_label: engineMode === "full_chart" ? "high" : "medium",
+          confidence_label: confidenceLabel,
           sort_order: sort++,
           deterministic_context: {
-            sentences: cp.sentences,
-            card_title: cp.title,
-            period_label: plainPeriodLabel(seg.start, seg.end),
-            internal_lord: seg.lord,
+            sentences: plan.fallbackSentences,
+            card_title: plan.fallbackTitle,
+            period_label: plan.periodLabel,
+            md_lord: seg.mdLord,
+            ad_lord: seg.adLord,
+            phase_pulse: plan.phasePulse,
+            active_domains: plan.activeDomains,
+            support_themes: plan.supportThemes,
+            pressure_themes: plan.pressureThemes,
+            kernel_signals: plan.kernelSignals,
+            domain_lenses: plan.domainLenses,
+            share_hook: llm?.share_hook ?? plan.shareHook,
+            evidence_line: plan.evidenceLine,
+            transition_note: plan.transitionNote,
+            llm_title: llm?.title ?? null,
+            llm_highlight: llm?.highlight ?? null,
+            llm_sentences: llm?.sentences ?? null,
+            provenance: buildProvenance({
+              promptVersion: llmEnvelope?.promptVersion ?? "proof-fallback",
+              provider: llmEnvelope?.provider ?? "deterministic",
+              model: llmEnvelope?.model ?? "none",
+              source: llm ? "llm" : "fallback",
+              factSignature: buildFactSignature([
+                profile.id,
+                bi.id,
+                KERNEL_VERSION,
+                seg.mdLord,
+                seg.adLord,
+                plan.phasePulse,
+                plan.activeDomains.join(","),
+                plan.kernelSignals?.join(","),
+              ]),
+            }),
           },
         });
       }
@@ -367,25 +2396,32 @@ export async function handleRequest(
       const { data: inserted, error: e3 } = await supabase
         .from("phase_segments")
         .insert(rows)
-        .select("id, deterministic_context, start_date, end_date");
+        .select("id, deterministic_context");
       if (e3) throw e3;
 
-      cards = (inserted ?? []).map((r) => {
+      cards = (inserted ?? []).map((r: Record<string, unknown>) => {
         const ctx = r.deterministic_context as Record<string, unknown>;
+        const llmTitle = typeof ctx.llm_title === "string" ? ctx.llm_title : null;
+        const llmHighlight = typeof ctx.llm_highlight === "string" ? ctx.llm_highlight : null;
+        const llmSentences = Array.isArray(ctx.llm_sentences)
+          ? ctx.llm_sentences.map((x) => String(x))
+          : null;
         return {
           phaseSegmentId: r.id,
           periodLabel: ctx.period_label,
-          title: ctx.card_title,
-          sentences: ctx.sentences,
-          confidenceLabel: engineMode === "full_chart" ? "high" : "medium",
-          validationOptions: [
-            "exactly_this",
-            "partly_true",
-            "wrong_timing",
-            "didnt_happen",
-          ],
+          title: llmTitle ?? ctx.card_title,
+          highlight: llmHighlight ?? ctx.evidence_line,
+          sentences: llmSentences ?? ctx.sentences,
+          activeDomains: Array.isArray(ctx.active_domains) ? ctx.active_domains : [],
+          shareHook: ctx.share_hook,
+          phasePulse: ctx.phase_pulse,
+          evidenceLine: ctx.evidence_line,
+          confidenceLabel,
+          validationOptions: ["exactly_this", "partly_true", "wrong_timing", "didnt_happen"],
         };
       });
+    } else {
+      cards = [];
     }
 
     return { cards, engineMode };
@@ -394,16 +2430,24 @@ export async function handleRequest(
   if (action === "validation_submit") {
     const phaseSegmentId = body.phase_segment_id as string;
     const feedbackValue = body.feedback_value as string;
-    if (!phaseSegmentId || !feedbackValue) throw new Error("Missing fields");
+    if (!phaseSegmentId || !feedbackValue) {
+      throw new ActionError(
+        "validation_missing_fields",
+        "Missing fields",
+        400,
+      );
+    }
     const { data: pseg } = await supabase
       .from("phase_segments")
       .select("profile_id")
       .eq("id", phaseSegmentId)
       .maybeSingle();
-    if (!pseg || pseg.profile_id !== prof.id) throw new Error("Invalid segment");
+    if (!pseg || pseg.profile_id !== profile.id) {
+      throw new ActionError("invalid_phase_segment", "Invalid segment", 400);
+    }
 
     const { error } = await supabase.from("validation_feedback").insert({
-      profile_id: prof.id,
+      profile_id: profile.id,
       phase_segment_id: phaseSegmentId,
       feedback_value: feedbackValue,
       optional_note: (body.optional_note as string) ?? null,
@@ -418,187 +2462,555 @@ export async function handleRequest(
   }
 
   if (action === "today_get") {
-    const locale = requestLocale(body, prof);
-    const tz = prof.current_timezone ?? "Asia/Kolkata";
+    const locale = requestLocale(body, profile);
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
     const dateStr = (body.date as string) ?? todayInTimezone(tz);
-    const lat = prof.current_lat != null ? Number(prof.current_lat) : DEFAULT_LAT;
-    const lng = prof.current_lng != null ? Number(prof.current_lng) : DEFAULT_LNG;
-    const day = zonedNoonJsDate(dateStr, tz);
-    const sun = sunriseSunset(day, lat, lng);
-    const slices = divideDaylight(sun, jsWeekday(dateStr, tz));
+
+    const refInstant = parseDateAsUtcInstant(dateStr, tz);
+    const lat = Number(profile.current_lat ?? DEFAULT_LAT);
+    const lng = Number(profile.current_lng ?? DEFAULT_LNG);
+
+    const sun = sunriseSunset(refInstant, lat, lng);
+    const slices = divideDaylight(sun, refInstant.getUTCDay());
     const { good, caution } = goodAndCautionWindows(slices, tz);
 
-    const refInstant = zonedNoonJsDate(dateStr, tz);
-    const moonLon = moonSiderealLongitudeDeg(refInstant);
-    const rk = rashiKeyFromSiderealLon(moonLon);
-    const moonSign = rashiDisplay(rk, locale);
-    const moonNak = nakshatraPadaFromSiderealLon(moonLon);
+    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    const moonSign = moonRashiAt(refInstant);
+    const moonNak = moonNakshatraAt(refInstant);
+    const rashiInfo = rashiDisplay(moonSign.key, locale);
+    const natalMoon = birthMoonDetails(bi, tz, locale);
+    const birthSun = birthSunDetails(bi, tz, locale);
 
-    const bi = await getLatestBirthInput(supabase, prof.id);
     const { data: chart } = await supabase
       .from("chart_runs")
       .select("engine_mode")
-      .eq("profile_id", prof.id)
+      .eq("profile_id", profile.id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     const engineMode = (chart?.engine_mode as string) ?? "general_panchanga";
 
-    await supabase
-      .from("daily_windows")
-      .delete()
-      .eq("profile_id", prof.id)
-      .eq("target_date", dateStr);
-
-    const inserts: Record<string, unknown>[] = [];
-    let gi = 0;
-    for (const g of good) {
-      inserts.push({
-        profile_id: prof.id,
-        target_date: dateStr,
-        location_city: prof.current_city,
-        timezone: tz,
-        engine_mode: engineMode,
-        window_type: "good",
-        start_time: g.start,
-        end_time: g.end,
-        label: `Favorable window ${++gi}`,
-        reason: "Outside Rahu Kalam (solar day model)",
-        source_factors: ["solar_segment"],
-      });
-    }
-    for (const c of caution) {
-      inserts.push({
-        profile_id: prof.id,
-        target_date: dateStr,
-        location_city: prof.current_city,
-        timezone: tz,
-        engine_mode: engineMode,
-        window_type: "caution",
-        start_time: c.start,
-        end_time: c.end,
-        label: "Rahu Kalam",
-        reason: "Traditional inauspicious segment for beginnings",
-        source_factors: ["rahu_kalam"],
-      });
-    }
-    if (inserts.length) {
-      const { error } = await supabase.from("daily_windows").insert(inserts);
-      if (error) throw error;
-    }
-
-    let betterFor = [
-      "Steady conversations with clear asks",
-      "Paperwork you have been postponing",
-    ];
-    let beCareful = [
-      "Starting brand-new commitments in Rahu Kalam",
-      "Emotional decisions on an empty stomach",
-    ];
-
-    let currentLifePeriod: { label: string; summary: string } | undefined;
     let mdLordFact = "";
     let adLordFact = "";
-    const nowZoned = DateTime.now().setZone(tz).toJSDate();
+
     if (bi) {
-      const { segments, nk } = computeTimeline(bi, prof.current_timezone ?? "Asia/Kolkata");
-      if (nk != null && segments.length) {
+      const { segments } = computeTimeline(bi, tz);
+      if (segments.length) {
         const lords = vimshottariLordsAt(segments, refInstant);
         if (lords) {
           mdLordFact = lords.mdLord;
           adLordFact = lords.adLord;
         }
-        const cur = segmentAt(segments, nowZoned);
-        if (cur) {
-          const cp = phaseCardCopy(
-            cur.lord,
-            cur.start,
-            cur.end,
-            cur.lord.length * 17 + cur.start.getUTCFullYear(),
-          );
-          currentLifePeriod = {
-            label: cp.title,
-            summary: cp.sentences[0] as string,
-          };
-          betterFor = [
-            `Rhythm favoring ${cp.lifeAreas[0]} and ${cp.lifeAreas[1]}`,
-            "Concrete next steps written in one line",
-          ];
-          beCareful = [
-            "Starting brand-new commitments in Rahu Kalam",
-            `Rushing decisions tied to ${cp.lifeAreas[0]}`,
-          ];
+      }
+    }
+
+    const kernel = buildKernelForBirthInput(
+      bi,
+      profile,
+      locale,
+      refInstant,
+      mdLordFact,
+      adLordFact,
+    );
+    const planner = buildTodayPlan(mdLordFact, adLordFact, locale, kernel, "today");
+    const factSignature = buildFactSignature([
+      profile.id,
+      bi?.id,
+      dateStr,
+      locale,
+      KERNEL_VERSION,
+      engineMode,
+      rashiInfo.key,
+      natalMoon?.sign.key,
+      birthSun?.key,
+      mdLordFact,
+      adLordFact,
+      planner.activeDomains.join(","),
+      planner.pressureThemes.join(","),
+      planner.personalSignals.join(","),
+      planner.domainLenses.join(","),
+    ]);
+    let betterFor = planner.actionBias.slice(0, 2);
+    let beCareful = planner.cautionBias.slice(0, 2);
+    let oneLine = planner.oneLineSeed;
+    let shareHook = planner.shareHook;
+    let currentLifePeriod: { label: string; summary: string } | undefined;
+
+    const pastFeedback = await getValidationFeedback(supabase, profile.id);
+    const lifeChapter = lifeChapterInfo(kernel, locale);
+    const pack = await loadBirthPack(supabase, profile, bi, locale, dateStr);
+    const packCard = packTodayCard(pack, dateStr);
+    let provenance = pack
+      ? buildProvenance({
+        promptVersion: BIRTH_PACK_VERSION,
+        provider: pack.provider,
+        model: pack.model,
+        source: pack.provider === "deterministic" ? "fallback" : "llm",
+        factSignature: pack.fact_signature,
+      })
+      : null;
+
+    if (packCard) {
+      betterFor = asArray<string>(packCard.better_for).map((s) => String(s).trim()).filter(Boolean)
+        .slice(0, 4);
+      beCareful = asArray<string>(packCard.be_careful).map((s) => String(s).trim()).filter(Boolean)
+        .slice(0, 3);
+      oneLine = safeString(packCard.one_line) || oneLine;
+      shareHook = safeString(packCard.share_hook) || shareHook;
+      if (safeString(packCard.title) && safeString(packCard.body)) {
+        currentLifePeriod = {
+          label: safeString(packCard.title),
+          summary: safeString(packCard.body),
+        };
+      }
+    } else {
+      provenance = buildProvenance({
+        promptVersion: CONTENT_PROMPT_VERSION,
+        provider: "deterministic",
+        model: "none",
+        source: "fallback",
+        factSignature,
+      });
+    }
+
+    const result = {
+      cacheVersion: NARRATIVE_CACHE_VERSION,
+      locale,
+      displayName: profile.display_name,
+      date: dateStr,
+      locationLabel: profile.current_city ?? "India reference",
+      engineMode,
+      birthInputId: bi?.id ?? null,
+      moonSign: rashiInfo,
+      moonNakshatra: moonNak.name,
+      birthMoonSign: natalMoon?.sign ?? null,
+      birthMoonNakshatra: natalMoon?.nakshatra ?? null,
+      sunSign: birthSun ?? null,
+      lifeChapter,
+      oneLine,
+      shareHook,
+      betterFor,
+      beCarefulWith: beCareful,
+      goodWindows: decorateWindows(
+        good.map((w) => ({ start: w.start, end: w.end, label: w.label })),
+        asArray<PackTimingWindowCopy>(packCard?.good_window_notes),
+        "good",
+      ),
+      cautionWindows: decorateWindows(
+        caution.map((w) => ({ start: w.start, end: w.end, label: w.label })),
+        asArray<PackTimingWindowCopy>(packCard?.caution_window_notes),
+        "caution",
+      ),
+      currentLifePeriod,
+      mahadashaLord: mdLordFact,
+      antardashaLord: adLordFact,
+      personalSignals: planner.personalSignals,
+      domainLenses: planner.domainLenses,
+      planner,
+      provenance: provenance!,
+      natalLuck: buildNatalLuck(natalMoon?.sign, locale),
+    };
+
+    return result;
+  }
+
+  if (action === "weekly_get" || action === "monthly_get") {
+    const locale = requestLocale(body, profile);
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
+    const dateStr = (body.date as string) ?? todayInTimezone(tz);
+    const scope = action === "weekly_get" ? "weekly" : "monthly";
+
+    const refInstant = parseDateAsUtcInstant(dateStr, tz);
+
+    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    const moonSign = moonRashiAt(refInstant);
+    const rashiInfo = rashiDisplay(moonSign.key, locale);
+    const natalMoon = birthMoonDetails(bi, tz, locale);
+    const birthSun = birthSunDetails(bi, tz, locale);
+
+    let mdLord = "";
+    let adLord = "";
+    let rhythm_title = scope === "weekly"
+      ? locale === "te" ? "ఈ వారం లయ" : locale === "hi" ? "इस हफ्ते की लय" : "Weekly Rhythm"
+      : locale === "te"
+      ? "ఈ నెల దృష్టి"
+      : locale === "hi"
+      ? "इस महीने का स्वर"
+      : "Monthly Outlook";
+    let rhythm_body = locale === "te"
+      ? "ఈ కాలం స్థిరమైన పురోగతికి దారి తీసేలా కనిపిస్తోంది."
+      : locale === "hi"
+      ? "यह दौर स्थिर प्रगति की ओर जाता हुआ दिखता है।"
+      : "The stars are aligning for a period of steady growth.";
+    let betterFor = scope === "weekly"
+      ? (locale === "te"
+        ? ["పని ప్రణాళిక", "డబ్బు క్రమం", "కుటుంబ ఫాలో-థ్రూ"]
+        : locale === "hi"
+        ? ["काम की योजना", "पैसे में अनुशासन", "परिवार में निरंतरता"]
+        : ["Work planning", "Money discipline", "Family follow-through"])
+      : (locale === "te"
+        ? ["దీర్ఘ ప్రణాళిక", "డబ్బులో సమతుల్యం", "సంబంధ స్థిరత్వం"]
+        : locale === "hi"
+        ? ["लंबी योजना", "पैसे का संतुलन", "रिश्तों में स्थिरता"]
+        : ["Long-term planning", "Money balance", "Relationship steadiness"]);
+    let beCarefulWith = scope === "weekly"
+      ? (locale === "te"
+        ? ["ఆవేశ స్పందనలు", "అధిక వాగ్దానాలు"]
+        : locale === "hi"
+        ? ["आवेग वाली प्रतिक्रिया", "ज्यादा वादे"]
+        : ["Impulsive reactions", "Overpromising"])
+      : (locale === "te"
+        ? ["శక్తి తినే బాధ్యతలు", "అహంకార ఢీకొన్లు"]
+        : locale === "hi"
+        ? ["ऊर्जा खींचने वाली जिम्मेदारियां", "अहम टकराव"]
+        : ["Draining commitments", "Ego clashes"]);
+
+    if (bi) {
+      const { segments } = computeTimeline(bi, tz);
+      if (segments.length) {
+        const lords = vimshottariLordsAt(segments, refInstant);
+        if (lords) {
+          mdLord = lords.mdLord;
+          adLord = lords.adLord;
         }
       }
     }
 
-    const tcopy = await generateTodayCopy(locale, {
-      date: dateStr,
-      moon_rashi: moonSign.label,
-      moon_nakshatra: moonNak.name,
-      mahadasha_lord: mdLordFact || undefined,
-      antardasha_lord: adLordFact || undefined,
-      good_windows: good.length,
-      caution_windows: caution.length,
-      engine_mode: engineMode,
-    });
+    const kernel = buildKernelForBirthInput(
+      bi,
+      profile,
+      locale,
+      refInstant,
+      mdLord,
+      adLord,
+    );
+    const planner = buildRangePlan(scope, mdLord, adLord, locale, kernel);
+    betterFor = planner.activeDomains.slice(0, 3);
+    beCarefulWith = planner.pressureThemes.slice(0, 2);
+    let shareHook = planner.shareHook;
+    const factSignature = buildFactSignature([
+      profile.id,
+      bi?.id,
+      dateStr,
+      locale,
+      KERNEL_VERSION,
+      scope,
+      rashiInfo.key,
+      natalMoon?.sign.key,
+      birthSun?.key,
+      mdLord,
+      adLord,
+      betterFor.join(","),
+      beCarefulWith.join(","),
+      planner.personalSignals.join(","),
+      planner.domainLenses.join(","),
+    ]);
+    const cached = await getCachedNarrative(
+      supabase,
+      profile.id,
+      dateStr,
+      scope,
+      locale,
+    );
     if (
-      tcopy &&
-      tcopy.better_for.length >= 2 &&
-      tcopy.be_careful.length >= 2
+      narrativeCacheOk(
+        cached,
+        bi?.id ?? null,
+        factSignature,
+        CONTENT_PROMPT_VERSION,
+      )
     ) {
-      betterFor = tcopy.better_for.slice(0, 2);
-      beCareful = tcopy.be_careful.slice(0, 2);
-      if (tcopy.rhythm_title?.trim() && tcopy.rhythm_body?.trim()) {
-        currentLifePeriod = {
-          label: tcopy.rhythm_title.trim(),
-          summary: tcopy.rhythm_body.trim(),
-        };
-      }
+      return cached;
     }
 
-    return {
+    const pastFeedback = await getValidationFeedback(supabase, profile.id);
+    const lifeChapter = lifeChapterInfo(kernel, locale);
+    const pack = await ensureBirthPack(supabase, profile, bi, locale, dateStr);
+    const packCard = packRangeCard(pack, scope, dateStr, tz);
+    let provenance = pack
+      ? buildProvenance({
+        promptVersion: BIRTH_PACK_VERSION,
+        provider: pack.provider,
+        model: pack.model,
+        source: pack.provider === "deterministic" ? "fallback" : "llm",
+        factSignature: pack.fact_signature,
+      })
+      : null;
+
+    if (packCard) {
+      rhythm_title = safeString(packCard.title) || rhythm_title;
+      rhythm_body = safeString(packCard.body) || rhythm_body;
+      shareHook = safeString(packCard.share_hook) || shareHook;
+      const packBetter = asArray<string>(packCard.better_for).map((s) => String(s).trim())
+        .filter(Boolean);
+      const packCareful = asArray<string>(packCard.be_careful).map((s) => String(s).trim())
+        .filter(Boolean);
+      if (packBetter.length > 0) betterFor = packBetter;
+      if (packCareful.length > 0) beCarefulWith = packCareful;
+    } else {
+      const narrative = await generateNarrativeCopy(locale, scope, {
+        date: dateStr,
+        age: bi ? calculateAge(bi.date_of_birth) : undefined,
+        moon_rashi: rashiInfo.label,
+        birth_moon_sign: natalMoon?.sign.label,
+        mahadasha_lord: mdLord || undefined,
+        antardasha_lord: adLord || undefined,
+        explanation_mode: profile.explanation_mode,
+        planner,
+        personalization_kernel: kernel,
+        life_chapter: lifeChapter,
+        screen_intent: planner.screenIntent,
+        domain_lenses: planner.domainLenses,
+        past_feedback: pastFeedback.length ? pastFeedback : undefined,
+      }, { supabase, profileId: profile.id });
+
+      if (narrative) {
+        rhythm_title = narrative.title;
+        rhythm_body = narrative.body;
+        if (narrative.shareHook?.trim()) shareHook = narrative.shareHook.trim();
+        if (narrative.betterFor.length > 0) betterFor = narrative.betterFor;
+        if (narrative.beCareful.length > 0) beCarefulWith = narrative.beCareful;
+      }
+
+      provenance = narrative
+        ? buildProvenance({
+          promptVersion: narrative.promptVersion,
+          provider: narrative.provider,
+          model: narrative.model,
+          source: "llm",
+          factSignature,
+        })
+        : buildProvenance({
+          promptVersion: CONTENT_PROMPT_VERSION,
+          provider: "deterministic",
+          model: "none",
+          source: "fallback",
+          factSignature,
+        });
+    }
+
+    const result = {
+      cacheVersion: NARRATIVE_CACHE_VERSION,
       locale,
-      displayName: prof.display_name,
+      birthInputId: bi?.id ?? null,
       date: dateStr,
-      locationLabel: prof.current_city ?? "India reference",
-      engineMode,
-      moonSign: {
-        key: moonSign.key,
-        label: moonSign.label,
-        symbol: moonSign.symbol,
+      locationLabel: profile.current_city || "Current Location",
+      displayName: profile.display_name,
+      moonSign: rashiInfo,
+      birthMoonSign: natalMoon?.sign ?? null,
+      birthMoonNakshatra: natalMoon?.nakshatra ?? null,
+      sunSign: birthSun ?? null,
+      lifeChapter,
+      shareHook,
+      currentLifePeriod: {
+        label: rhythm_title,
+        summary: rhythm_body,
       },
-      moonNakshatra: moonNak.name,
       betterFor,
-      beCarefulWith: beCareful,
-      goodWindows: good.map((w) => ({
-        start: w.start,
-        end: w.end,
-        label: w.label,
-      })),
-      cautionWindows: caution.map((w) => ({
-        start: w.start,
-        end: w.end,
-        label: w.label,
-      })),
-      currentLifePeriod,
+      beCarefulWith,
+      goodWindows: [],
+      cautionWindows: [],
+      mahadashaLord: mdLord,
+      antardashaLord: adLord,
+      personalSignals: planner.personalSignals,
+      domainLenses: planner.domainLenses,
+      planner,
+      provenance: provenance!,
+    };
+
+    await saveNarrativeCache(supabase, profile.id, dateStr, locale, scope, result);
+
+    return result;
+  }
+
+  if (action === "ask") {
+    const locale = requestLocale(body, profile);
+    const question = String(body.question ?? "").trim();
+    if (question.length < 3) {
+      throw new ActionError("missing_question", "question required", 400);
+    }
+    if (question.length > 900) {
+      throw new ActionError("question_too_long", "question is too long", 400);
+    }
+
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
+    const targetDate = todayInTimezone(tz);
+    const proUser = await isProProfile(supabase, profile.id);
+    const askQuota = await consumeAskQuota(supabase, profile.id, targetDate, proUser);
+
+    const requestedSessionId = body.session_id == null ? "" : String(body.session_id);
+    let sessionId = requestedSessionId;
+    if (sessionId) {
+      const { data: session, error: sessionError } = await supabase
+        .from("chat_sessions")
+        .select("id")
+        .eq("id", sessionId)
+        .eq("profile_id", profile.id)
+        .maybeSingle();
+      if (sessionError) throw sessionError;
+      if (!session) {
+        throw new ActionError("chat_session_not_found", "Chat session not found", 404);
+      }
+    } else {
+      const { data: session, error: sessionError } = await supabase
+        .from("chat_sessions")
+        .insert({
+          profile_id: profile.id,
+          title: question.slice(0, 80),
+          language_code: locale,
+        })
+        .select("id")
+        .single();
+      if (sessionError) throw sessionError;
+      sessionId = session.id as string;
+    }
+
+    const day = zonedNoonJsDate(targetDate, tz);
+    const lat = profile.current_lat != null ? Number(profile.current_lat) : DEFAULT_LAT;
+    const lng = profile.current_lng != null ? Number(profile.current_lng) : DEFAULT_LNG;
+    const sun = sunriseSunset(day, lat, lng);
+    const slices = divideDaylight(sun, jsWeekday(targetDate, tz));
+    const { good, caution } = goodAndCautionWindows(slices, tz);
+    const goodWindows = good.slice(0, 2).map((w) => ({
+      start: w.start,
+      end: w.end,
+      label: "Good window",
+    }));
+    const cautionWindows = caution.slice(0, 2).map((w) => ({
+      start: w.start,
+      end: w.end,
+      label: w.label,
+    }));
+
+    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    let currentLord = "";
+    let currentSubLord = "";
+    if (bi) {
+      const { segments, nk } = computeTimeline(bi, profile.current_timezone ?? "Asia/Kolkata");
+      if (nk != null && segments.length) {
+        const current = vimshottariLordsAt(segments, new Date());
+        currentLord = current?.mdLord ?? "";
+        currentSubLord = current?.adLord ?? "";
+      }
+    }
+    // Ask never calls live LLM — free and pro both use pack templates + deterministic copy.
+    const pack = await loadBirthPack(supabase, profile, bi, locale, targetDate);
+
+    const { error: userMessageError } = await supabase.from("chat_messages").insert({
+      session_id: sessionId,
+      profile_id: profile.id,
+      role: "user",
+      content: question,
+      payload: { locale },
+    });
+    if (userMessageError) throw userMessageError;
+
+    const cachedAnswer = cachedAskAnswer(pack, question, locale, goodWindows, cautionWindows);
+    const copy = cachedAnswer ?? askFallbackCopy(locale, goodWindows, cautionWindows);
+    const provenance = cachedAnswer && pack
+      ? buildProvenance({
+        promptVersion: BIRTH_PACK_VERSION,
+        provider: pack.provider,
+        model: pack.model,
+        source: pack.provider === "deterministic" ? "fallback" : "llm",
+        factSignature: pack.fact_signature,
+      })
+      : buildProvenance({
+        promptVersion: ASK_PROMPT_VERSION,
+        provider: "cached_pack",
+        model: "none",
+        source: "deterministic",
+        factSignature: buildFactSignature([
+          profile.id,
+          bi?.id,
+          sessionId,
+          locale,
+          question,
+          currentLord,
+          currentSubLord,
+          JSON.stringify(goodWindows),
+          JSON.stringify(cautionWindows),
+        ]),
+      });
+
+    const assistantPayload = {
+      answer: copy,
+      provenance,
+      context: {
+        goodWindows,
+        cautionWindows,
+        currentLord,
+        currentSubLord,
+        engineMode: bi ? resolveEngineMode(bi) : "general_panchanga",
+      },
+    };
+    const { data: savedAnswer, error: answerError } = await supabase
+      .from("chat_messages")
+      .insert({
+        session_id: sessionId,
+        profile_id: profile.id,
+        role: "assistant",
+        content: copy.direct_answer,
+        payload: assistantPayload,
+      })
+      .select("id")
+      .single();
+    if (answerError) throw answerError;
+
+    await supabase.from("chat_sessions").update({
+      updated_at: new Date().toISOString(),
+      language_code: locale,
+    }).eq("id", sessionId).eq("profile_id", profile.id);
+
+    return {
+      sessionId,
+      answerId: savedAnswer.id,
+      directAnswer: copy.direct_answer,
+      bestTime: copy.best_time,
+      cautionTime: copy.caution_time,
+      betterOption: copy.better_option,
+      simpleWhy: copy.simple_why,
+      actionLine: copy.action_line,
+      shareHook: copy.share_hook,
+      goodWindows,
+      cautionWindows,
+      provenance,
+      locale,
+      askAccess: {
+        planCode: askQuota.planCode,
+        freeRemainingToday: askQuota.remaining,
+        isPro: proUser,
+      },
     };
   }
 
   if (action === "purpose_check") {
-    const locale = requestLocale(body, prof);
+    const locale = requestLocale(body, profile);
     const purposeType = body.purpose_type as string;
-    if (!purposeType) throw new Error("purpose_type required");
+    if (!purposeType) {
+      throw new ActionError(
+        "missing_purpose_type",
+        "purpose_type required",
+        400,
+      );
+    }
     const rules = purposeRules[purposeType] ??
       { favor: ["Jupiter", "Mercury"], caution: ["Rahu"] };
-    const tz = prof.current_timezone ?? "Asia/Kolkata";
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
     const targetDate = (body.target_date as string) ?? todayInTimezone(tz);
-    const bi = await getLatestBirthInput(supabase, prof.id);
+    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
     let score = 48 + (PURPOSE_SCORE_BIAS[purposeType] ?? 0);
     let lord = "";
     let adLordCtx = "";
     if (bi) {
-      const { segments, nk } = computeTimeline(bi, prof.current_timezone ?? "Asia/Kolkata");
+      const { segments, nk } = computeTimeline(
+        bi,
+        profile.current_timezone ?? "Asia/Kolkata",
+      );
       if (nk != null && segments.length) {
         const at = zonedNoonJsDate(targetDate, tz);
         const vl = vimshottariLordsAt(segments, at);
@@ -614,23 +3026,36 @@ export async function handleRequest(
     }
     if (score > 100) score = 100;
     if (score < 0) score = 0;
-    const status = score >= 75
-      ? "matched"
-      : score >= 45
-      ? "partly_matched"
-      : "not_matched";
-
+    const status = score >= 75 ? "matched" : score >= 45 ? "partly_matched" : "not_matched";
     const day = zonedNoonJsDate(targetDate, tz);
-    const lat = prof.current_lat != null ? Number(prof.current_lat) : DEFAULT_LAT;
-    const lng = prof.current_lng != null ? Number(prof.current_lng) : DEFAULT_LNG;
+    const kernel = buildKernelForBirthInput(
+      bi,
+      profile,
+      locale,
+      day,
+      lord,
+      adLordCtx,
+    );
+    const purposePlan = buildPurposePlan(
+      purposeType,
+      status,
+      score,
+      lord,
+      adLordCtx,
+      locale,
+      kernel,
+    );
+
+    const lat = profile.current_lat != null ? Number(profile.current_lat) : DEFAULT_LAT;
+    const lng = profile.current_lng != null ? Number(profile.current_lng) : DEFAULT_LNG;
     const sun = sunriseSunset(day, lat, lng);
     const slices = divideDaylight(sun, jsWeekday(targetDate, tz));
     const { good, caution } = goodAndCautionWindows(slices, tz);
 
-    const best_windows = good.slice(0, 3).map((w) => ({
+    const best_windows = good.slice(0, 2).map((w) => ({
       start: w.start,
       end: w.end,
-      label: "Preferred daylight segment",
+      label: "Best window",
     }));
     const caution_windows = caution.slice(0, 2).map((w) => ({
       start: w.start,
@@ -640,12 +3065,17 @@ export async function handleRequest(
 
     let better_options = status === "not_matched"
       ? [{
-        label: "Tomorrow morning",
-        detail:
-          "Retry after sunrise, avoiding the first Rahu segment—keep the task small and concrete.",
+        label: locale === "te" ? "రేపు ఉదయం" : locale === "hi" ? "कल सुबह" : "Tomorrow morning",
+        detail: purposePlan.betterOptionSeed ??
+          (locale === "te"
+            ? "సూర్యోదయానికి తరువాత మళ్లీ ప్రయత్నించండి. మొదటి రాహు భాగాన్ని తప్పించి అడుగును చిన్నగా ఉంచండి."
+            : locale === "hi"
+            ? "सूर्योदय के बाद फिर से कोशिश करें। पहले राहु हिस्से से बचें और कदम छोटा रखें।"
+            : "Retry after sunrise, avoiding the first Rahu segment. Keep the step small and clear."),
       }]
       : [];
 
+    let headline = purposePlan.headline;
     let summary = status === "matched"
       ? "The current life-period rhythm leans supportive for this purpose—still use common sense."
       : status === "partly_matched"
@@ -655,6 +3085,8 @@ export async function handleRequest(
     let action_line = status === "not_matched"
       ? "Pick the next clear morning window or shorten the ask."
       : "Proceed with a written note of what success means.";
+    let timing_note = purposePlan.supportSummary;
+    let shareHook = purposePlan.shareHook;
 
     const pcopy = await generatePurposeCopy(locale, {
       purpose_type: purposeType,
@@ -663,29 +3095,87 @@ export async function handleRequest(
       md_lord: lord,
       ad_lord: adLordCtx,
       target_date: targetDate,
+      age: bi ? calculateAge(bi.date_of_birth) : undefined,
+      planner: purposePlan,
+      purpose_lens: kernel?.purposeLenses[purposeType],
+      personalization_kernel: kernel,
+      domain_lenses: purposePlan.domainLenses,
+      best_windows,
+      caution_windows,
       suggest_alternatives: status === "not_matched",
-    });
-    if (pcopy?.summary) summary = pcopy.summary;
-    if (pcopy?.action_line) action_line = pcopy.action_line;
-    if (Array.isArray(pcopy?.better_options) && pcopy.better_options.length > 0) {
-      better_options = pcopy.better_options.map((b) => ({
+    }, { supabase, profileId: profile.id });
+    if (pcopy?.data.headline?.trim()) headline = pcopy.data.headline.trim();
+    if (pcopy?.data.summary) summary = pcopy.data.summary;
+    if (pcopy?.data.action_line) action_line = pcopy.data.action_line;
+    if (pcopy?.data.timing_note) timing_note = pcopy.data.timing_note;
+    if (pcopy?.data.share_hook?.trim()) shareHook = pcopy.data.share_hook.trim();
+    if (Array.isArray(pcopy?.data.better_options) && pcopy.data.better_options.length > 0) {
+      better_options = pcopy.data.better_options.map((b: { label: string; detail: string }) => ({
         label: String(b.label),
         detail: String(b.detail),
       }));
     }
 
-    const ctx = { score, purposeType, lord, ad_lord: adLordCtx, rules };
+    const ctx = {
+      score,
+      purposeType,
+      lord,
+      ad_lord: adLordCtx,
+      rules,
+      planner: purposePlan,
+      provenance: pcopy
+        ? buildProvenance({
+          promptVersion: pcopy.promptVersion,
+          provider: pcopy.provider,
+          model: pcopy.model,
+          source: "llm",
+          factSignature: buildFactSignature([
+            profile.id,
+            bi?.id,
+            purposeType,
+            targetDate,
+            locale,
+            KERNEL_VERSION,
+            status,
+            score.toString(),
+            lord,
+            adLordCtx,
+            purposePlan.domainLenses.join(","),
+            purposePlan.personalSignals.join(","),
+          ]),
+        })
+        : buildProvenance({
+          promptVersion: CONTENT_PROMPT_VERSION,
+          provider: "deterministic",
+          model: "none",
+          source: "fallback",
+          factSignature: buildFactSignature([
+            profile.id,
+            bi?.id,
+            purposeType,
+            targetDate,
+            locale,
+            KERNEL_VERSION,
+            status,
+            score.toString(),
+            lord,
+            adLordCtx,
+            purposePlan.domainLenses.join(","),
+            purposePlan.personalSignals.join(","),
+          ]),
+        }),
+    };
 
     const { data: saved, error } = await supabase
       .from("purpose_checks")
       .insert({
-        profile_id: prof.id,
+        profile_id: profile.id,
         purpose_type: purposeType,
         target_date: targetDate,
-        location_city: prof.current_city,
+        location_city: profile.current_city,
         timezone: tz,
         status,
-        summary,
+        summary: `${headline}\n${summary}`,
         action_line,
         best_windows,
         caution_windows,
@@ -699,110 +3189,424 @@ export async function handleRequest(
     return {
       id: saved.id,
       status,
+      headline,
       summary,
       action_line,
+      timing_note,
+      shareHook,
       best_windows,
       caution_windows,
       better_options,
+      domainLenses: purposePlan.domainLenses,
+      personalSignals: purposePlan.personalSignals,
+      provenance: ctx.provenance,
+      locale,
+    };
+  }
+
+  if (action === "share_card_generate") {
+    const profile = requireProfile(prof, action);
+    const locale = requestLocale(body, profile);
+    const sourceType = String(body.source_type ?? "").trim();
+    if (!sourceType) {
+      throw new ActionError(
+        "missing_source_type",
+        "source_type required",
+        400,
+      );
+    }
+    const payloadRaw = body.payload;
+    if (
+      payloadRaw == null || typeof payloadRaw !== "object" ||
+      Array.isArray(payloadRaw)
+    ) {
+      throw new ActionError(
+        "invalid_share_payload",
+        "payload must be an object",
+        400,
+      );
+    }
+    const sourceId = body.source_id == null ? null : String(body.source_id);
+    const shareId = crypto.randomUUID();
+    const payload = payloadRaw as Record<string, unknown>;
+    const built = buildShareCard(shareId, locale, sourceType, payload);
+    const { error } = await supabase.from("share_cards").insert({
+      id: shareId,
+      profile_id: profile.id,
+      source_type: sourceType,
+      source_id: sourceId,
+      share_title: built.shareTitle,
+      share_body: built.shareBody,
+      share_context: built.shareContext,
+      share_text: built.shareText,
+      deep_link: built.deepLink,
+      brand_variant: built.brandVariant,
+      language_code: locale,
+      raw_payload: payload,
+    });
+    if (error) throw error;
+    return {
+      id: shareId,
+      sourceType,
+      sourceId,
+      shareTitle: built.shareTitle,
+      shareBody: built.shareBody,
+      shareContext: built.shareContext,
+      shareText: built.shareText,
+      deepLink: built.deepLink,
+      brandVariant: built.brandVariant,
       locale,
     };
   }
 
   if (action === "journey_get") {
-    const locale = requestLocale(body, prof);
-    const bi = await getLatestBirthInput(supabase, prof.id);
+    const locale = requestLocale(body, profile);
+    const cacheDate = todayInTimezone(profile.current_timezone ?? "Asia/Kolkata");
+    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
     if (!bi) return { phases: [] };
-    const { segments, nk } = computeTimeline(bi, prof.current_timezone ?? "Asia/Kolkata");
+    const { segments, nk } = computeTimeline(
+      bi,
+      profile.current_timezone ?? "Asia/Kolkata",
+    );
     if (nk === null || !segments.length) return { phases: [] };
     const now = new Date();
     const ads = allAntardashasFromMahadashas(segments);
     const clipped = recentAntardashasClipped(ads, now, JOURNEY_LOOKBACK_YEARS);
     if (!clipped.length) return { phases: [] };
-
-    const llmMap = await generateJourneyLlmCards(clipped, locale);
-    const phases = clipped.map((seg, idx) => {
-      const fromLlm = llmMap?.get(idx);
-      if (fromLlm && fromLlm.sentences.length >= 2) {
-        return {
-          sortOrder: idx,
-          periodLabel: plainPeriodLabel(seg.start, seg.end),
-          title: fromLlm.title,
-          sentences: fromLlm.sentences.slice(0, 3),
-        };
-      }
-      const fb = antardashaFallbackCopy(
+    const currentLords = vimshottariLordsAt(segments, now);
+    const kernel = buildKernelForBirthInput(
+      bi,
+      profile,
+      locale,
+      now,
+      currentLords?.mdLord,
+      currentLords?.adLord,
+    );
+    const plans = clipped.map((seg, idx) => {
+      const fallback = antardashaFallbackCopy(
         seg.mdLord,
         seg.adLord,
         seg.start,
         seg.end,
         idx,
+        locale,
       );
-      return {
-        sortOrder: idx,
+      return buildPhasePlan(seg, idx, locale, {
+        now,
+        previous: idx > 0 ? clipped[idx - 1] ?? null : null,
+        confidenceLabel: resolveEngineMode(bi) === "full_chart" ? "high" : "medium",
         periodLabel: plainPeriodLabel(seg.start, seg.end),
-        title: fb.title,
-        sentences: fb.sentences,
+        fallbackTitle: fallback.title,
+        fallbackSentences: fallback.sentences,
+        kernel,
+      });
+    });
+    const factSignature = buildFactSignature([
+      profile.id,
+      bi.id,
+      locale,
+      KERNEL_VERSION,
+      plans.map((p) => `${p.mahadashaLord}-${p.antardashaLord}-${p.phasePulse}`).join(";"),
+      plans.map((p) => p.kernelSignals?.join(",") ?? "").join(";"),
+      kernel?.period.line,
+    ]);
+    const cached = await getCachedNarrative(
+      supabase,
+      profile.id,
+      cacheDate,
+      "journey",
+      locale,
+    );
+    if (
+      narrativeCacheOk(
+        cached,
+        bi.id,
+        factSignature,
+        "journey:" + PLANNER_VERSION,
+      )
+    ) {
+      return cached;
+    }
+
+    const pack = await ensureBirthPack(supabase, profile, bi, locale, cacheDate);
+    const packPhases = asArray<PackJourneyPhase>(pack?.content.journey_phases);
+    if (pack && packPhases.length) {
+      const phases = packPhases.map((phase, idx) => ({
+        sortOrder: Number.isFinite(Number(phase.sortOrder)) ? Number(phase.sortOrder) : idx,
+        periodLabel: safeString(phase.periodLabel) || plans[idx]?.periodLabel || "",
+        mahadashaLord: safeString(phase.mahadashaLord) || plans[idx]?.mahadashaLord || "",
+        antardashaLord: safeString(phase.antardashaLord) || plans[idx]?.antardashaLord || "",
+        focusAreas: asArray<string>(phase.focusAreas).map((s) => String(s).trim()).filter(Boolean),
+        tone: asArray<string>(phase.tone).map((s) => String(s).trim()).filter(Boolean),
+        pressureThemes: asArray<string>(phase.pressureThemes).map((s) => String(s).trim()).filter(
+          Boolean,
+        ),
+        phasePulse: safeString(phase.phasePulse) || plans[idx]?.phasePulse || "",
+        domainLenses: asArray<string>(phase.domainLenses).map((s) => String(s).trim()).filter(
+          Boolean,
+        ),
+        kernelSignals: asArray<string>(phase.kernelSignals).map((s) => String(s).trim()).filter(
+          Boolean,
+        ),
+        shareHook: safeString(phase.shareHook) || plans[idx]?.shareHook,
+        transitionNote: safeString(phase.transitionNote) || plans[idx]?.transitionNote || "",
+        evidenceLine: safeString(phase.evidenceLine) || plans[idx]?.evidenceLine || "",
+        title: safeString(phase.title) || plans[idx]?.fallbackTitle || "",
+        highlight: safeString(phase.highlight) || plans[idx]?.evidenceLine || "",
+        sentences: asArray<string>(phase.sentences).map((line) => String(line).trim()).filter(
+          Boolean,
+        ).slice(0, 3),
+        proLocked: false,
+        subPhases: asArray<PackJourneyPhase>(phase.subPhases),
+      }));
+      const result = {
+        cacheVersion: NARRATIVE_CACHE_VERSION,
+        birthInputId: bi.id,
+        engineVersion: ENGINE_V,
+        phases,
+        locale,
+        plannerVersion: PLANNER_VERSION,
+        copySource: pack.provider === "deterministic" ? "fallback" : "llm",
+        provenance: buildProvenance({
+          promptVersion: BIRTH_PACK_VERSION,
+          provider: pack.provider,
+          model: pack.model,
+          source: pack.provider === "deterministic" ? "fallback" : "llm",
+          factSignature: pack.fact_signature,
+        }),
+      };
+      await saveNarrativeCache(supabase, profile.id, cacheDate, locale, "journey", result);
+      return result;
+    }
+
+    const age = bi ? calculateAge(bi.date_of_birth) : undefined;
+    const llmEnvelope = await generateJourneyLlmCards(plans, locale, age, {
+      supabase,
+      profileId: profile.id,
+    });
+    const phases = plans.map((plan) => {
+      const fromLlm = llmEnvelope?.cards.get(plan.id);
+      const llmSentences = fromLlm?.sentences
+        .map((line) => String(line).trim())
+        .filter(Boolean) ?? [];
+      const sentences = [
+        ...llmSentences,
+        ...plan.fallbackSentences.map((line) => String(line).trim()).filter(Boolean),
+      ].slice(0, 2);
+      return {
+        sortOrder: plan.id,
+        periodLabel: plan.periodLabel,
+        mahadashaLord: plan.mahadashaLord,
+        antardashaLord: plan.antardashaLord,
+        focusAreas: plan.activeDomains,
+        tone: plan.supportThemes,
+        pressureThemes: plan.pressureThemes,
+        phasePulse: plan.phasePulse,
+        domainLenses: plan.domainLenses,
+        kernelSignals: plan.kernelSignals,
+        shareHook: fromLlm?.share_hook ?? plan.shareHook,
+        transitionNote: plan.transitionNote,
+        evidenceLine: plan.evidenceLine,
+        title: fromLlm?.title?.trim() || plan.fallbackTitle,
+        highlight: fromLlm?.highlight?.trim() || plan.evidenceLine,
+        sentences,
       };
     });
-    return { phases, locale };
+    const provenance = llmEnvelope
+      ? buildProvenance({
+        promptVersion: `journey:${llmEnvelope.promptVersion}`,
+        provider: llmEnvelope.provider,
+        model: llmEnvelope.model,
+        source: "llm",
+        factSignature,
+      })
+      : buildProvenance({
+        promptVersion: "journey:" + PLANNER_VERSION,
+        provider: "deterministic",
+        model: "none",
+        source: "fallback",
+        factSignature,
+      });
+    const result = {
+      cacheVersion: NARRATIVE_CACHE_VERSION,
+      birthInputId: bi.id,
+      engineVersion: ENGINE_V,
+      phases,
+      locale,
+      plannerVersion: PLANNER_VERSION,
+      copySource: llmEnvelope ? "llm" : "fallback",
+      provenance,
+    };
+    await saveNarrativeCache(supabase, profile.id, cacheDate, locale, "journey", result);
+    return result;
   }
 
   if (action === "remedy_today") {
-    const locale = requestLocale(body, prof);
-    const bi = await getLatestBirthInput(supabase, prof.id);
+    const locale = requestLocale(body, profile);
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
+    const dateStr = todayInTimezone(tz);
+    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
     const { data: catalog } = await supabase
       .from("remedy_catalog")
       .select("id, remedy_key, remedy_type, title, simple_line, applicable_planets")
       .eq("is_active", true);
     let lord = "";
     if (bi) {
-      const { segments, nk } = computeTimeline(bi, prof.current_timezone ?? "Asia/Kolkata");
+      const { segments, nk } = computeTimeline(
+        bi,
+        profile.current_timezone ?? "Asia/Kolkata",
+      );
       if (nk != null && segments.length) {
         const cur = segmentAt(segments, new Date());
         if (cur) lord = cur.lord;
       }
     }
-    const rows = (catalog ?? []).filter((r) => {
+    const rows = (catalog ?? []).filter((r: Record<string, unknown>) => {
       const p = r.applicable_planets as string[] | null;
       if (!p || p.length === 0) return true;
       return lord && p.includes(lord);
     }).slice(0, 5);
 
-    const base = rows.map((r) => ({
+    const base = rows.map((r: Record<string, unknown>) => ({
       id: r.id as string,
+      remedy_key: r.remedy_key as string,
       title: r.title as string,
       simple_line: r.simple_line as string,
       remedyType: r.remedy_type as string,
     }));
+    const factSignature = buildFactSignature([
+      profile.id,
+      bi?.id,
+      dateStr,
+      locale,
+      KERNEL_VERSION,
+      lord,
+      base.map((b: { id: string }) => b.id).join(","),
+      base.map((b: { remedy_key: string }) => b.remedy_key).join(","),
+    ]);
+    const cached = await getCachedNarrative(
+      supabase,
+      profile.id,
+      dateStr,
+      "remedy",
+      locale,
+    );
+    if (
+      narrativeCacheOk(
+        cached,
+        bi?.id ?? null,
+        factSignature,
+        CONTENT_PROMPT_VERSION,
+      )
+    ) {
+      return cached;
+    }
 
-    let remedies = base.map((b) => ({
-      id: b.id,
-      title: b.title,
-      simpleLine: b.simple_line,
-      remedyType: b.remedyType,
-    }));
-    const rcopy = await generateRemedyCopy(locale, {
-      active_lord: lord || undefined,
-      items: base.map((b) => ({
+    let remedies = base.map((b: {
+      id: string;
+      remedy_key: string;
+      title: string;
+      simple_line: string;
+      remedyType: string;
+    }) => {
+      const categoryKey = remedyCategoryKey(b.remedy_key, b.remedyType);
+      return {
         id: b.id,
         title: b.title,
-        simple_line: b.simple_line,
-      })),
+        simpleLine: b.simple_line,
+        remedyType: remedyTypeLabel(b.remedyType, locale),
+        remedyCategoryKey: categoryKey,
+        remedyCategoryLabel: remedyCategoryLabel(categoryKey, locale),
+        whyNow: remedyWhyNow(b.remedyType, lord, locale),
+        keepItSimple: remedyKeepSimple(b.remedyType, locale),
+      };
     });
-    if (rcopy && rcopy.length === base.length) {
-      remedies = base.map((b, i) => {
-        const rc = rcopy[i]!;
+    const pack = await loadBirthPack(supabase, profile, bi, locale, dateStr);
+    const packRemedies = asArray<Record<string, unknown>>(pack?.content.remedy_cards);
+    let remedyProvenance = pack
+      ? buildProvenance({
+        promptVersion: BIRTH_PACK_VERSION,
+        provider: pack.provider,
+        model: pack.model,
+        source: pack.provider === "deterministic" ? "fallback" : "llm",
+        factSignature: pack.fact_signature,
+      })
+      : null;
+
+    if (packRemedies.length) {
+      remedies = base.map((b: {
+        id: string;
+        remedy_key: string;
+        title: string;
+        simple_line: string;
+        remedyType: string;
+      }, i: number) => {
+        const rc = packRemedies.find((item) => safeString(item.id) === b.id) ??
+          packRemedies[i] ?? {};
+        const categoryKey = remedyCategoryKey(b.remedy_key, b.remedyType);
         return {
-          id: (rc.id || b.id) as string,
-          title: (rc.title || b.title) as string,
-          simpleLine: (rc.simple_line || b.simple_line) as string,
-          remedyType: b.remedyType,
+          id: safeString(rc.id) || b.id,
+          title: safeString(rc.title) || b.title,
+          simpleLine: safeString(rc.simple_line) || b.simple_line,
+          remedyType: remedyTypeLabel(b.remedyType, locale),
+          remedyCategoryKey: categoryKey,
+          remedyCategoryLabel: remedyCategoryLabel(categoryKey, locale),
+          whyNow: safeString(rc.why_now) || remedyWhyNow(b.remedyType, lord, locale),
+          keepItSimple: safeString(rc.keep_it_simple) || remedyKeepSimple(b.remedyType, locale),
+          shareHook: safeString(rc.share_hook),
         };
+      });
+    } else {
+      remedyProvenance = buildProvenance({
+        promptVersion: CONTENT_PROMPT_VERSION,
+        provider: "deterministic",
+        model: "none",
+        source: "fallback",
+        factSignature: buildFactSignature([
+          profile.id,
+          bi?.id,
+          dateStr,
+          locale,
+          KERNEL_VERSION,
+          lord,
+          base.map((b: { id: string }) => b.id).join(","),
+          base.map((b: { remedy_key: string }) => b.remedy_key).join(","),
+        ]),
       });
     }
 
-    return { remedies, locale };
+    const result = {
+      cacheVersion: NARRATIVE_CACHE_VERSION,
+      birthInputId: bi?.id ?? null,
+      date: dateStr,
+      locale,
+      remedies,
+      provenance: remedyProvenance!,
+    };
+
+    await saveNarrativeCache(supabase, profile.id, dateStr, locale, "remedy", result);
+
+    return result;
   }
 
-  throw new Error(`Unknown action: ${action}`);
+  throw new ActionError("unknown_action", `Unknown action: ${action}`, 400);
+}
+
+export async function getCachedNarrative(
+  _supabase: SupabaseClient,
+  _profileId: string,
+  _dateStr: string,
+  _type: string,
+  _locale: string,
+) {
+  return null;
+}
+
+export async function getValidationFeedback(
+  _supabase: SupabaseClient,
+  _profileId: string,
+): Promise<string[]> {
+  return [];
 }

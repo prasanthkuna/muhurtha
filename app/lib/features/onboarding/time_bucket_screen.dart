@@ -9,9 +9,17 @@ import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 import 'birth_draft.dart';
 import 'birth_draft_notifier.dart';
+import 'onboarding_finish.dart';
 
-class TimeBucketScreen extends ConsumerWidget {
+class TimeBucketScreen extends ConsumerStatefulWidget {
   const TimeBucketScreen({super.key});
+
+  @override
+  ConsumerState<TimeBucketScreen> createState() => _TimeBucketScreenState();
+}
+
+class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
+  var _saving = false;
 
   String _label(AppLocalizations l10n, TimeBucketOption o) {
     switch (o) {
@@ -35,7 +43,7 @@ class TimeBucketScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final draft = ref.watch(birthDraftProvider);
@@ -55,7 +63,8 @@ class TimeBucketScreen extends ConsumerWidget {
     Future<void> pickExactTime() async {
       final t = await showTimePicker(
         context: context,
-        initialTime: draft.exactBirthTime ?? const TimeOfDay(hour: 6, minute: 0),
+        initialTime:
+            draft.exactBirthTime ?? const TimeOfDay(hour: 6, minute: 0),
       );
       if (t != null) {
         notifier.update((d) => d.copyWith(exactBirthTime: t));
@@ -106,43 +115,49 @@ class TimeBucketScreen extends ConsumerWidget {
                         : draft.exactBirthTime!.format(context),
                     style: theme.textTheme.titleSmall,
                   ),
-                  trailing: const Icon(Icons.schedule_rounded,
-                      color: MuhColors.gold),
+                  trailing:
+                      const Icon(Icons.schedule_rounded, color: MuhColors.gold),
                   onTap: pickExactTime,
                 ),
               ],
               const SizedBox(height: MuhSpace.xl),
               MuhPrimaryButton(
-                label: l10n.continueLabel,
-                onPressed: () {
-                  if (draft.timeBucket == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(l10n.errorGeneric)),
-                    );
-                    return;
-                  }
-                  if (draft.timeBucket == TimeBucketOption.exact &&
-                      draft.exactBirthTime == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(l10n.errorGeneric)),
-                    );
-                    return;
-                  }
-                  // Exact date+time fixes the chart: nakshatra is derived on the server
-                  // (Lahiri Moon). Optional override via Nakshatra screen for bucket modes.
-                  if (draft.timeBucket == TimeBucketOption.exact &&
-                      draft.exactBirthTime != null) {
-                    notifier.update(
-                      (d) => d.copyWith(
-                        nakshatraUnknown: true,
-                        clearJanmaNakshatra: true,
-                      ),
-                    );
-                    context.push('/onboarding/accuracy');
-                    return;
-                  }
-                  context.push('/onboarding/nakshatra');
-                },
+                label: _saving ? l10n.splashLoading : l10n.continueLabel,
+                onPressed: _saving
+                    ? null
+                    : () {
+                        if (draft.timeBucket == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l10n.errorGeneric)),
+                          );
+                          return;
+                        }
+                        if (draft.timeBucket == TimeBucketOption.exact &&
+                            draft.exactBirthTime == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l10n.errorGeneric)),
+                          );
+                          return;
+                        }
+                        // Exact date+time fixes the chart: nakshatra is derived on the server
+                        // (Lahiri Moon). Optional override via Nakshatra screen for bucket modes.
+                        if (draft.timeBucket == TimeBucketOption.exact &&
+                            draft.exactBirthTime != null) {
+                          notifier.update(
+                            (d) => d.copyWith(
+                              nakshatraUnknown: true,
+                              clearJanmaNakshatra: true,
+                            ),
+                          );
+                          setState(() => _saving = true);
+                          finishOnboardingToHome(context: context, ref: ref)
+                              .whenComplete(() {
+                            if (mounted) setState(() => _saving = false);
+                          });
+                          return;
+                        }
+                        context.push('/onboarding/nakshatra');
+                      },
               ),
             ],
           ),

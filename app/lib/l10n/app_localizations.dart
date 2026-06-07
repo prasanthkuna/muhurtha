@@ -145,7 +145,7 @@ abstract class AppLocalizations {
   /// No description provided for @authPhoneHint.
   ///
   /// In en, this message translates to:
-  /// **'E.164 (+country code). Tap the field to pick your number when offered.'**
+  /// **'Include country code, e.g. +91…'**
   String get authPhoneHint;
 
   /// No description provided for @authSendCode.
@@ -154,11 +154,41 @@ abstract class AppLocalizations {
   /// **'Send code'**
   String get authSendCode;
 
+  /// No description provided for @authPickingNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your number in the popup…'**
+  String get authPickingNumber;
+
+  /// No description provided for @authSendingCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending verification code…'**
+  String get authSendingCode;
+
+  /// No description provided for @authWaitingForSms.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for your SMS — code will fill automatically.'**
+  String get authWaitingForSms;
+
+  /// No description provided for @authVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Signing you in…'**
+  String get authVerifying;
+
   /// No description provided for @authOtpLabel.
   ///
   /// In en, this message translates to:
   /// **'Verification code'**
   String get authOtpLabel;
+
+  /// No description provided for @authOtpAutoHint.
+  ///
+  /// In en, this message translates to:
+  /// **'When Android asks, tap Allow once to read the code. No typing needed.'**
+  String get authOtpAutoHint;
 
   /// No description provided for @authVerify.
   ///
@@ -337,7 +367,7 @@ abstract class AppLocalizations {
   /// No description provided for @navPurpose.
   ///
   /// In en, this message translates to:
-  /// **'Purpose'**
+  /// **'Ask'**
   String get navPurpose;
 
   /// No description provided for @navJourney.
@@ -723,6 +753,444 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Timing refreshed for all tabs.'**
   String get profileSaved;
+
+  /// No description provided for @luckyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your natal luck'**
+  String get luckyTitle;
+
+  /// No description provided for @luckyNumbers.
+  ///
+  /// In en, this message translates to:
+  /// **'Lucky numbers'**
+  String get luckyNumbers;
+
+  /// No description provided for @luckyDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Lucky days'**
+  String get luckyDays;
+
+  /// No description provided for @luckyColours.
+  ///
+  /// In en, this message translates to:
+  /// **'Lucky colours'**
+  String get luckyColours;
+
+  /// No description provided for @locationDetectAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Detect location'**
+  String get locationDetectAction;
+
+  /// No description provided for @locationDetectedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'City and language detected from your location. You can edit either.'**
+  String get locationDetectedHint;
+
+  /// No description provided for @concernTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What matters most?'**
+  String get concernTitle;
+
+  /// No description provided for @concernSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick what you want Muhūrta to focus on first. This shapes your personalised copy.'**
+  String get concernSubtitle;
+
+  /// No description provided for @concernMainLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Main concern'**
+  String get concernMainLabel;
+
+  /// No description provided for @concernRoleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Life role'**
+  String get concernRoleLabel;
+
+  /// No description provided for @concernLifeStuck.
+  ///
+  /// In en, this message translates to:
+  /// **'Why life feels stuck'**
+  String get concernLifeStuck;
+
+  /// No description provided for @concernCareerTiming.
+  ///
+  /// In en, this message translates to:
+  /// **'Career timing'**
+  String get concernCareerTiming;
+
+  /// No description provided for @concernMoneyGrowth.
+  ///
+  /// In en, this message translates to:
+  /// **'Money growth'**
+  String get concernMoneyGrowth;
+
+  /// No description provided for @concernMarriage.
+  ///
+  /// In en, this message translates to:
+  /// **'Marriage / relationship'**
+  String get concernMarriage;
+
+  /// No description provided for @concernFamilyPressure.
+  ///
+  /// In en, this message translates to:
+  /// **'Family pressure'**
+  String get concernFamilyPressure;
+
+  /// No description provided for @concernBusiness.
+  ///
+  /// In en, this message translates to:
+  /// **'Business direction'**
+  String get concernBusiness;
+
+  /// No description provided for @concernHealth.
+  ///
+  /// In en, this message translates to:
+  /// **'Health / routine'**
+  String get concernHealth;
+
+  /// No description provided for @concernGoodBadTiming.
+  ///
+  /// In en, this message translates to:
+  /// **'Good / bad time today'**
+  String get concernGoodBadTiming;
+
+  /// No description provided for @roleStudent.
+  ///
+  /// In en, this message translates to:
+  /// **'Student / fresher'**
+  String get roleStudent;
+
+  /// No description provided for @roleEarlyCareer.
+  ///
+  /// In en, this message translates to:
+  /// **'Early career (job)'**
+  String get roleEarlyCareer;
+
+  /// No description provided for @roleManager.
+  ///
+  /// In en, this message translates to:
+  /// **'Manager / senior IC'**
+  String get roleManager;
+
+  /// No description provided for @roleBusinessOwner.
+  ///
+  /// In en, this message translates to:
+  /// **'Business owner'**
+  String get roleBusinessOwner;
+
+  /// No description provided for @roleHomemaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Homemaker / family-first'**
+  String get roleHomemaker;
+
+  /// No description provided for @roleBetweenJobs.
+  ///
+  /// In en, this message translates to:
+  /// **'Between jobs / pivoting'**
+  String get roleBetweenJobs;
+
+  /// No description provided for @errorAskLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used today\'s free question. Come back tomorrow or upgrade for more.'**
+  String get errorAskLimitReached;
+
+  /// No description provided for @loadingOpening.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening Muhurtha...'**
+  String get loadingOpening;
+
+  /// No description provided for @loadingDecode.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing your Decode...'**
+  String get loadingDecode;
+
+  /// No description provided for @loadingToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing today...'**
+  String get loadingToday;
+
+  /// No description provided for @loadingProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading your profile...'**
+  String get loadingProfile;
+
+  /// No description provided for @loadingTodayWindows.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking today\'s useful windows...'**
+  String get loadingTodayWindows;
+
+  /// No description provided for @loadingTimingPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Building your timing plan...'**
+  String get loadingTimingPlan;
+
+  /// No description provided for @loadingLifeMap.
+  ///
+  /// In en, this message translates to:
+  /// **'Building your Life Map...'**
+  String get loadingLifeMap;
+
+  /// No description provided for @loadingBoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening your timing space...'**
+  String get loadingBoot;
+
+  /// No description provided for @loadingAuth.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking your profile...'**
+  String get loadingAuth;
+
+  /// No description provided for @loadingGenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing your life timing map...'**
+  String get loadingGenerate;
+
+  /// No description provided for @loadingAsk.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading your question with your timing map...'**
+  String get loadingAsk;
+
+  /// No description provided for @loadingShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating your share card...'**
+  String get loadingShare;
+
+  /// No description provided for @loadingCompact.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading the timing...'**
+  String get loadingCompact;
+
+  /// No description provided for @loadingScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading your Moon rhythm...'**
+  String get loadingScreen;
+
+  /// No description provided for @loadingBootSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Moon sign, phase, and today are lining up.'**
+  String get loadingBootSub;
+
+  /// No description provided for @loadingAuthSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeping your decode ready.'**
+  String get loadingAuthSub;
+
+  /// No description provided for @loadingGenerateSub.
+  ///
+  /// In en, this message translates to:
+  /// **'This can take a moment the first time.'**
+  String get loadingGenerateSub;
+
+  /// No description provided for @loadingAskSub.
+  ///
+  /// In en, this message translates to:
+  /// **'One clean answer, not a long horoscope.'**
+  String get loadingAskSub;
+
+  /// No description provided for @loadingShareSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Branding it before it leaves the app.'**
+  String get loadingShareSub;
+
+  /// No description provided for @loadingScreenSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Good windows and cautions are being checked.'**
+  String get loadingScreenSub;
+
+  /// No description provided for @v3DecodeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Decode'**
+  String get v3DecodeTitle;
+
+  /// No description provided for @v3DecodeSub.
+  ///
+  /// In en, this message translates to:
+  /// **'First it should feel like \"okay, this is me\". Then timing earns trust.'**
+  String get v3DecodeSub;
+
+  /// No description provided for @v3MoonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Moon-led reading'**
+  String get v3MoonLabel;
+
+  /// No description provided for @v3MoonExplainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Indian astrology reads your mind, timing, and life rhythm mainly from your birth Moon. Sun sign is just the familiar anchor.'**
+  String get v3MoonExplainer;
+
+  /// No description provided for @v3SunSign.
+  ///
+  /// In en, this message translates to:
+  /// **'Sun sign'**
+  String get v3SunSign;
+
+  /// No description provided for @v3ThisSounds.
+  ///
+  /// In en, this message translates to:
+  /// **'This sounds like you'**
+  String get v3ThisSounds;
+
+  /// No description provided for @v3Strengths.
+  ///
+  /// In en, this message translates to:
+  /// **'Strengths'**
+  String get v3Strengths;
+
+  /// No description provided for @v3Watchouts.
+  ///
+  /// In en, this message translates to:
+  /// **'Watchouts'**
+  String get v3Watchouts;
+
+  /// No description provided for @v3WorkMoney.
+  ///
+  /// In en, this message translates to:
+  /// **'Work / money pattern'**
+  String get v3WorkMoney;
+
+  /// No description provided for @v3Relationship.
+  ///
+  /// In en, this message translates to:
+  /// **'Relationship pattern'**
+  String get v3Relationship;
+
+  /// No description provided for @v3TodayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get v3TodayTitle;
+
+  /// No description provided for @v3TodaySub.
+  ///
+  /// In en, this message translates to:
+  /// **'One main line, one useful window, one caution.'**
+  String get v3TodaySub;
+
+  /// No description provided for @v3MainAdvice.
+  ///
+  /// In en, this message translates to:
+  /// **'Main advice today'**
+  String get v3MainAdvice;
+
+  /// No description provided for @v3GoodWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this window'**
+  String get v3GoodWindow;
+
+  /// No description provided for @v3CautionWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep this light'**
+  String get v3CautionWindow;
+
+  /// No description provided for @v3BetterFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Better for'**
+  String get v3BetterFor;
+
+  /// No description provided for @v3CarefulWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Be careful with'**
+  String get v3CarefulWith;
+
+  /// No description provided for @v3TimingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Timing Plan'**
+  String get v3TimingTitle;
+
+  /// No description provided for @v3TimingSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Week focus, month strategy, and what to use now.'**
+  String get v3TimingSub;
+
+  /// No description provided for @v3Week.
+  ///
+  /// In en, this message translates to:
+  /// **'This week'**
+  String get v3Week;
+
+  /// No description provided for @v3Month.
+  ///
+  /// In en, this message translates to:
+  /// **'This month'**
+  String get v3Month;
+
+  /// No description provided for @v3CurrentPhase.
+  ///
+  /// In en, this message translates to:
+  /// **'Current phase'**
+  String get v3CurrentPhase;
+
+  /// No description provided for @v3LifeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Life Map'**
+  String get v3LifeTitle;
+
+  /// No description provided for @v3LifeSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the past first, then understand the chapter you are in now.'**
+  String get v3LifeSub;
+
+  /// No description provided for @v3PastCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Past check'**
+  String get v3PastCheck;
+
+  /// No description provided for @v3Coming.
+  ///
+  /// In en, this message translates to:
+  /// **'Coming chapters'**
+  String get v3Coming;
+
+  /// No description provided for @v3Ask.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask'**
+  String get v3Ask;
+
+  /// No description provided for @v3ShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Share failed'**
+  String get v3ShareFailed;
 }
 
 class _AppLocalizationsDelegate

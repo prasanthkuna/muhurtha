@@ -32,14 +32,30 @@ class AppLocalizationsTe extends AppLocalizations {
   String get authPhone => 'మొబైల్ నంబర్';
 
   @override
-  String get authPhoneHint =>
-      'E.164 (+ దేశ కోడ్). సూచన ఇచ్చినప్పుడు నంబర్ ఎంచుకోండి.';
+  String get authPhoneHint => 'దేశ కోడ్ తో, ఉదా. +91…';
 
   @override
   String get authSendCode => 'కోడ్ పంపు';
 
   @override
+  String get authPickingNumber => 'పాపప్‌లో మీ నంబర్ ఎంచుకోండి…';
+
+  @override
+  String get authSendingCode => 'ధృవీకరణ కోడ్ పంపుతున్నాం…';
+
+  @override
+  String get authWaitingForSms =>
+      'SMS కోసం వేచి ఉన్నాం — కోడ్ స్వయంచాలకంగా నిండుతుంది.';
+
+  @override
+  String get authVerifying => 'సైన్ ఇన్ అవుతోంది…';
+
+  @override
   String get authOtpLabel => 'ధృవీకరణ కోడ్';
+
+  @override
+  String get authOtpAutoHint =>
+      'Android అడిగితే Allow నొక్కండి — టైప్ చేయాల్సిన అవసరం లేదు.';
 
   @override
   String get authVerify => 'ధృవీకరించు';
@@ -137,7 +153,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get navToday => 'ఈరోజు';
 
   @override
-  String get navPurpose => 'ఉద్దేశం';
+  String get navPurpose => 'అడగండి';
 
   @override
   String get navJourney => 'ప్రయాణం';
@@ -340,4 +356,230 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get profileSaved => 'మీ టైమింగ్ అప్‌డేట్ అయింది.';
+
+  @override
+  String get luckyTitle => 'మీ జన్మ భాగ్యం';
+
+  @override
+  String get luckyNumbers => 'అదృష్ట సంఖ్యలు';
+
+  @override
+  String get luckyDays => 'అదృష్ట రోజులు';
+
+  @override
+  String get luckyColours => 'అదృష్ట రంగులు';
+
+  @override
+  String get locationDetectAction => 'స్థానం గుర్తించు';
+
+  @override
+  String get locationDetectedHint =>
+      'నగరం, భాష మీ స్థానం నుండి నింపబడ్డాయి. మార్చవచ్చు.';
+
+  @override
+  String get concernTitle => 'మీకు ఎక్కువ ముఖ్యమైనది?';
+
+  @override
+  String get concernSubtitle =>
+      'Muhūrta మొదట ఏది చూడాలో ఎంచుకోండి. ఇది మీ కాపీని ఆకారం ఇస్తుంది.';
+
+  @override
+  String get concernMainLabel => 'ప్రధాన ఆందోళన';
+
+  @override
+  String get concernRoleLabel => 'జీవిత పాత్ర';
+
+  @override
+  String get concernLifeStuck => 'జీవితం ఎందుకు నిలిచిపోయినట్లు';
+
+  @override
+  String get concernCareerTiming => 'కెరీర్ టైమింగ్';
+
+  @override
+  String get concernMoneyGrowth => 'డబ్బు పెరుగుదల';
+
+  @override
+  String get concernMarriage => 'వివాహం / సంబంధం';
+
+  @override
+  String get concernFamilyPressure => 'కుటుంబ ఒత్తిడి';
+
+  @override
+  String get concernBusiness => 'వ్యాపార దిశ';
+
+  @override
+  String get concernHealth => 'ఆరోగ్యం / రొటీన్';
+
+  @override
+  String get concernGoodBadTiming => 'ఈరోజు మంచి / చెడు సమయం';
+
+  @override
+  String get roleStudent => 'విద్యార్థి / ఫ్రెషర్';
+
+  @override
+  String get roleEarlyCareer => 'ప్రారంభ కెరీర్';
+
+  @override
+  String get roleManager => 'మేనేజర్ / సీనియర్';
+
+  @override
+  String get roleBusinessOwner => 'వ్యాపార యజమాని';
+
+  @override
+  String get roleHomemaker => 'గృహిణి / కుటుంబం మొదట';
+
+  @override
+  String get roleBetweenJobs => 'ఉద్యోగ మార్పు / పివట్';
+
+  @override
+  String get errorAskLimitReached =>
+      'ఈరోజు ఉచిత ప్రశ్న పూర్తయింది. రేపు మళ్లీ రండి లేదా మరిన్ని కోసం అప్‌గ్రేడ్ చేయండి.';
+
+  @override
+  String get loadingOpening => 'ముహూర్త తెరుస్తున్నాం...';
+
+  @override
+  String get loadingDecode => 'మీ డీకోడ్ సిద్ధం చేస్తున్నాం...';
+
+  @override
+  String get loadingToday => 'ఈరోజు సిద్ధం చేస్తున్నాం...';
+
+  @override
+  String get loadingProfile => 'మీ ప్రొఫైల్ లోడ్ అవుతోంది...';
+
+  @override
+  String get loadingTodayWindows => 'ఈరోజు ఉపయోగపడే సమయాలు చూస్తున్నాం...';
+
+  @override
+  String get loadingTimingPlan => 'మీ టైమింగ్ ప్లాన్ సిద్ధం చేస్తున్నాం...';
+
+  @override
+  String get loadingLifeMap => 'మీ లైఫ్ మ్యాప్ సిద్ధం చేస్తున్నాం...';
+
+  @override
+  String get loadingBoot => 'మీ టైమింగ్ స్పేస్ తెరుస్తున్నాం...';
+
+  @override
+  String get loadingAuth => 'మీ ప్రొఫైల్ చూస్తున్నాం...';
+
+  @override
+  String get loadingGenerate => 'మీ లైఫ్ టైమింగ్ మ్యాప్ సిద్ధం చేస్తున్నాం...';
+
+  @override
+  String get loadingAsk => 'మీ ప్రశ్నను టైమింగ్ మ్యాప్‌తో చదువుతున్నాం...';
+
+  @override
+  String get loadingShare => 'షేర్ కార్డ్ సిద్ధం చేస్తున్నాం...';
+
+  @override
+  String get loadingCompact => 'టైమింగ్ చదువుతున్నాం...';
+
+  @override
+  String get loadingScreen => 'మీ చంద్ర రిథమ్ చదువుతున్నాం...';
+
+  @override
+  String get loadingBootSub => 'చంద్ర రాశి, దశ, ఈరోజు లైన్ అవుతున్నాయి.';
+
+  @override
+  String get loadingAuthSub => 'మీ డీకోడ్ రెడీగా ఉంచుతున్నాం.';
+
+  @override
+  String get loadingGenerateSub => 'మొదటిసారి కొంచెం సమయం పడవచ్చు.';
+
+  @override
+  String get loadingAskSub => 'ఒక సూటి సమాధానం — పొడవైన జాతకం కాదు.';
+
+  @override
+  String get loadingShareSub => 'యాప్ నుంచి వెళ్లే ముందు బ్రాండ్ చేస్తున్నాం.';
+
+  @override
+  String get loadingScreenSub => 'మంచి/జాగ్రత్త సమయాలు చెక్ అవుతున్నాయి.';
+
+  @override
+  String get v3DecodeTitle => 'నీ డీకోడ్';
+
+  @override
+  String get v3DecodeSub =>
+      'ముందు \"అరే, ఇది నేనే\" అనిపించాలి. తర్వాతే టైమింగ్ నమ్మకం వస్తుంది.';
+
+  @override
+  String get v3MoonLabel => 'చంద్ర రాశి ఆధారంగా';
+
+  @override
+  String get v3MoonExplainer =>
+      'భారతీయ జ్యోతిషంలో నీ మనసు, టైమింగ్, లైఫ్ రిథమ్ ఎక్కువగా జన్మ చంద్ర రాశి నుంచి చదువుతాం. సన్ సైన్ తెలిసిన గుర్తు మాత్రమే.';
+
+  @override
+  String get v3SunSign => 'సన్ సైన్';
+
+  @override
+  String get v3ThisSounds => 'ఇది నువ్వే కదా';
+
+  @override
+  String get v3Strengths => 'బలాలు';
+
+  @override
+  String get v3Watchouts => 'జాగ్రత్తలు';
+
+  @override
+  String get v3WorkMoney => 'పని / డబ్బు ప్యాటర్న్';
+
+  @override
+  String get v3Relationship => 'సంబంధాల ప్యాటర్న్';
+
+  @override
+  String get v3TodayTitle => 'ఈరోజు';
+
+  @override
+  String get v3TodaySub => 'ఒక మెయిన్ మాట, ఒక ఉపయోగపడే టైమ్, ఒక జాగ్రత్త.';
+
+  @override
+  String get v3MainAdvice => 'ఈరోజు మెయిన్ మాట';
+
+  @override
+  String get v3GoodWindow => 'వాడుకోవాల్సిన సమయం';
+
+  @override
+  String get v3CautionWindow => 'తేలికగా ఉంచాల్సిన సమయం';
+
+  @override
+  String get v3BetterFor => 'ఇవి బాగుంటాయి';
+
+  @override
+  String get v3CarefulWith => 'ఇక్కడ జాగ్రత్త';
+
+  @override
+  String get v3TimingTitle => 'నీ టైమింగ్ ప్లాన్';
+
+  @override
+  String get v3TimingSub =>
+      'వారం ఫోకస్, నెల స్ట్రాటజీ, ఇప్పుడు వాడుకోవాల్సిన దశ.';
+
+  @override
+  String get v3Week => 'ఈ వారం';
+
+  @override
+  String get v3Month => 'ఈ నెల';
+
+  @override
+  String get v3CurrentPhase => 'ఇప్పటి దశ';
+
+  @override
+  String get v3LifeTitle => 'లైఫ్ మ్యాప్';
+
+  @override
+  String get v3LifeSub =>
+      'గతం మ్యాచ్ అవుతుందా చూసి, ఇప్పుడు ఎక్కడ ఉన్నావో అర్థం చేసుకో.';
+
+  @override
+  String get v3PastCheck => 'గతం చెక్';
+
+  @override
+  String get v3Coming => 'ముందు వచ్చే దశలు';
+
+  @override
+  String get v3Ask => 'అడుగు';
+
+  @override
+  String get v3ShareFailed => 'షేర్ కాలేదు';
 }

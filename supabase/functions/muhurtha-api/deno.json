@@ -2,6 +2,7 @@
   "imports": {
     "suncalc": "npm:suncalc@1.9.0",
     "luxon": "npm:luxon@3.4.4",
+    "tz-lookup": "npm:tz-lookup@6.1.25",
     "astronomy-engine": "npm:astronomy-engine@2.1.19",
     "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.49.8"
   },

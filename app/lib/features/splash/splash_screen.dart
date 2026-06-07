@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:muhurta/l10n/app_localizations.dart';
+
 import '../../core/config/env.dart';
 import '../../core/data/profile_repository.dart';
-import '../../design_system/design_system.dart';
+import '../../core/locale/locale_provider.dart';
+import '../../shared/widgets/muhurtha_loading_view.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -32,6 +35,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       return;
     }
 
+    final lang = await repo.loadProfileLanguageCode();
+    if (lang != null && lang.isNotEmpty) {
+      ref.read(localeProvider.notifier).setLanguageCode(lang);
+    }
+
     final target = await repo.initialSignedInRoute();
     if (!mounted) return;
 
@@ -49,9 +57,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(color: MuhColors.gold),
+    final l10n = AppLocalizations.of(context)!;
+    return Scaffold(
+      body: MuhurthaLoadingView(
+        mode: MuhurthaLoadingMode.boot,
+        moonSymbol: '☽',
+        message: l10n.loadingOpening,
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/location/location_locale_service.dart';
 import '../../design_system/design_system.dart';
 import '../../core/locale/locale_provider.dart';
 import '../../shared/widgets/muh_primary_button.dart';
@@ -21,6 +22,7 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
   late final TextEditingController _name;
   late final TextEditingController _city;
   late final TextEditingController _place;
+  var _detectingLocation = false;
 
   @override
   void initState() {
@@ -29,6 +31,20 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
     _name = TextEditingController(text: d.displayName ?? '');
     _city = TextEditingController(text: d.currentCity ?? '');
     _place = TextEditingController(text: d.birthPlace ?? '');
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoDetectLocation());
+  }
+
+  Future<void> _autoDetectLocation() async {
+    if (!mounted || ref.read(birthDraftProvider).locationDetected) return;
+    setState(() => _detectingLocation = true);
+    try {
+      final result =
+          await ref.read(locationLocaleServiceProvider).detectAndApply();
+      if (!mounted) return;
+      if (result.city != null) _city.text = result.city!;
+    } finally {
+      if (mounted) setState(() => _detectingLocation = false);
+    }
   }
 
   @override
@@ -99,8 +115,34 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
                 controller: _city,
                 onChanged: (v) =>
                     notifier.update((d) => d.copyWith(currentCity: v)),
-                decoration: InputDecoration(labelText: l10n.fieldCurrentCity),
+                decoration: InputDecoration(
+                  labelText: l10n.fieldCurrentCity,
+                  suffixIcon: _detectingLocation
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : IconButton(
+                          tooltip: l10n.locationDetectAction,
+                          icon: const Icon(Icons.my_location_rounded),
+                          onPressed: _autoDetectLocation,
+                        ),
+                ),
               ),
+              if (draft.locationDetected)
+                Padding(
+                  padding: const EdgeInsets.only(top: MuhSpace.xs),
+                  child: Text(
+                    l10n.locationDetectedHint,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: MuhColors.goldSoft,
+                    ),
+                  ),
+                ),
               const SizedBox(height: MuhSpace.md),
               DropdownButtonFormField<String>(
                 initialValue: draft.languageCode,

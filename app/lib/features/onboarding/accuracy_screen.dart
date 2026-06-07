@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../design_system/design_system.dart';
-import '../../core/data/muhurtha_engine_api.dart';
-import '../../core/data/engine_cache_invalidate.dart';
-import '../../core/data/profile_repository.dart';
 import '../../core/engine/accuracy_copy.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 import 'birth_draft_notifier.dart';
+import 'onboarding_finish.dart';
 
 class AccuracyScreen extends ConsumerStatefulWidget {
   const AccuracyScreen({super.key});
@@ -23,59 +20,9 @@ class _AccuracyScreenState extends ConsumerState<AccuracyScreen> {
   var _saving = false;
 
   Future<void> _finish() async {
-    final l10n = AppLocalizations.of(context)!;
-    final draft = ref.read(birthDraftProvider);
-    final repo = ref.read(profileRepositoryProvider);
-
-    if (repo == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.errorNeedSupabase)),
-        );
-        context.go('/home');
-      }
-      return;
-    }
-
     setState(() => _saving = true);
     try {
-      final ids = await repo.saveOnboardingDraft(draft);
-      final api = ref.read(muhurthaEngineApiProvider);
-      var cards = <QuickProofCard>[];
-
-      if (api != null) {
-        try {
-          final chart = await api.chartInitialize(ids.birthInputId);
-          if (chart.canShowQuickProof) {
-            try {
-              cards = await api.quickProofGenerate();
-            } catch (_) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(l10n.errorGeneric)),
-                );
-              }
-            }
-          }
-        } catch (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.errorGeneric)),
-            );
-          }
-          return;
-        }
-      }
-
-      if (!mounted) return;
-      invalidateAllEngineCaches(ref);
-      context.go('/onboarding/quick-proof', extra: cards);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.errorGeneric)),
-        );
-      }
+      await finishOnboardingToHome(context: context, ref: ref);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -104,6 +51,14 @@ class _AccuracyScreenState extends ConsumerState<AccuracyScreen> {
                   height: 1.45,
                 ),
               ),
+              const SizedBox(height: MuhSpace.md),
+              Text(
+                _accuracyProfileNote(context),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: MuhColors.goldSoft,
+                  height: 1.45,
+                ),
+              ),
               const SizedBox(height: MuhSpace.xl),
               Container(
                 padding: const EdgeInsets.all(MuhSpace.xl),
@@ -119,7 +74,7 @@ class _AccuracyScreenState extends ConsumerState<AccuracyScreen> {
               ),
               const SizedBox(height: MuhSpace.xl),
               MuhPrimaryButton(
-                label: l10n.accuracyContinue,
+                label: _saving ? l10n.loadingGenerate : l10n.accuracyContinue,
                 onPressed: _saving ? null : _finish,
               ),
             ],
@@ -128,4 +83,15 @@ class _AccuracyScreenState extends ConsumerState<AccuracyScreen> {
       ),
     );
   }
+}
+
+String _accuracyProfileNote(BuildContext context) {
+  final lang = Localizations.localeOf(context).languageCode.toLowerCase();
+  if (lang == 'te') {
+    return 'ఖచ్చితమైన సమయం లేదా నక్షత్రం లేకపోవడంతో కొన్ని ఫలితాలు తక్కువ స్పష్టంగా ఉండవచ్చు. తర్వాత Profile లో మార్చవచ్చు.';
+  }
+  if (lang == 'hi') {
+    return 'सटीक जन्म समय या नक्षत्र न होने पर कुछ परिणाम कम निश्चित हो सकते हैं। आप इसे बाद में Profile में बदल सकते हैं।';
+  }
+  return 'Because exact birth time or Nakshatra is missing, some results may be less precise. You can update this anytime in Profile.';
 }

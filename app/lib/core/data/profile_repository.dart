@@ -12,6 +12,45 @@ class ProfileRepository {
 
   final SupabaseClient _client;
 
+  Future<String> ensureSignedInProfile() async {
+    final user = _client.auth.currentUser;
+    if (user == null) {
+      throw StateError('Not signed in');
+    }
+
+    final existing = await _client
+        .from('profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+    if (existing != null) {
+      return existing['id'] as String;
+    }
+
+    try {
+      final profileRow = await _client
+          .from('profiles')
+          .upsert(
+            {
+              'user_id': user.id,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            },
+            onConflict: 'user_id',
+          )
+          .select('id')
+          .single();
+      return profileRow['id'] as String;
+    } on PostgrestException catch (e) {
+      if (e.code != '23505' && e.code != '409') rethrow;
+      final fallback = await _client
+          .from('profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+      return fallback['id'] as String;
+    }
+  }
+
   /// Inserts or updates profile and upserts birth_input; returns stable IDs for engine calls.
   Future<OnboardingSaveIds> saveOnboardingDraft(BirthDraft draft) async {
     final user = _client.auth.currentUser;
@@ -19,32 +58,43 @@ class ProfileRepository {
       throw StateError('Not signed in');
     }
 
-    final profileRow = await _client
-        .from('profiles')
-        .upsert(
-          {
-            'user_id': user.id,
-            'display_name': draft.displayName,
-            'current_city': draft.currentCity,
-            'language_code': draft.languageCode,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          },
-          onConflict: 'user_id',
-        )
-        .select('id')
-        .single();
+    final profileId = await ensureSignedInProfile();
 
-    final profileId = profileRow['id'] as String;
+    final locationMeta = <String, dynamic>{
+      if (draft.currentLat != null) 'current_lat': draft.currentLat,
+      if (draft.currentLng != null) 'current_lng': draft.currentLng,
+      if (draft.currentTimezone != null) 'timezone': draft.currentTimezone,
+      'detected': draft.locationDetected,
+    };
 
+    await _client.from('profiles').upsert(
+      {
+        'id': profileId,
+        'user_id': user.id,
+        'display_name': draft.displayName,
+        'current_city': draft.currentCity,
+        'language_code': draft.languageCode,
+        'onboarding_intent': draft.intent.toJson(),
+        'location_meta': locationMeta,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      },
+      onConflict: 'user_id',
+    );
+
+    final resolvedBirthPlace = await _resolveBirthPlace(draft.birthPlace);
     final birthPayload = {
       'profile_id': profileId,
       'date_of_birth': draft.dateOfBirth!.toIso8601String().split('T').first,
       'birth_place': draft.birthPlace,
+      if (resolvedBirthPlace != null) ...{
+        'birth_lat': resolvedBirthPlace.lat,
+        'birth_lng': resolvedBirthPlace.lng,
+        'birth_timezone': resolvedBirthPlace.timezone,
+      },
       'birth_input_mode': draft.resolution.birthInputMode.apiValue,
       'exact_birth_time': _formatTime(draft.exactBirthTime),
       'time_bucket': draft.timeBucket?.apiValue,
-      'janma_nakshatra':
-          draft.nakshatraUnknown ? null : draft.janmaNakshatra,
+      'janma_nakshatra': draft.nakshatraUnknown ? null : draft.janmaNakshatra,
       'nakshatra_pada': draft.nakshatraPada,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
@@ -80,6 +130,31 @@ class ProfileRepository {
     final h = t.hour.toString().padLeft(2, '0');
     final m = t.minute.toString().padLeft(2, '0');
     return '$h:$m:00';
+  }
+
+  Future<_ResolvedBirthPlace?> _resolveBirthPlace(String? place) async {
+    final trimmed = place?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    try {
+      final res = await _client.functions.invoke(
+        'muhurtha-api',
+        body: {
+          'action': 'birth_place_resolve',
+          'place': trimmed,
+        },
+      );
+      final data = res.data;
+      if (data is! Map) return null;
+      final lat = num.tryParse(data['lat']?.toString() ?? '')?.toDouble();
+      final lng = num.tryParse(data['lng']?.toString() ?? '')?.toDouble();
+      final timezone = data['timezone']?.toString();
+      if (lat == null || lng == null || timezone == null || timezone.isEmpty) {
+        return null;
+      }
+      return _ResolvedBirthPlace(lat: lat, lng: lng, timezone: timezone);
+    } catch (_) {
+      return null;
+    }
   }
 
   static TimeOfDay? parseDbTime(String? t) {
@@ -168,6 +243,17 @@ class ProfileRepository {
     return EditableProfileBundle(draft: draft, birthInputId: birthInputId);
   }
 
+  Future<String?> loadProfileLanguageCode() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return null;
+    final profile = await _client
+        .from('profiles')
+        .select('language_code')
+        .eq('user_id', user.id)
+        .maybeSingle();
+    return profile?['language_code'] as String?;
+  }
+
   /// Returns: `welcome` | `onboarding` | `home`.
   Future<String> initialSignedInRoute() async {
     final user = _client.auth.currentUser;
@@ -192,6 +278,18 @@ class ProfileRepository {
     if (birth == null) return 'onboarding';
     return 'home';
   }
+}
+
+class _ResolvedBirthPlace {
+  const _ResolvedBirthPlace({
+    required this.lat,
+    required this.lng,
+    required this.timezone,
+  });
+
+  final double lat;
+  final double lng;
+  final String timezone;
 }
 
 class EditableProfileBundle {
