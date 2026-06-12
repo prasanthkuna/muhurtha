@@ -365,6 +365,46 @@ adb emu sms send 900 "Your Muhurtha code is 123456"
 
 ---
 
+## RevenueCat + subscriptions
+
+**Client keys** (compile-time, in `app/dart_defines.json` — gitignored):
+
+```json
+"REVENUECAT_API_KEY": "test_…"
+```
+
+Use one test/public SDK key for local dev, or platform keys:
+
+```json
+"REVENUECAT_ANDROID_KEY": "goog_…",
+"REVENUECAT_IOS_KEY": "appl_…"
+```
+
+**RevenueCat dashboard setup (muhurtha Pro):**
+
+1. **Entitlement:** `muhurtha Pro`
+2. **Products:** attach Play/App Store `monthly` and `yearly` subscriptions
+3. **Offering `default`:** packages `monthly` + `yearly` → entitlement `muhurtha Pro`
+4. **Paywall:** create in RevenueCat → Paywalls, assign to `default` offering
+5. **Customer Center:** enable in RevenueCat project settings (Profile → Manage subscription uses it)
+6. **App user ID:** we call `Purchases.logIn(profileId)` so purchases map to Supabase `profiles.id`
+
+**Server webhook** (`revenuecat-webhook` edge function):
+
+1. Deploy: `supabase functions deploy revenuecat-webhook --project-ref kdngizqrybkrckvphyin`
+2. Set secret: `supabase secrets set REVENUECAT_WEBHOOK_SECRET=<random> --project-ref kdngizqrybkrckvphyin`
+3. In RevenueCat → Webhooks, point to  
+   `https://kdngizqrybkrckvphyin.supabase.co/functions/v1/revenuecat-webhook`  
+   with `Authorization: Bearer <REVENUECAT_WEBHOOK_SECRET>`.
+
+**Products (v1):** create Play/App Store subscriptions, map entitlements `plus` and `pro` in RevenueCat. Package identifiers should contain `plus` or `pro` (e.g. `muhurta_plus_monthly`, `muhurta_pro_monthly`).
+
+**Dev Pro without billing:** manual row in `subscriptions` (see migration `20260608120000_grant_dev_pro_subscriptions.sql`) still works when RevenueCat keys are empty.
+
+**Onboarding intent:** concern/life-context forms were removed. Purpose chips on **Ask** lazily write `profiles.onboarding_intent`; the birth pack LLM uses `inferred_life_signals` from chart + age.
+
+---
+
 ## Common issues
 
 | Symptom | What to try |

@@ -103,7 +103,7 @@ class _NakshatraScreenState extends ConsumerState<NakshatraScreen> {
                       );
                       return;
                     }
-                    context.push('/onboarding/concern');
+                    context.push('/onboarding/accuracy');
                   },
                 ),
               ),

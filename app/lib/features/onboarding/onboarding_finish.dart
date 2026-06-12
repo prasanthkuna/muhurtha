@@ -6,6 +6,7 @@ import 'package:muhurta/l10n/app_localizations.dart';
 import '../../core/data/engine_cache_invalidate.dart';
 import '../../core/data/muhurtha_engine_api.dart';
 import '../../core/data/profile_repository.dart';
+import '../../core/subscription/subscription_service.dart';
 import '../../core/locale/locale_provider.dart';
 import 'birth_draft_notifier.dart';
 
@@ -27,6 +28,9 @@ Future<void> finishOnboardingToHome({
 
   try {
     final ids = await repo.saveOnboardingDraft(draft);
+    await ref
+        .read(subscriptionServiceProvider)
+        .configureForProfile(ids.profileId);
     final api = ref.read(muhurthaEngineApiProvider);
     if (api != null) {
       try {

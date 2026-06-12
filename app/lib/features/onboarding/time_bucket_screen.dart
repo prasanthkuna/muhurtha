@@ -9,7 +9,6 @@ import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 import 'birth_draft.dart';
 import 'birth_draft_notifier.dart';
-import 'onboarding_finish.dart';
 
 class TimeBucketScreen extends ConsumerStatefulWidget {
   const TimeBucketScreen({super.key});
@@ -19,8 +18,6 @@ class TimeBucketScreen extends ConsumerStatefulWidget {
 }
 
 class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
-  var _saving = false;
-
   String _label(AppLocalizations l10n, TimeBucketOption o) {
     switch (o) {
       case TimeBucketOption.earlyMorning:
@@ -122,10 +119,8 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
               ],
               const SizedBox(height: MuhSpace.xl),
               MuhPrimaryButton(
-                label: _saving ? l10n.splashLoading : l10n.continueLabel,
-                onPressed: _saving
-                    ? null
-                    : () {
+                label: l10n.continueLabel,
+                onPressed: () {
                         if (draft.timeBucket == null) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text(l10n.errorGeneric)),
@@ -149,12 +144,6 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
                               clearJanmaNakshatra: true,
                             ),
                           );
-                          setState(() => _saving = true);
-                          finishOnboardingToHome(context: context, ref: ref)
-                              .whenComplete(() {
-                            if (mounted) setState(() => _saving = false);
-                          });
-                          return;
                         }
                         context.push('/onboarding/nakshatra');
                       },

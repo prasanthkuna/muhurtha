@@ -291,17 +291,20 @@ class RecognitionCard {
     required this.periodLabel,
     required this.theme,
     required this.whatMayMatch,
+    this.locked = false,
   });
 
   final String periodLabel;
   final String theme;
   final String whatMayMatch;
+  final bool locked;
 
   factory RecognitionCard.fromJson(Map<String, dynamic> j) => RecognitionCard(
         periodLabel:
             j['period_label']?.toString() ?? j['period']?.toString() ?? '',
         theme: j['theme']?.toString() ?? j['main_theme']?.toString() ?? '',
         whatMayMatch: j['what_may_match']?.toString() ?? '',
+        locked: j['locked'] == true || j['pro_locked'] == true,
       );
 }
 
@@ -313,6 +316,7 @@ class ChapterView {
     required this.story,
     required this.useFor,
     required this.avoid,
+    this.locked = false,
   });
 
   final String tense;
@@ -321,6 +325,7 @@ class ChapterView {
   final String story;
   final String useFor;
   final String avoid;
+  final bool locked;
 
   factory ChapterView.fromJson(Map<String, dynamic> j) => ChapterView(
         tense: j['tense']?.toString() ?? '',
@@ -329,6 +334,7 @@ class ChapterView {
         story: j['story']?.toString() ?? '',
         useFor: j['use_for']?.toString() ?? j['use_it_for']?.toString() ?? '',
         avoid: j['avoid']?.toString() ?? '',
+        locked: j['locked'] == true || j['pro_locked'] == true,
       );
 
   factory ChapterView.fromLifeMap(Map<String, dynamic> j, {required String tense}) {
@@ -344,6 +350,21 @@ class ChapterView {
       story: parts.join('\n'),
       useFor: j['use_it_for']?.toString() ?? '',
       avoid: j['avoid']?.toString() ?? '',
+      locked: j['locked'] == true || j['pro_locked'] == true,
     );
+  }
+}
+
+extension BirthPackViewsPaywall on BirthPackViews {
+  Map<String, dynamic> get paywallCopy {
+    final raw = _content['paywall_copy'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return const {};
+  }
+
+  List<String> get paywallBullets {
+    final bullets = paywallCopy['bullets'];
+    if (bullets is! List) return const [];
+    return bullets.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
   }
 }

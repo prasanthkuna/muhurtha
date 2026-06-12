@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,11 @@ import '../../core/format/day_window_label.dart';
 import '../../core/locale/locale_provider.dart';
 import '../../core/notifications/muhurtha_notification_service.dart';
 import '../../core/share/share_card_service.dart';
+import '../../core/data/profile_repository.dart';
+import '../../core/subscription/onboarding_intent_map.dart';
+import '../../core/subscription/subscription_access.dart';
+import '../../core/subscription/subscription_service.dart';
+import '../../shared/widgets/paywall_sheet.dart';
 import '../../design_system/design_system.dart';
 import '../../shared/widgets/celestial_components.dart';
 import '../../shared/widgets/lucky_strip.dart';
@@ -42,6 +49,23 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> {
   late var _index = widget.initialIndex.clamp(0, 4);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _configureBilling());
+  }
+
+  Future<void> _configureBilling() async {
+    final repo = ref.read(profileRepositoryProvider);
+    if (repo == null) return;
+    try {
+      final profileId = await repo.ensureSignedInProfile();
+      await ref
+          .read(subscriptionServiceProvider)
+          .configureForProfile(profileId);
+    } catch (_) {}
+  }
 
   String _purposeLabel(AppLocalizations l, String key) {
     return switch (key) {
@@ -424,6 +448,24 @@ class _DecodeTab extends ConsumerWidget {
                   ),
                 ),
               ),
+            ...views.recognition.map(
+              (card) => _V3ProseCard(
+                eyebrow: card.periodLabel,
+                title: card.theme,
+                body: card.whatMayMatch,
+                locked: card.locked,
+                onLockedTap: card.locked
+                    ? () => PaywallSheet.show(
+                          context,
+                          headline: views.paywallCopy['headline']?.toString(),
+                          subline: views.paywallCopy['subline']?.toString(),
+                          bullets: views.paywallBullets,
+                          cta: views.paywallCopy['cta']?.toString(),
+                          preferredPlan: PaywallPlan.pro,
+                        )
+                    : null,
+              ),
+            ),
           ],
         );
       },
@@ -719,6 +761,15 @@ class _TimingTab extends ConsumerWidget {
                 month.body,
                 month.caution,
               ].where((line) => line.isNotEmpty).join('\n\n'),
+              locked: !ref.watch(subscriptionAccessProvider).isPro,
+              onLockedTap: () => PaywallSheet.show(
+                context,
+                headline: views.paywallCopy['headline']?.toString(),
+                subline: views.paywallCopy['subline']?.toString(),
+                bullets: views.paywallBullets,
+                cta: views.paywallCopy['cta']?.toString(),
+                preferredPlan: PaywallPlan.pro,
+              ),
               trailingAction: WhatsAppShareButton(
                 onTap: () => _shareExactCard(
                   ref,
@@ -838,6 +889,17 @@ class _LifeMapTab extends ConsumerWidget {
                       p.story,
                       p.avoid,
                     ].where((line) => line.isNotEmpty).join('\n\n'),
+                    locked: p.locked,
+                    onLockedTap: p.locked
+                        ? () => PaywallSheet.show(
+                              context,
+                              headline: views.paywallCopy['headline']?.toString(),
+                              subline: views.paywallCopy['subline']?.toString(),
+                              bullets: views.paywallBullets,
+                              cta: views.paywallCopy['cta']?.toString(),
+                              preferredPlan: PaywallPlan.pro,
+                            )
+                        : null,
                     trailingAction: WhatsAppShareButton(
                       onTap: () => _shareExactCard(
                         ref,
@@ -877,6 +939,8 @@ class _V3ProseCard extends StatelessWidget {
     required this.body,
     this.chips = const <String>[],
     this.trailingAction,
+    this.locked = false,
+    this.onLockedTap,
   });
 
   final String eyebrow;
@@ -884,6 +948,8 @@ class _V3ProseCard extends StatelessWidget {
   final String body;
   final List<String> chips;
   final Widget? trailingAction;
+  final bool locked;
+  final VoidCallback? onLockedTap;
 
   @override
   Widget build(BuildContext context) {
@@ -891,7 +957,7 @@ class _V3ProseCard extends StatelessWidget {
     if (title.trim().isEmpty && body.trim().isEmpty) {
       return const SizedBox.shrink();
     }
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(MuhSpace.lg),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -969,6 +1035,51 @@ class _V3ProseCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+
+    if (!locked) return card;
+
+    final l10n = AppLocalizations.of(context)!;
+    return Stack(
+      children: [
+        Opacity(opacity: 0.45, child: card),
+        Positioned.fill(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(MuhRadius.card),
+              onTap: onLockedTap,
+              child: Center(
+                child: Container(
+                  margin: const EdgeInsets.all(MuhSpace.lg),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: MuhSpace.lg,
+                    vertical: MuhSpace.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: MuhColors.surface.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(MuhRadius.chip),
+                    border: Border.all(color: MuhColors.goldSoft),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.lock_outline, color: MuhColors.goldSoft, size: 18),
+                      const SizedBox(width: MuhSpace.sm),
+                      Text(
+                        l10n.paywallLockedTeaser,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: MuhColors.cream,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1161,6 +1272,14 @@ class _AskTabState extends State<_AskTab> {
     ];
   }
 
+  Future<void> _recordPurposeIntent(String purposeValue) async {
+    final repo = widget.ref.read(profileRepositoryProvider);
+    if (repo == null) return;
+    try {
+      await repo.patchOnboardingIntent(intentPatchForPurpose(purposeValue));
+    } catch (_) {}
+  }
+
   Future<void> _ask() async {
     final question = _controller.text.trim();
     if (question.isEmpty) {
@@ -1185,6 +1304,16 @@ class _AskTabState extends State<_AskTab> {
       });
     } catch (e, st) {
       setState(() => _result = AsyncValue.error(e, st));
+      if (e is EngineException && e.code == 'free_ask_limit_reached' && mounted) {
+        unawaited(
+          PaywallSheet.show(
+            context,
+            headline: widget.l10n.paywallTitle,
+            subline: widget.l10n.errorAskLimitReached,
+            preferredPlan: PaywallPlan.pro,
+          ),
+        );
+      }
     }
   }
 
@@ -1323,6 +1452,7 @@ class _AskTabState extends State<_AskTab> {
                       label: widget.purposeLabel(widget.l10n, entry.labelKey),
                       isSelected: false,
                       onTap: () {
+                        unawaited(_recordPurposeIntent(entry.value));
                         final label =
                             widget.purposeLabel(widget.l10n, entry.labelKey);
                         _controller.text = _lang == 'te'

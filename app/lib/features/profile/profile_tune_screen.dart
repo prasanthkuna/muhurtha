@@ -10,6 +10,9 @@ import '../../core/location/location_locale_service.dart';
 import '../../core/data/nakshatra_labels.dart';
 import '../../core/data/nakshatras.dart';
 import '../../core/locale/locale_provider.dart';
+import '../../core/subscription/subscription_access.dart';
+import '../../core/subscription/subscription_service.dart';
+import '../../shared/widgets/paywall_sheet.dart';
 import '../../design_system/design_system.dart';
 import '../../features/onboarding/birth_draft.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
@@ -165,6 +168,7 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
     final buckets = [
       TimeBucketOption.earlyMorning,
       TimeBucketOption.morning,
@@ -374,6 +378,47 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
                             nakshatraUnknown: false,
                           );
                         }),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: MuhSpace.lg),
+              _ProfileSection(
+                title: l10n.paywallProLabel,
+                subtitle: l10n.paywallSubtitle,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (ref.watch(subscriptionAccessProvider).isPro)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: MuhSpace.sm),
+                        child: Text(
+                          l10n.paywallBillingNote,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: MuhColors.goldSoft,
+                          ),
+                        ),
+                      ),
+                    OutlinedButton(
+                      onPressed: () => PaywallSheet.show(
+                        context,
+                        onlyIfNeeded: false,
+                      ),
+                      child: Text(
+                        ref.watch(subscriptionAccessProvider).isPro
+                            ? l10n.profileManageSubscription
+                            : l10n.paywallCtaPro,
+                      ),
+                    ),
+                    if (ref.read(subscriptionServiceProvider).isAvailable &&
+                        ref.watch(subscriptionAccessProvider).isPro) ...[
+                      const SizedBox(height: MuhSpace.sm),
+                      TextButton(
+                        onPressed: () => ref
+                            .read(subscriptionServiceProvider)
+                            .presentCustomerCenter(),
+                        child: Text(l10n.profileManageSubscription),
                       ),
                     ],
                   ],

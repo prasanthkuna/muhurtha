@@ -59,6 +59,10 @@ import {
   rashiKeyFromSiderealLon,
   westernSignDisplayFromTropicalLon,
 } from "./vedic_labels.ts";
+import {
+  inferLifeSignals,
+  intentFingerprint,
+} from "./inferred_life_signals.ts";
 
 const ENGINE_V = "v5";
 const JOURNEY_LOOKBACK_YEARS = 15;
@@ -97,6 +101,7 @@ type ProfRow = {
   display_name: string | null;
   language_code: string | null;
   explanation_mode: string | null;
+  onboarding_intent?: Record<string, unknown> | null;
 };
 
 class ActionError extends Error {
@@ -1171,8 +1176,9 @@ function ensureLifeMapCoverage(
       }
       : currentLifeMap.current_chapter,
     future_chapters: fillLifeMapFutureGaps(
-      futurePlans.map((plan) =>
-        futureByPeriod.get(plan.periodLabel) ?? phasePlanLifeMapChapter(plan, false)
+      futurePlans.map((plan, idx) =>
+        futureByPeriod.get(plan.periodLabel) ??
+          phasePlanLifeMapChapter(plan, idx > 0)
       ),
       locale,
     ),
@@ -1372,6 +1378,7 @@ async function ensureBirthPack(
   );
   const timing = dailyTimingFacts(profile, dateStr, PACK_DAILY_DAYS, tz);
   const phasePlans = buildPackPhasePlans(bi, profile, locale, refInstant, kernel);
+  const intent = profile.onboarding_intent ?? {};
   const factSignature = buildFactSignature([
     profile.id,
     bi.id,
@@ -1384,6 +1391,7 @@ async function ensureBirthPack(
     currentLords?.adLord,
     kernel?.natal.archetype.key,
     kernel?.period.line,
+    intentFingerprint(intent),
     phasePlans.map((p) => `${p.periodLabel}:${p.mahadashaLord}-${p.antardashaLord}:${p.tense}`)
       .join("|"),
   ]);
@@ -1433,6 +1441,11 @@ async function ensureBirthPack(
       language_code: profile.language_code,
       explanation_mode: profile.explanation_mode,
     },
+    inferred_life_signals: inferLifeSignals(
+      kernel,
+      calculateAge(bi.date_of_birth),
+      intent,
+    ),
     birth: {
       date_of_birth: bi.date_of_birth,
       birth_place: bi.birth_place,
@@ -1687,7 +1700,19 @@ async function ensureBirthPack(
   return pack;
 }
 
-async function isProProfile(supabase: SupabaseClient, profileId: string): Promise<boolean> {
+type AccessTier = "free" | "plus" | "pro";
+
+type SubscriptionAccess = {
+  planCode: string;
+  tier: AccessTier;
+  isPlus: boolean;
+  isPro: boolean;
+};
+
+async function getSubscriptionAccess(
+  supabase: SupabaseClient,
+  profileId: string,
+): Promise<SubscriptionAccess> {
   const nowIso = new Date().toISOString();
   const { data, error } = await supabase
     .from("subscriptions")
@@ -1708,18 +1733,140 @@ async function isProProfile(supabase: SupabaseClient, profileId: string): Promis
       undefined,
       { error: error.message },
     );
-    return false;
+    return {
+      planCode: "free",
+      tier: "free",
+      isPlus: false,
+      isPro: false,
+    };
   }
-  return Boolean(data && String(data.plan_code ?? "free") !== "free");
+  const planCode = String(data?.plan_code ?? "free").toLowerCase();
+  const tier: AccessTier = planCode === "pro"
+    ? "pro"
+    : planCode === "plus"
+    ? "plus"
+    : "free";
+  return {
+    planCode,
+    tier,
+    isPlus: tier === "plus" || tier === "pro",
+    isPro: tier === "pro",
+  };
+}
+
+function buildAccessPayload(access: SubscriptionAccess) {
+  return {
+    isPro: access.isPro,
+    isPlus: access.isPlus,
+    planCode: access.planCode,
+  };
+}
+
+function notificationAllowed(tier: AccessTier, notificationType: string): boolean {
+  if (tier === "pro") return true;
+  if (tier === "plus") {
+    return ["today_ready", "good_time_start", "caution_start"].includes(
+      notificationType,
+    );
+  }
+  return notificationType === "today_ready";
+}
+
+function lockedTeaser(locale: AppLocale) {
+  if (locale === "te") {
+    return "ఈ దశ పూర్తి వివరాలు Proలో తెరుచుకుంటాయి.";
+  }
+  if (locale === "hi") {
+    return "इस चरण का पूरा विवरण Pro में खुलता है.";
+  }
+  return "Full detail for this phase unlocks with Pro.";
+}
+
+function applyAccessMask(
+  content: Record<string, unknown>,
+  locale: AppLocale,
+  tier: AccessTier,
+): Record<string, unknown> {
+  if (tier === "pro") return content;
+  const out = { ...content };
+  const teaser = lockedTeaser(locale);
+  const recognitionLimit = tier === "plus" ? 4 : 2;
+  const lifeEventLimit = tier === "plus" ? 2 : 1;
+
+  const lifeMap = typeof out.life_map === "object" && out.life_map
+    ? { ...(out.life_map as Record<string, unknown>) }
+    : undefined;
+  if (lifeMap && Array.isArray(lifeMap.future_chapters)) {
+    lifeMap.future_chapters = (lifeMap.future_chapters as Record<string, unknown>[]).map(
+      (row, idx) => idx === 0
+        ? { ...row, locked: false }
+        : {
+          ...row,
+          locked: true,
+          career: teaser,
+          money: "",
+          family_relationship: "",
+          avoid: "",
+        },
+    );
+    out.life_map = lifeMap;
+  }
+
+  const maskRecognitionList = (key: string) => {
+    const rows = out[key];
+    if (!Array.isArray(rows)) return;
+    out[key] = (rows as Record<string, unknown>[]).map((row, idx) => idx < recognitionLimit
+      ? { ...row, locked: false }
+      : {
+        ...row,
+        locked: true,
+        what_may_match: teaser,
+        main_theme: safeString(row.main_theme) || safeString(row.theme),
+      });
+  };
+  maskRecognitionList("past_life_check");
+  maskRecognitionList("recognition");
+
+  const timingPlan = typeof out.timing_plan === "object" && out.timing_plan
+    ? { ...(out.timing_plan as Record<string, unknown>) }
+    : undefined;
+  if (tier === "free" && timingPlan?.month && typeof timingPlan.month === "object") {
+    const month = { ...(timingPlan.month as Record<string, unknown>) };
+    month.strategy = teaser;
+    month.caution = safeString(month.caution);
+    timingPlan.month = month;
+    out.timing_plan = timingPlan;
+  }
+
+  if (tier === "free" && Array.isArray(out.weekly_cards)) {
+    out.weekly_cards = (out.weekly_cards as Record<string, unknown>[]).map(
+      (row, idx) => idx === 0 ? row : { ...row, body: teaser, pro_locked: true },
+    );
+  }
+  if (Array.isArray(out.monthly_cards)) {
+    out.monthly_cards = (out.monthly_cards as Record<string, unknown>[]).map(
+      (row) => ({ ...row, body: teaser, pro_locked: true }),
+    );
+  }
+
+  if (Array.isArray(out.likely_life_events)) {
+    out.likely_life_events = (out.likely_life_events as Record<string, unknown>[]).map(
+      (row, idx) => idx < lifeEventLimit
+        ? row
+        : { ...row, pro_locked: true, why_it_may_fit: teaser },
+    );
+  }
+
+  return out;
 }
 
 async function consumeAskQuota(
   supabase: SupabaseClient,
   profileId: string,
   usageDate: string,
-  isPro: boolean,
+  isPlus: boolean,
 ) {
-  if (isPro) return { planCode: "pro", remaining: null as number | null };
+  if (isPlus) return { planCode: "plus", remaining: null as number | null };
   const { data: row, error: readError } = await supabase
     .from("ask_usage")
     .select("ask_count")
@@ -1731,7 +1878,7 @@ async function consumeAskQuota(
   if (current >= FREE_ASKS_PER_DAY) {
     throw new ActionError(
       "free_ask_limit_reached",
-      "Free plan includes 1 Ask per day. Upgrade to Pro for more questions.",
+      "Free plan includes 1 Ask per day. Upgrade to Plus for unlimited questions.",
       429,
     );
   }
@@ -1820,7 +1967,7 @@ async function getProfileForUser(
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code, explanation_mode",
+      "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code, explanation_mode, onboarding_intent",
     )
     .eq("user_id", user.id)
     .single();
@@ -2043,7 +2190,7 @@ export async function handleRequest(
   }
 
   try {
-    return await _handleInternal(supabase, prof, body);
+    return await _handleInternal(supabase, prof, body, loggingSupabase);
   } catch (e) {
     const msg = errorMessage(e);
     const stack = e instanceof Error ? e.stack : "";
@@ -2059,6 +2206,7 @@ async function _handleInternal(
   supabase: SupabaseClient,
   prof: ProfRow | null,
   body: Record<string, unknown>,
+  adminSupabase: SupabaseClient = supabase,
 ): Promise<unknown> {
   const action = body.action as string;
 
@@ -2180,6 +2328,40 @@ async function _handleInternal(
 
   const profile = requireProfile(prof, action);
 
+  if (action === "subscription_sync") {
+    const planCode = String(body.plan_code ?? "").trim().toLowerCase();
+    if (!["free", "plus", "pro"].includes(planCode)) {
+      throw new ActionError("invalid_plan_code", "plan_code must be free, plus, or pro", 400);
+    }
+    const providerSubId = String(
+      body.provider_subscription_id ?? "revenuecat_active",
+    ).trim() || "revenuecat_active";
+    const periodEndRaw = body.current_period_end;
+    const periodEnd = periodEndRaw == null
+      ? null
+      : new Date(String(periodEndRaw)).toISOString();
+    const status = planCode === "free" ? "expired" : "active";
+    const { error } = await adminSupabase.from("subscriptions").upsert(
+      {
+        profile_id: profile.id,
+        plan_code: planCode,
+        status,
+        provider: "revenuecat",
+        provider_subscription_id: providerSubId,
+        current_period_end: periodEnd,
+        entitlement: {
+          source: "client_sync",
+          product_id: body.product_id ?? null,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "profile_id,provider,provider_subscription_id" },
+    );
+    if (error) throw error;
+    const access = await getSubscriptionAccess(supabase, profile.id);
+    return { access: buildAccessPayload(access) };
+  }
+
   if (action === "birth_pack_get") {
     // Sole entry point for birth-pack LLM generation (one call per locale, lock-protected).
     const locale = requestLocale(body, profile);
@@ -2199,6 +2381,13 @@ async function _handleInternal(
       );
     }
 
+    const access = await getSubscriptionAccess(supabase, profile.id);
+    const maskedContent = applyAccessMask(
+      pack.content as Record<string, unknown>,
+      locale,
+      access.tier,
+    );
+
     return {
       date: dateStr,
       locale,
@@ -2209,7 +2398,8 @@ async function _handleInternal(
       provider: pack.provider,
       model: pack.model,
       status: pack.status,
-      content: pack.content,
+      content: maskedContent,
+      access: buildAccessPayload(access),
       natalLuck: buildNatalLuck(
         birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
         locale,
@@ -2228,6 +2418,7 @@ async function _handleInternal(
     }
     const nowIso = new Date().toISOString();
     const untilIso = DateTime.fromISO(dateStr, { zone: tz }).plus({ days: 7 }).toUTC().toISO();
+    const access = await getSubscriptionAccess(supabase, profile.id);
     const { data, error } = await supabase
       .from("notification_schedule")
       .select(
@@ -2240,7 +2431,13 @@ async function _handleInternal(
       .order("scheduled_at", { ascending: true })
       .limit(32);
     if (error) throw error;
-    return { notifications: data ?? [], locale };
+    const rows = (data ?? []).filter((row) =>
+      notificationAllowed(
+        access.tier,
+        String(row.notification_type ?? ""),
+      )
+    );
+    return { notifications: rows, locale, access: buildAccessPayload(access) };
   }
 
   if (action === "quick_proof_generate") {
@@ -2837,8 +3034,13 @@ async function _handleInternal(
 
     const tz = profile.current_timezone ?? "Asia/Kolkata";
     const targetDate = todayInTimezone(tz);
-    const proUser = await isProProfile(supabase, profile.id);
-    const askQuota = await consumeAskQuota(supabase, profile.id, targetDate, proUser);
+    const access = await getSubscriptionAccess(supabase, profile.id);
+    const askQuota = await consumeAskQuota(
+      supabase,
+      profile.id,
+      targetDate,
+      access.isPlus,
+    );
 
     const requestedSessionId = body.session_id == null ? "" : String(body.session_id);
     let sessionId = requestedSessionId;
@@ -2982,13 +3184,16 @@ async function _handleInternal(
       askAccess: {
         planCode: askQuota.planCode,
         freeRemainingToday: askQuota.remaining,
-        isPro: proUser,
+        isPlus: access.isPlus,
+        isPro: access.isPro,
       },
+      access: buildAccessPayload(access),
     };
   }
 
   if (action === "purpose_check") {
     const locale = requestLocale(body, profile);
+    const access = await getSubscriptionAccess(supabase, profile.id);
     const purposeType = body.purpose_type as string;
     if (!purposeType) {
       throw new ActionError(
@@ -3186,6 +3391,18 @@ async function _handleInternal(
       .single();
     if (error) throw error;
 
+    let responseBetterOptions = better_options;
+    if (!access.isPlus && responseBetterOptions.length > 0) {
+      responseBetterOptions = [{
+        label: locale === "te"
+          ? "Pro తో మంచి రోజులు"
+          : locale === "hi"
+          ? "Pro से बेहतर दिन"
+          : "Better days with Pro",
+        detail: lockedTeaser(locale),
+      }];
+    }
+
     return {
       id: saved.id,
       status,
@@ -3196,11 +3413,12 @@ async function _handleInternal(
       shareHook,
       best_windows,
       caution_windows,
-      better_options,
+      better_options: responseBetterOptions,
       domainLenses: purposePlan.domainLenses,
       personalSignals: purposePlan.personalSignals,
       provenance: ctx.provenance,
       locale,
+      access: buildAccessPayload(access),
     };
   }
 

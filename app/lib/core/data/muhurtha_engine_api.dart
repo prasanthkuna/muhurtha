@@ -299,6 +299,9 @@ class BirthPackPayload {
     required this.provider,
     required this.model,
     required this.content,
+    this.isPlus = false,
+    this.isPro = false,
+    this.planCode = 'free',
   });
 
   final String date;
@@ -308,9 +311,15 @@ class BirthPackPayload {
   final String provider;
   final String model;
   final Map<String, dynamic> content;
+  final bool isPlus;
+  final bool isPro;
+  final String planCode;
 
   factory BirthPackPayload.fromJson(Map<String, dynamic> j) {
     final rawContent = j['content'];
+    final access = j['access'] is Map
+        ? Map<String, dynamic>.from(j['access'] as Map)
+        : const <String, dynamic>{};
     return BirthPackPayload(
       date: j['date']?.toString() ?? '',
       locale: j['locale']?.toString() ?? 'en',
@@ -321,6 +330,9 @@ class BirthPackPayload {
       content: rawContent is Map
           ? Map<String, dynamic>.from(rawContent)
           : const <String, dynamic>{},
+      isPlus: access['isPlus'] == true || access['isPro'] == true,
+      isPro: access['isPro'] == true,
+      planCode: access['planCode']?.toString() ?? 'free',
     );
   }
 
@@ -795,6 +807,24 @@ class MuhurthaEngineApi {
       },
     );
     return BirthPackPayload.fromJson(m);
+  }
+
+  Future<void> subscriptionSync({
+    required String planCode,
+    String? productId,
+    String? currentPeriodEnd,
+    String? providerSubscriptionId,
+  }) async {
+    await _invoke(
+      'subscription_sync',
+      extra: {
+        'plan_code': planCode,
+        if (productId != null) 'product_id': productId,
+        if (currentPeriodEnd != null) 'current_period_end': currentPeriodEnd,
+        if (providerSubscriptionId != null)
+          'provider_subscription_id': providerSubscriptionId,
+      },
+    );
   }
 
   Future<AskAnswerResult> ask({

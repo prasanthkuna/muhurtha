@@ -243,6 +243,26 @@ class ProfileRepository {
     return EditableProfileBundle(draft: draft, birthInputId: birthInputId);
   }
 
+  /// Merges behavioral intent (purpose chips, Ask) without a full onboarding resave.
+  Future<void> patchOnboardingIntent(Map<String, dynamic> patch) async {
+    if (patch.isEmpty) return;
+    final profileId = await ensureSignedInProfile();
+    final row = await _client
+        .from('profiles')
+        .select('onboarding_intent')
+        .eq('id', profileId)
+        .single();
+    final current = row['onboarding_intent'];
+    final merged = <String, dynamic>{
+      if (current is Map) ...Map<String, dynamic>.from(current),
+      ...patch,
+    };
+    await _client.from('profiles').update({
+      'onboarding_intent': merged,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', profileId);
+  }
+
   Future<String?> loadProfileLanguageCode() async {
     final user = _client.auth.currentUser;
     if (user == null) return null;

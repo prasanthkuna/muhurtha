@@ -26,6 +26,8 @@ dependencies:
   geolocator: ^13.0.2
   flutter_svg: ^2.0.17
   otp_autofill: ^4.1.0
+  purchases_flutter: ^8.6.0
+  purchases_ui_flutter: ^8.11.0
 
 dev_dependencies:
   flutter_test:

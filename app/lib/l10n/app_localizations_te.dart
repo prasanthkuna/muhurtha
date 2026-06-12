@@ -432,6 +432,183 @@ class AppLocalizationsTe extends AppLocalizations {
   String get roleBetweenJobs => 'ఉద్యోగ మార్పు / పివట్';
 
   @override
+  String get lifeContextTitle => 'A little about your life';
+
+  @override
+  String get lifeContextSubtitle =>
+      'Marriage, children, and job shape how we phrase timing — especially for family and career questions.';
+
+  @override
+  String get lifeContextGenderLabel => 'You are';
+
+  @override
+  String get lifeContextMaritalLabel => 'Marital status';
+
+  @override
+  String get lifeContextMarriageIntentLabel => 'Marriage plans';
+
+  @override
+  String get lifeContextChildrenLabel => 'Children';
+
+  @override
+  String get lifeContextJobLabel => 'Work / study';
+
+  @override
+  String get lifeContextJobFieldLabel => 'Field (optional)';
+
+  @override
+  String get genderMale => 'Male';
+
+  @override
+  String get genderFemale => 'Female';
+
+  @override
+  String get genderPreferNot => 'Prefer not to say';
+
+  @override
+  String get maritalSingle => 'Single';
+
+  @override
+  String get maritalMarried => 'Married';
+
+  @override
+  String get maritalInRelationship => 'In a relationship';
+
+  @override
+  String get maritalDivorced => 'Divorced';
+
+  @override
+  String get maritalWidowed => 'Widowed';
+
+  @override
+  String get marriageLooking => 'Looking for match';
+
+  @override
+  String get marriageNotNow => 'Not now';
+
+  @override
+  String get marriageEngaged => 'Engaged / fixed';
+
+  @override
+  String get marriageNa => 'Not applicable';
+
+  @override
+  String get childrenNone => 'No children';
+
+  @override
+  String get childrenSon => 'Have son(s)';
+
+  @override
+  String get childrenDaughter => 'Have daughter(s)';
+
+  @override
+  String get childrenBoth => 'Son and daughter';
+
+  @override
+  String get childrenExpecting => 'Expecting';
+
+  @override
+  String get jobEmployed => 'Job / salaried';
+
+  @override
+  String get jobSelfEmployed => 'Self-employed / business';
+
+  @override
+  String get jobStudent => 'Student';
+
+  @override
+  String get jobHomemaker => 'Homemaker';
+
+  @override
+  String get jobBetweenJobs => 'Between jobs';
+
+  @override
+  String get jobRetired => 'Retired';
+
+  @override
+  String get jobFieldIt => 'IT / tech';
+
+  @override
+  String get jobFieldGovt => 'Government';
+
+  @override
+  String get jobFieldBusiness => 'Business / trade';
+
+  @override
+  String get jobFieldTeaching => 'Teaching';
+
+  @override
+  String get jobFieldHealth => 'Healthcare';
+
+  @override
+  String get jobFieldOther => 'Other';
+
+  @override
+  String get paywallTitle => 'Unlock full timing';
+
+  @override
+  String get paywallSubtitle =>
+      'Plus gives daily power use. Pro unlocks future phases, month plan, and full Life Map.';
+
+  @override
+  String get paywallCta => 'Upgrade to Pro';
+
+  @override
+  String get paywallCtaPlus => 'Start Plus — ₹99/month';
+
+  @override
+  String get paywallCtaPro => 'Unlock muhurtha Pro';
+
+  @override
+  String get paywallPlusLabel => 'Plus';
+
+  @override
+  String get paywallProLabel => 'Pro';
+
+  @override
+  String get paywallPlusPrice => '₹99/month';
+
+  @override
+  String get paywallProPrice => '₹199/month';
+
+  @override
+  String get paywallMonthlyLabel => 'Monthly';
+
+  @override
+  String get paywallYearlyLabel => 'Yearly';
+
+  @override
+  String get paywallMonthlyPrice => 'Billed monthly';
+
+  @override
+  String get paywallYearlyPrice => 'Best value yearly';
+
+  @override
+  String get profileManageSubscription => 'Manage subscription';
+
+  @override
+  String get paywallProcessing => 'Processing...';
+
+  @override
+  String get paywallRestore => 'Restore purchases';
+
+  @override
+  String get paywallBillingNote =>
+      'Billed through Play Store or App Store. Cancel anytime.';
+
+  @override
+  String get paywallStorePending =>
+      'Add products in RevenueCat to enable purchases.';
+
+  @override
+  String get paywallDevNote =>
+      'Purchases activate when RevenueCat keys are configured. Server grants still work for testing.';
+
+  @override
+  String get paywallLockedTeaser =>
+      'Pro unlocks the full picture for this phase.';
+
+  @override
   String get errorAskLimitReached =>
       'ఈరోజు ఉచిత ప్రశ్న పూర్తయింది. రేపు మళ్లీ రండి లేదా మరిన్ని కోసం అప్‌గ్రేడ్ చేయండి.';
 

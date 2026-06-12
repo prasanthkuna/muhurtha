@@ -26,6 +26,27 @@ function createLoggingClient(authHeader: string): SupabaseClient {
   );
 }
 
+function jwtRole(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof payload.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
+function isServiceRoleRequest(req: Request, serviceKey: string): boolean {
+  if (!serviceKey) return false;
+  const apiKey = req.headers.get("apikey") ?? "";
+  if (apiKey === serviceKey) return true;
+  const auth = req.headers.get("Authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+  const token = apiKey || bearer;
+  return jwtRole(token) === "service_role";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: cors });
@@ -34,20 +55,25 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
 
     if (body.action === "smoke_test_locale_llm") {
-      const apiKey = req.headers.get("apikey") ?? "";
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-      if (!serviceKey || apiKey !== serviceKey) {
+      if (!isServiceRoleRequest(req, serviceKey)) {
         return new Response(JSON.stringify({ error: "forbidden" }), {
           status: 403,
           headers: { ...cors, "Content-Type": "application/json" },
         });
       }
       const locale = (body.locale as AppLocale) ?? "en";
+      const skipOpenAi = body.skip_openai === true;
       const loggingSupabase = createClient(
         Deno.env.get("SUPABASE_URL") ?? "",
         serviceKey,
       );
-      const result = await smokeTestLocaleLlm(locale, loggingSupabase, null);
+      const result = await smokeTestLocaleLlm(
+        locale,
+        loggingSupabase,
+        null,
+        { skipOpenAi },
+      );
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
       });

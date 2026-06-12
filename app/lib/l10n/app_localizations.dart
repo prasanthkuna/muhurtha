@@ -898,6 +898,348 @@ abstract class AppLocalizations {
   /// **'Between jobs / pivoting'**
   String get roleBetweenJobs;
 
+  /// No description provided for @lifeContextTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A little about your life'**
+  String get lifeContextTitle;
+
+  /// No description provided for @lifeContextSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Marriage, children, and job shape how we phrase timing — especially for family and career questions.'**
+  String get lifeContextSubtitle;
+
+  /// No description provided for @lifeContextGenderLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'You are'**
+  String get lifeContextGenderLabel;
+
+  /// No description provided for @lifeContextMaritalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Marital status'**
+  String get lifeContextMaritalLabel;
+
+  /// No description provided for @lifeContextMarriageIntentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Marriage plans'**
+  String get lifeContextMarriageIntentLabel;
+
+  /// No description provided for @lifeContextChildrenLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Children'**
+  String get lifeContextChildrenLabel;
+
+  /// No description provided for @lifeContextJobLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Work / study'**
+  String get lifeContextJobLabel;
+
+  /// No description provided for @lifeContextJobFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Field (optional)'**
+  String get lifeContextJobFieldLabel;
+
+  /// No description provided for @genderMale.
+  ///
+  /// In en, this message translates to:
+  /// **'Male'**
+  String get genderMale;
+
+  /// No description provided for @genderFemale.
+  ///
+  /// In en, this message translates to:
+  /// **'Female'**
+  String get genderFemale;
+
+  /// No description provided for @genderPreferNot.
+  ///
+  /// In en, this message translates to:
+  /// **'Prefer not to say'**
+  String get genderPreferNot;
+
+  /// No description provided for @maritalSingle.
+  ///
+  /// In en, this message translates to:
+  /// **'Single'**
+  String get maritalSingle;
+
+  /// No description provided for @maritalMarried.
+  ///
+  /// In en, this message translates to:
+  /// **'Married'**
+  String get maritalMarried;
+
+  /// No description provided for @maritalInRelationship.
+  ///
+  /// In en, this message translates to:
+  /// **'In a relationship'**
+  String get maritalInRelationship;
+
+  /// No description provided for @maritalDivorced.
+  ///
+  /// In en, this message translates to:
+  /// **'Divorced'**
+  String get maritalDivorced;
+
+  /// No description provided for @maritalWidowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Widowed'**
+  String get maritalWidowed;
+
+  /// No description provided for @marriageLooking.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for match'**
+  String get marriageLooking;
+
+  /// No description provided for @marriageNotNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get marriageNotNow;
+
+  /// No description provided for @marriageEngaged.
+  ///
+  /// In en, this message translates to:
+  /// **'Engaged / fixed'**
+  String get marriageEngaged;
+
+  /// No description provided for @marriageNa.
+  ///
+  /// In en, this message translates to:
+  /// **'Not applicable'**
+  String get marriageNa;
+
+  /// No description provided for @childrenNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No children'**
+  String get childrenNone;
+
+  /// No description provided for @childrenSon.
+  ///
+  /// In en, this message translates to:
+  /// **'Have son(s)'**
+  String get childrenSon;
+
+  /// No description provided for @childrenDaughter.
+  ///
+  /// In en, this message translates to:
+  /// **'Have daughter(s)'**
+  String get childrenDaughter;
+
+  /// No description provided for @childrenBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'Son and daughter'**
+  String get childrenBoth;
+
+  /// No description provided for @childrenExpecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Expecting'**
+  String get childrenExpecting;
+
+  /// No description provided for @jobEmployed.
+  ///
+  /// In en, this message translates to:
+  /// **'Job / salaried'**
+  String get jobEmployed;
+
+  /// No description provided for @jobSelfEmployed.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-employed / business'**
+  String get jobSelfEmployed;
+
+  /// No description provided for @jobStudent.
+  ///
+  /// In en, this message translates to:
+  /// **'Student'**
+  String get jobStudent;
+
+  /// No description provided for @jobHomemaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Homemaker'**
+  String get jobHomemaker;
+
+  /// No description provided for @jobBetweenJobs.
+  ///
+  /// In en, this message translates to:
+  /// **'Between jobs'**
+  String get jobBetweenJobs;
+
+  /// No description provided for @jobRetired.
+  ///
+  /// In en, this message translates to:
+  /// **'Retired'**
+  String get jobRetired;
+
+  /// No description provided for @jobFieldIt.
+  ///
+  /// In en, this message translates to:
+  /// **'IT / tech'**
+  String get jobFieldIt;
+
+  /// No description provided for @jobFieldGovt.
+  ///
+  /// In en, this message translates to:
+  /// **'Government'**
+  String get jobFieldGovt;
+
+  /// No description provided for @jobFieldBusiness.
+  ///
+  /// In en, this message translates to:
+  /// **'Business / trade'**
+  String get jobFieldBusiness;
+
+  /// No description provided for @jobFieldTeaching.
+  ///
+  /// In en, this message translates to:
+  /// **'Teaching'**
+  String get jobFieldTeaching;
+
+  /// No description provided for @jobFieldHealth.
+  ///
+  /// In en, this message translates to:
+  /// **'Healthcare'**
+  String get jobFieldHealth;
+
+  /// No description provided for @jobFieldOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get jobFieldOther;
+
+  /// No description provided for @paywallTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock full timing'**
+  String get paywallTitle;
+
+  /// No description provided for @paywallSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Plus gives daily power use. Pro unlocks future phases, month plan, and full Life Map.'**
+  String get paywallSubtitle;
+
+  /// No description provided for @paywallCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Pro'**
+  String get paywallCta;
+
+  /// No description provided for @paywallCtaPlus.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Plus — ₹99/month'**
+  String get paywallCtaPlus;
+
+  /// No description provided for @paywallCtaPro.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock muhurtha Pro'**
+  String get paywallCtaPro;
+
+  /// No description provided for @paywallPlusLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Plus'**
+  String get paywallPlusLabel;
+
+  /// No description provided for @paywallProLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pro'**
+  String get paywallProLabel;
+
+  /// No description provided for @paywallPlusPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'₹99/month'**
+  String get paywallPlusPrice;
+
+  /// No description provided for @paywallProPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'₹199/month'**
+  String get paywallProPrice;
+
+  /// No description provided for @paywallMonthlyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get paywallMonthlyLabel;
+
+  /// No description provided for @paywallYearlyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get paywallYearlyLabel;
+
+  /// No description provided for @paywallMonthlyPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'Billed monthly'**
+  String get paywallMonthlyPrice;
+
+  /// No description provided for @paywallYearlyPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'Best value yearly'**
+  String get paywallYearlyPrice;
+
+  /// No description provided for @profileManageSubscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage subscription'**
+  String get profileManageSubscription;
+
+  /// No description provided for @paywallProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing...'**
+  String get paywallProcessing;
+
+  /// No description provided for @paywallRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore purchases'**
+  String get paywallRestore;
+
+  /// No description provided for @paywallBillingNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Billed through Play Store or App Store. Cancel anytime.'**
+  String get paywallBillingNote;
+
+  /// No description provided for @paywallStorePending.
+  ///
+  /// In en, this message translates to:
+  /// **'Add products in RevenueCat to enable purchases.'**
+  String get paywallStorePending;
+
+  /// No description provided for @paywallDevNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchases activate when RevenueCat keys are configured. Server grants still work for testing.'**
+  String get paywallDevNote;
+
+  /// No description provided for @paywallLockedTeaser.
+  ///
+  /// In en, this message translates to:
+  /// **'Pro unlocks the full picture for this phase.'**
+  String get paywallLockedTeaser;
+
   /// No description provided for @errorAskLimitReached.
   ///
   /// In en, this message translates to:

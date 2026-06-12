@@ -4,7 +4,7 @@ import { type JsonGenerationEnvelope, openAiGenerateJsonEnvelope } from "./opena
 import { logAppEvent } from "./engine.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview";
+const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
 
 type GeminiResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -142,8 +142,12 @@ export async function generateJsonWithFallbackEnvelope(
     groqModelEnvName?: string;
     supabase?: SupabaseClient;
     profileId?: string;
-    /** te/hi packs: try Groq + Gemini before slow OpenAI to avoid edge timeouts. */
+    /** te/hi: prefer non-OpenAI providers first. */
     preferFastProviders?: boolean;
+    /** Birth pack / large JSON: skip Groq (free tier TPM too small). */
+    largePayload?: boolean;
+    /** Ops/testing: skip OpenAI entirely. */
+    skipOpenAi?: boolean;
   },
 ): Promise<JsonGenerationEnvelope | null> {
   const groundedSystem = `${systemInstruction}\n\n${runtimeContextLine()}`;
@@ -151,46 +155,52 @@ export async function generateJsonWithFallbackEnvelope(
     supabase: opts?.supabase,
     profileId: opts?.profileId,
   };
+  const openAiDisabled = opts?.skipOpenAi ||
+    Deno.env.get("DISABLE_OPENAI")?.trim().toLowerCase() === "true";
 
   const tryGroq = () =>
     groqGenerateJsonEnvelope(groundedSystem, userText, {
       ...callOpts,
       modelEnvName: opts?.groqModelEnvName,
     });
-  const tryGemini = () =>
-    geminiGenerateJsonEnvelope(groundedSystem, userText, {
-      ...callOpts,
-      modelEnvName: opts?.geminiModelEnvName,
-    });
   const tryOpenAi = () =>
-    openAiGenerateJsonEnvelope(groundedSystem, userText, {
-      ...callOpts,
-      modelEnvName: opts?.openAiModelEnvName,
-    });
+    openAiDisabled
+      ? Promise.resolve(null)
+      : openAiGenerateJsonEnvelope(groundedSystem, userText, {
+        ...callOpts,
+        modelEnvName: opts?.openAiModelEnvName,
+      });
   const tryOpenRouter = () =>
     openRouterGenerateJsonEnvelope(groundedSystem, userText, {
       ...callOpts,
       modelEnvName: opts?.openRouterModelEnvName,
     });
 
-  if (opts?.preferFastProviders) {
-    const groq = await tryGroq();
-    if (groq) return groq;
-    const gemini = await tryGemini();
-    if (gemini) return gemini;
+  // Large birth-pack prompts (~50k tokens): Groq free tier rejects with 413.
+  if (opts?.largePayload) {
+    const openRouter = await tryOpenRouter();
+    if (openRouter) return openRouter;
     const openAi = await tryOpenAi();
     if (openAi) return openAi;
-    return await tryOpenRouter();
+    return null;
   }
 
-  const openAi = await tryOpenAi();
-  if (openAi) return openAi;
-  const groq = await tryGroq();
-  if (groq) return groq;
+  if (opts?.preferFastProviders) {
+    const openRouter = await tryOpenRouter();
+    if (openRouter) return openRouter;
+    const groq = await tryGroq();
+    if (groq) return groq;
+    const openAi = await tryOpenAi();
+    if (openAi) return openAi;
+    return null;
+  }
+
   const openRouter = await tryOpenRouter();
   if (openRouter) return openRouter;
-  const gemini = await tryGemini();
-  if (gemini) return gemini;
+  const groq = await tryGroq();
+  if (groq) return groq;
+  const openAi = await tryOpenAi();
+  if (openAi) return openAi;
 
   if (opts?.supabase) {
     await logAppEvent(

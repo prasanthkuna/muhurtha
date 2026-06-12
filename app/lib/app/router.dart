@@ -9,7 +9,6 @@ import '../features/auth/sign_in_screen.dart';
 import '../features/home/home_shell.dart';
 import '../features/onboarding/accuracy_screen.dart';
 import '../features/onboarding/birth_basics_screen.dart';
-import '../features/onboarding/concern_screen.dart';
 import '../features/onboarding/nakshatra_screen.dart';
 import '../features/onboarding/time_bucket_screen.dart';
 import '../features/profile/profile_tune_screen.dart';
@@ -62,10 +61,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding/nakshatra',
         builder: (context, state) => const NakshatraScreen(),
-      ),
-      GoRoute(
-        path: '/onboarding/concern',
-        builder: (context, state) => const ConcernScreen(),
       ),
       GoRoute(
         path: '/onboarding/accuracy',

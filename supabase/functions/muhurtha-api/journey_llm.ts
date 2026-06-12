@@ -127,10 +127,13 @@ async function journeyBatch(
     journeySystem(loc, mode, age),
     JSON.stringify(bodyObj),
     {
+      openRouterModelEnvName: "OPENROUTER_MODEL",
+      groqModelEnvName: "GROQ_MODEL",
       geminiModelEnvName: "JOURNEY_GEMINI_MODEL",
       openAiModelEnvName: "JOURNEY_LLM_MODEL",
       supabase: opts?.supabase,
       profileId: opts?.profileId,
+      preferFastProviders: true,
     },
   );
   if (!raw) return null;

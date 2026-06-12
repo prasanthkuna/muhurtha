@@ -1,5 +1,8 @@
 {
   "SUPABASE_URL": "https://YOUR_PROJECT_REF.supabase.co",
   "SUPABASE_ANON_KEY": "YOUR_ANON_OR_PUBLISHABLE_KEY",
+  "REVENUECAT_API_KEY": "test_your_revenuecat_public_sdk_key",
+  "REVENUECAT_ANDROID_KEY": "",
+  "REVENUECAT_IOS_KEY": "",
   "VERBOSE_LOGS": "false"
 }

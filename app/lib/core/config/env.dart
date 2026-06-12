@@ -15,8 +15,27 @@ abstract final class Env {
     defaultValue: '',
   );
 
+  /// Single test/public SDK key (RevenueCat test store) or platform-specific keys.
+  static const revenueCatApiKey = String.fromEnvironment(
+    'REVENUECAT_API_KEY',
+    defaultValue: '',
+  );
+  static const revenueCatAndroidKey = String.fromEnvironment(
+    'REVENUECAT_ANDROID_KEY',
+    defaultValue: '',
+  );
+  static const revenueCatIosKey = String.fromEnvironment(
+    'REVENUECAT_IOS_KEY',
+    defaultValue: '',
+  );
+
   static bool get hasSupabase =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+
+  static bool get hasRevenueCat =>
+      revenueCatApiKey.isNotEmpty ||
+      revenueCatAndroidKey.isNotEmpty ||
+      revenueCatIosKey.isNotEmpty;
 
   /// Extra console/logcat output (`appLog`, and Supabase client `debug`). Optional in release.
   static const verboseLogs = bool.fromEnvironment(

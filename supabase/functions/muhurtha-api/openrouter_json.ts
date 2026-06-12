@@ -2,7 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { JsonGenerationEnvelope } from "./openai_json.ts";
 import { logAppEvent } from "./engine.ts";
 
-const DEFAULT_OPENROUTER_MODEL = "google/gemma-3-27b-it:free";
+const DEFAULT_OPENROUTER_MODEL = "google/gemini-2.0-flash-001";
+
+const ALTERNATE_MODELS = [
+  "meta-llama/llama-3.3-70b-instruct",
+  "google/gemini-2.5-flash-lite",
+  "meta-llama/llama-3.3-70b-instruct:free",
+];
 
 type OpenRouterChatResponse = {
   choices?: { message?: { content?: string } }[];
@@ -15,11 +21,6 @@ function resolveModel(modelEnvName?: string): string {
     Deno.env.get("OPENROUTER_MODEL")?.trim() ||
     DEFAULT_OPENROUTER_MODEL;
 }
-
-const ALTERNATE_FREE_MODELS = [
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "qwen/qwen3-next-80b-a3b-instruct:free",
-];
 
 export async function openRouterGenerateJsonEnvelope(
   systemInstruction: string,
@@ -68,7 +69,23 @@ export async function openRouterGenerateJsonEnvelope(
       }
 
       if (!res.ok) {
-        console.error(`OpenRouter JSON HTTP (${modelName})`, res.status, await res.text());
+        const errorText = await res.text();
+        console.error(`OpenRouter JSON HTTP (${modelName})`, res.status, errorText);
+        if (supabase) {
+          await logAppEvent(
+            supabase,
+            profileId ?? null,
+            "openrouter",
+            "error",
+            "OpenRouter JSON HTTP error",
+            undefined,
+            {
+              model: modelName,
+              status: res.status,
+              error: errorText.slice(0, 1200),
+            },
+          );
+        }
         return null;
       }
 
@@ -80,6 +97,21 @@ export async function openRouterGenerateJsonEnvelope(
           return null;
         }
         console.error(`OpenRouter JSON error (${modelName})`, body.error.message);
+        if (supabase) {
+          await logAppEvent(
+            supabase,
+            profileId ?? null,
+            "openrouter",
+            "error",
+            "OpenRouter JSON API error",
+            undefined,
+            {
+              model: modelName,
+              code: body.error.code,
+              error: body.error.message.slice(0, 1200),
+            },
+          );
+        }
         return null;
       }
 
@@ -101,14 +133,12 @@ export async function openRouterGenerateJsonEnvelope(
   let result = await tryModel(primaryModel);
   if (result) return result;
 
-  // 2. If primary was rate-limited or failed, try alternates IF we are using a free model
-  if (primaryModel.endsWith(":free")) {
-    for (const alt of ALTERNATE_FREE_MODELS) {
-      if (alt === primaryModel) continue;
-      console.info(`Retrying with alternate free model: ${alt}`);
-      result = await tryModel(alt);
-      if (result) return result;
-    }
+  // 2. If primary failed, try alternates (skip duplicate primary).
+  for (const alt of ALTERNATE_MODELS) {
+    if (alt === primaryModel) continue;
+    console.info(`Retrying OpenRouter with alternate model: ${alt}`);
+    result = await tryModel(alt);
+    if (result) return result;
   }
 
   return null;

@@ -1,4 +1,4 @@
-# Smoke-test OpenAI / Groq / Gemini locale output on deployed edge function.
+# Smoke-test Groq / OpenRouter locale output on deployed edge function (no Gemini).
 # Requires SUPABASE_SERVICE_ROLE_KEY in env (Dashboard → Settings → API → service_role).
 param(
   [string]$Locale = "all"

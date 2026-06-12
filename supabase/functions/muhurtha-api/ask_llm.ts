@@ -114,10 +114,13 @@ Rules:
     system,
     JSON.stringify({ facts }),
     {
+      openRouterModelEnvName: "OPENROUTER_MODEL",
+      groqModelEnvName: "GROQ_MODEL",
       geminiModelEnvName: "GEMINI_MODEL",
       openAiModelEnvName: "CONTENT_LLM_MODEL",
       supabase: opts?.supabase,
       profileId: opts?.profileId,
+      preferFastProviders: true,
     },
   );
   if (!raw) return null;

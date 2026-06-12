@@ -41,12 +41,24 @@ class OnboardingIntent {
     this.lifeRole,
     this.upcomingEvent,
     this.upcomingEventDate,
+    this.userGender,
+    this.maritalStatus,
+    this.marriageIntent,
+    this.childrenContext,
+    this.jobStatus,
+    this.jobField,
   });
 
   final String? mainConcern;
   final String? lifeRole;
   final String? upcomingEvent;
   final DateTime? upcomingEventDate;
+  final String? userGender;
+  final String? maritalStatus;
+  final String? marriageIntent;
+  final String? childrenContext;
+  final String? jobStatus;
+  final String? jobField;
 
   Map<String, dynamic> toJson() => {
         if (mainConcern != null) 'main_concern': mainConcern,
@@ -55,6 +67,12 @@ class OnboardingIntent {
         if (upcomingEventDate != null)
           'upcoming_event_date':
               upcomingEventDate!.toIso8601String().split('T').first,
+        if (userGender != null) 'user_gender': userGender,
+        if (maritalStatus != null) 'marital_status': maritalStatus,
+        if (marriageIntent != null) 'marriage_intent': marriageIntent,
+        if (childrenContext != null) 'children_context': childrenContext,
+        if (jobStatus != null) 'job_status': jobStatus,
+        if (jobField != null) 'job_field': jobField,
       };
 
   factory OnboardingIntent.fromJson(Map<String, dynamic>? j) {
@@ -66,6 +84,12 @@ class OnboardingIntent {
       upcomingEvent: j['upcoming_event']?.toString(),
       upcomingEventDate:
           dateRaw == null ? null : DateTime.tryParse(dateRaw),
+      userGender: j['user_gender']?.toString(),
+      maritalStatus: j['marital_status']?.toString(),
+      marriageIntent: j['marriage_intent']?.toString(),
+      childrenContext: j['children_context']?.toString(),
+      jobStatus: j['job_status']?.toString(),
+      jobField: j['job_field']?.toString(),
     );
   }
 
@@ -75,6 +99,12 @@ class OnboardingIntent {
     String? upcomingEvent,
     DateTime? upcomingEventDate,
     bool clearUpcomingEventDate = false,
+    String? userGender,
+    String? maritalStatus,
+    String? marriageIntent,
+    String? childrenContext,
+    String? jobStatus,
+    String? jobField,
   }) {
     return OnboardingIntent(
       mainConcern: mainConcern ?? this.mainConcern,
@@ -83,6 +113,12 @@ class OnboardingIntent {
       upcomingEventDate: clearUpcomingEventDate
           ? null
           : (upcomingEventDate ?? this.upcomingEventDate),
+      userGender: userGender ?? this.userGender,
+      maritalStatus: maritalStatus ?? this.maritalStatus,
+      marriageIntent: marriageIntent ?? this.marriageIntent,
+      childrenContext: childrenContext ?? this.childrenContext,
+      jobStatus: jobStatus ?? this.jobStatus,
+      jobField: jobField ?? this.jobField,
     );
   }
 }

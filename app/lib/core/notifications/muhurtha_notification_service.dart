@@ -7,6 +7,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../data/muhurtha_engine_api.dart';
 import '../locale/locale_provider.dart';
+import '../subscription/subscription_access.dart';
 
 final muhurthaNotificationServiceProvider =
     Provider<MuhurthaNotificationService>((ref) {
@@ -25,9 +26,20 @@ class MuhurthaNotificationService {
     final api = _ref.read(muhurthaEngineApiProvider);
     if (api == null) return;
     await _ensureInitialized();
+    final access = _ref.read(subscriptionAccessProvider);
+    await _plugin.cancelAll();
     final locale = _ref.read(localeProvider).languageCode;
     final rows = await api.notificationScheduleGet(locale: locale);
     for (final row in rows) {
+      if (!access.isPlus &&
+          row.type != 'today_ready') {
+        continue;
+      }
+      if (!access.isPro &&
+          const {'weekly_ready', 'monthly_ready', 'phase_change'}
+              .contains(row.type)) {
+        continue;
+      }
       if (row.title.trim().isEmpty || row.body.trim().isEmpty) continue;
       if (row.scheduledAt
           .isBefore(DateTime.now().add(const Duration(minutes: 1)))) {

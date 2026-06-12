@@ -250,8 +250,10 @@ Content rules:
 - If facts contain many good windows, give notes for as many as facts support. Do not invent extra time ranges.
 - Explain caution windows plainly. Rahu Kalam can be named because Indian users know it.
 - Journey should explain whether the phase was supportive, mixed, or heavy in normal language. Do not force "good/bad"; say how to use it.
-- For now, future journey phases must use proLocked=false because the app is testing future-phase screens before the payment gate is added.
-- Still write future phases in future tense and make them exciting, useful, and subscription-worthy.
+- life_map.future_chapters: first future chapter unlocked (locked=false), all later future chapters locked=true with exciting titles but subscription-worthy depth.
+- journey_phases with tense "future": first future phase proLocked=false, later future phases proLocked=true.
+- Use facts.inferred_life_signals (life_stage, age_band, active_themes, dasha_emphasis, domain_signals) for marriage, children, job, and family themes — infer from chart and age, never creepy, never guaranteed predictions.
+- If facts.inferred_life_signals.user_confirmed has main_concern or last_purpose, sharpen tone for that intent only. Do not claim the user told you private life facts you were not given.
 - likely_life_events must be careful and non-creepy: infer broad themes from phase facts only, such as job pressure, relocation thoughts, family duty, money restructuring, study/certification, relationship seriousness, property/vehicle focus, health discipline, or status changes. Never claim exact events as guaranteed.
 - Pro teasers should create curiosity without fear: future phases, sub-phase expansion, richer chat, and timing notifications.
 - Never output raw internal words like planner, kernel, provenance, cache, screen_intent, domain_lenses, or fact_signature.
@@ -262,13 +264,13 @@ Content rules:
     system,
     JSON.stringify({ facts }),
     {
+      openRouterModelEnvName: "OPENROUTER_MODEL",
       openAiModelEnvName: "BIRTH_PACK_MODEL",
-      geminiModelEnvName: "GEMINI_MODEL",
       groqModelEnvName: "BIRTH_PACK_GROQ_MODEL",
       supabase: opts?.supabase,
       profileId: opts?.profileId,
-      // te/hi: Groq/Gemini first to avoid OpenAI quota waits and edge timeouts.
-      preferFastProviders: loc !== "en",
+      // Birth pack: OpenRouter first; Groq skipped (51k+ tokens → 413).
+      largePayload: true,
     },
   );
   if (!raw) return null;
