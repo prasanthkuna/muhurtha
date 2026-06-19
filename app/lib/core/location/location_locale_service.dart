@@ -53,8 +53,18 @@ class LocationLocaleService {
     return 'en';
   }
 
+  void _applyLanguage(String languageCode) {
+    _ref.read(localeProvider.notifier).setLanguageCode(languageCode);
+    _ref.read(birthDraftProvider.notifier).update(
+          (d) => d.copyWith(languageCode: languageCode),
+        );
+  }
+
   Future<LocationDetectResult> detectAndApply({bool applyDraft = true}) async {
     final languageCode = inferLanguageCode();
+    if (applyDraft) {
+      _applyLanguage(languageCode);
+    }
     if (!Env.hasSupabase) {
       return LocationDetectResult(languageCode: languageCode);
     }

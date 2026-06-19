@@ -66,6 +66,29 @@ class AppLocalizationsHi extends AppLocalizations {
   String get authResendCode => 'कोड दोबारा भेजें';
 
   @override
+  String get authTapPhone => 'मोबाइल नंबर चुनने के लिए टैप करें';
+
+  @override
+  String get authTypeNumberInstead => 'नंबर मैन्युअल टाइप करें';
+
+  @override
+  String get authUsePhonePicker => 'फ़ोन पिकर इस्तेमाल करें';
+
+  @override
+  String get authContinue => 'जारी रखें';
+
+  @override
+  String get authChooseFromSim => 'SIM से नंबर चुनें';
+
+  @override
+  String get authPickerCancelled =>
+      'कोई नंबर नहीं चुना। ऊपर टाइप करें या फिर कोशिश करें।';
+
+  @override
+  String get authStuckRetry =>
+      'बहुत समय लग गया। फिर कोशिश के लिए जारी रखें दबाएँ।';
+
+  @override
   String get onboardingBirthTitle => 'जन्म विवरण';
 
   @override

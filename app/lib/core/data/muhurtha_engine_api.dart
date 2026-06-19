@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/env.dart';
 import '../locale/locale_provider.dart';
+import 'birth_pack_readiness.dart';
 
 /// Typed access to `muhurtha-api` Edge Function (POST JSON body `{ action, ... }`).
 final muhurthaEngineApiProvider = Provider<MuhurthaEngineApi?>((ref) {
@@ -299,6 +300,8 @@ class BirthPackPayload {
     required this.provider,
     required this.model,
     required this.content,
+    this.status = 'ready',
+    this.screensReady = const [],
     this.isPlus = false,
     this.isPro = false,
     this.planCode = 'free',
@@ -311,6 +314,8 @@ class BirthPackPayload {
   final String provider;
   final String model;
   final Map<String, dynamic> content;
+  final String status;
+  final List<String> screensReady;
   final bool isPlus;
   final bool isPro;
   final String planCode;
@@ -320,6 +325,7 @@ class BirthPackPayload {
     final access = j['access'] is Map
         ? Map<String, dynamic>.from(j['access'] as Map)
         : const <String, dynamic>{};
+    final rawScreens = j['screensReady'];
     return BirthPackPayload(
       date: j['date']?.toString() ?? '',
       locale: j['locale']?.toString() ?? 'en',
@@ -330,6 +336,10 @@ class BirthPackPayload {
       content: rawContent is Map
           ? Map<String, dynamic>.from(rawContent)
           : const <String, dynamic>{},
+      status: j['status']?.toString() ?? 'ready',
+      screensReady: rawScreens is List
+          ? rawScreens.map((e) => e.toString()).toList()
+          : const [],
       isPlus: access['isPlus'] == true || access['isPro'] == true,
       isPro: access['isPro'] == true,
       planCode: access['planCode']?.toString() ?? 'free',
@@ -923,12 +933,32 @@ final todayPayloadProvider =
   return api.todayGet(locale: locale);
 });
 
+Stream<BirthPackPayload?> _pollBirthPack(
+  MuhurthaEngineApi api,
+  String locale,
+) async* {
+  const pollInterval = Duration(seconds: 3);
+  const maxAttempts = 80;
+  for (var attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      final pack = await api.birthPackGet(locale: locale);
+      yield pack;
+      if (pack.isComplete) return;
+    } on EngineException catch (e) {
+      if (e.code != 'birth_pack_not_ready') rethrow;
+    }
+    if (attempt < maxAttempts - 1) {
+      await Future<void>.delayed(pollInterval);
+    }
+  }
+}
+
 final birthPackProvider =
-    FutureProvider.autoDispose<BirthPackPayload?>((ref) async {
+    StreamProvider.autoDispose<BirthPackPayload?>((ref) {
   final api = ref.watch(muhurthaEngineApiProvider);
-  if (api == null) return null;
+  if (api == null) return Stream.value(null);
   final locale = ref.watch(localeProvider).languageCode;
-  return api.birthPackGet(locale: locale);
+  return _pollBirthPack(api, locale);
 });
 
 final remedyListProvider =

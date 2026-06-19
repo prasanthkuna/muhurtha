@@ -208,6 +208,48 @@ abstract class AppLocalizations {
   /// **'Resend code'**
   String get authResendCode;
 
+  /// No description provided for @authTapPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to choose your mobile number'**
+  String get authTapPhone;
+
+  /// No description provided for @authTypeNumberInstead.
+  ///
+  /// In en, this message translates to:
+  /// **'Type number manually'**
+  String get authTypeNumberInstead;
+
+  /// No description provided for @authUsePhonePicker.
+  ///
+  /// In en, this message translates to:
+  /// **'Use phone picker instead'**
+  String get authUsePhonePicker;
+
+  /// No description provided for @authContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get authContinue;
+
+  /// No description provided for @authChooseFromSim.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose number from SIM'**
+  String get authChooseFromSim;
+
+  /// No description provided for @authPickerCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'No number selected. Type yours above or try again.'**
+  String get authPickerCancelled;
+
+  /// No description provided for @authStuckRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'That took too long. Tap Continue to try again.'**
+  String get authStuckRetry;
+
   /// No description provided for @onboardingBirthTitle.
   ///
   /// In en, this message translates to:

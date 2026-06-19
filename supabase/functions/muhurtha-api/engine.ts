@@ -6,9 +6,11 @@ import { attachNatalLuckToContent, buildNatalLuck } from "./natal_luck.ts";
 import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
 import {
   allAntardashasFromMahadashas,
+  type AdSegment,
   type MdSegment,
   recentAntardashasClipped,
   segmentAt,
+  segmentAtAntardasha,
   vimshottariLordsAt,
   vimshottariMahadashas,
 } from "./vimshottari.ts";
@@ -25,16 +27,23 @@ import {
   generatePurposeCopy,
 } from "./content_llm.ts";
 import { ASK_PROMPT_VERSION } from "./ask_llm.ts";
+import { normalizeAskTemplates, resolveAskFromPack } from "./ask_pack.ts";
 import {
   BIRTH_PACK_VERSION,
   type BirthIntelligencePackContent,
-  generateBirthIntelligencePack,
+  getPackScreensReady,
   type PackJourneyPhase,
   type PackRangeCard,
   type PackTimingWindowCopy,
   type PackTodayCard,
-  validateBirthPackContent,
+  validateBirthPackQuality,
 } from "./birth_intelligence_pack.ts";
+import {
+  advanceBirthPackPhases,
+  birthPackPhasesRemaining,
+  isPhaseAdvanceLocked,
+  nextBirthPackPhase,
+} from "./birth_pack_multiturn.ts";
 import { fallbackPackStrings } from "./fallback_pack_copy.ts";
 import {
   buildFactSignature,
@@ -74,8 +83,18 @@ const PACK_WEEKLY_WEEKS = 8;
 const PACK_MONTHLY_MONTHS = 12;
 const FREE_ASKS_PER_DAY = 1;
 const PACK_GENERATION_STALE_MS = 10 * 60 * 1000;
-const PACK_GENERATION_WAIT_MS = 120_000;
+/** Empty `{}` generating rows reclaim after this — unblocks stuck LLM tasks. */
+const PACK_GENERATION_EMPTY_STALE_MS = 3 * 60 * 1000;
+const PACK_GENERATION_WAIT_MS = 140_000;
+const PACK_GENERATION_EMPTY_WAIT_MS = 12_000;
 const PACK_GENERATION_POLL_MS = 1_500;
+/** Min gap between phased LLM steps (debounce duplicate polls). */
+const PACK_ADVANCE_DEBOUNCE_MS = 8_000;
+/** Stalled generating pack — next poll runs phase synchronously. */
+const PACK_ADVANCE_STALL_MS = 90_000;
+const PACK_ADVANCE_MAX_PHASES = 1;
+/** Exclusive lock while one edge worker runs a phase LLM call. */
+const PACK_PHASE_LOCK_MS = 150_000;
 
 type BioRow = {
   id: string;
@@ -459,58 +478,6 @@ function remedyKeepSimple(remedyType: string, locale: AppLocale): string {
   }
 }
 
-function formatAskWindow(
-  window: { start: string; end: string; label?: string },
-  includeLabel = false,
-): string {
-  const label = includeLabel && window.label ? ` (${window.label})` : "";
-  return `${window.start} - ${window.end}${label}`;
-}
-
-function askFallbackCopy(
-  locale: AppLocale,
-  good: { start: string; end: string; label?: string }[],
-  caution: { start: string; end: string; label?: string }[],
-) {
-  const best = good[0] ? formatAskWindow(good[0]) : "";
-  const careful = caution[0] ? formatAskWindow(caution[0], true) : "";
-  if (locale === "te") {
-    return {
-      direct_answer: best ? "ఇది చేయొచ్చు, కానీ మాటను సింపుల్‌గా ఉంచండి." : "ఇది చేయొచ్చు, కానీ చిన్న స్టెప్‌గా ఉంచండి.",
-      best_time: best ? `మంచి సమయం: ${best}` : "మంచి సమయం స్పష్టంగా లేదు. చిన్నగా మొదలుపెట్టండి.",
-      caution_time: careful ? `జాగ్రత్త సమయం: ${careful}` : "రాహు కాలం ఉంటే పెద్ద నిర్ణయం పెట్టొద్దు.",
-      better_option: "ముందు పాయింట్లు రాసుకోండి, తరువాత మాట్లాడండి.",
-      simple_why: "ఈరోజు టైమింగ్‌లో స్పష్టత కంటే క్రమం ముఖ్యం.",
-      action_line: "పని చిన్నది, మాట సూటిగా, నిర్ణయం ప్రశాంతంగా ఉంచండి.",
-      share_hook: "ఈరోజు తొందర కాదు; సరైన సమయం చూసి అడుగు వేయండి.",
-    };
-  }
-  if (locale === "hi") {
-    return {
-      direct_answer: best ? "कर सकते हैं, बस बात साफ और छोटी रखें." : "कर सकते हैं, लेकिन कदम छोटा रखें.",
-      best_time: best ? `अच्छा समय: ${best}` : "अच्छा समय साफ नहीं है. छोटा कदम रखें.",
-      caution_time: careful ? `सावधानी समय: ${careful}` : "राहु काल हो तो बड़ा फैसला न रखें.",
-      better_option: "पहले पॉइंट्स लिखें, फिर बात करें.",
-      simple_why: "आज जल्दबाजी से ज्यादा साफ क्रम काम आएगा.",
-      action_line: "काम छोटा, बात सीधी, फैसला शांत रखें.",
-      share_hook: "आज जल्दबाजी नहीं; सही समय देखकर कदम बढ़ाएं.",
-    };
-  }
-  return {
-    direct_answer: best
-      ? "You can do it, but keep the ask clear and small."
-      : "You can move, but keep it as a small first step.",
-    best_time: best ? `Good time: ${best}` : "No strong good window is clear. Start small.",
-    caution_time: careful
-      ? `Caution time: ${careful}`
-      : "Avoid placing the biggest decision in Rahu Kalam.",
-    better_option: "Write the points first, then speak or act.",
-    simple_why: "Today rewards clean sequencing more than force.",
-    action_line: "Keep the work small, the words direct, and the decision calm.",
-    share_hook: "Do not rush today; choose the cleaner window and move lightly.",
-  };
-}
-
 function buildProvenance(
   input: Omit<GenerationProvenance, "engineVersion" | "plannerVersion">,
 ): GenerationProvenance {
@@ -673,18 +640,32 @@ function buildPackPhasePlans(
   const { segments, nk } = computeTimeline(bi, profile.current_timezone ?? "Asia/Kolkata");
   if (nk === null || !segments.length) return [];
   const ads = allAntardashasFromMahadashas(segments);
-  const recent = recentAntardashasClipped(ads, refInstant, JOURNEY_LOOKBACK_YEARS);
+  const currentAd = segmentAtAntardasha(ads, refInstant);
+  const recent = recentAntardashasClipped(ads, refInstant, JOURNEY_LOOKBACK_YEARS)
+    .filter((seg) => {
+      if (!currentAd) return true;
+      // Drop the clipped tail of the live antardasha — we add the full segment below.
+      return !(
+        seg.mdLord === currentAd.mdLord &&
+        seg.adLord === currentAd.adLord &&
+        seg.start.getTime() >= currentAd.start.getTime()
+      );
+    });
+  const futureStart = currentAd?.end.getTime() ?? refInstant.getTime();
   const future = ads
-    .filter((seg) => seg.start.getTime() > refInstant.getTime())
+    .filter((seg) => seg.start.getTime() >= futureStart)
     .slice(0, 16);
   const seen = new Set<string>();
-  const merged = [...recent, ...future].filter((seg) => {
+  const merged: AdSegment[] = [...recent];
+  if (currentAd) merged.push(currentAd);
+  merged.push(...future);
+  const deduped = merged.filter((seg) => {
     const key = `${seg.mdLord}-${seg.adLord}-${seg.start.toISOString()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-  return merged.map((seg, idx) => {
+  return deduped.map((seg, idx) => {
     const fallback = antardashaFallbackCopy(
       seg.mdLord,
       seg.adLord,
@@ -695,7 +676,7 @@ function buildPackPhasePlans(
     );
     return buildPhasePlan(seg, idx, locale, {
       now: refInstant,
-      previous: idx > 0 ? merged[idx - 1] ?? null : null,
+      previous: idx > 0 ? deduped[idx - 1] ?? null : null,
       confidenceLabel: resolveEngineMode(bi) === "full_chart" ? "high" : "medium",
       periodLabel: plainPeriodLabel(seg.start, seg.end),
       fallbackTitle: fallback.title,
@@ -927,11 +908,59 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isStaleGeneration(updatedAt: string | null | undefined): boolean {
+function isStaleGeneration(
+  updatedAt: string | null | undefined,
+  staleMs: number = PACK_GENERATION_STALE_MS,
+): boolean {
   if (!updatedAt) return true;
   const ts = Date.parse(updatedAt);
   if (!Number.isFinite(ts)) return true;
-  return Date.now() - ts > PACK_GENERATION_STALE_MS;
+  return Date.now() - ts > staleMs;
+}
+
+function isEmptyGeneratingPack(
+  row: BirthPackRow | null | undefined,
+): boolean {
+  if (!row || row.status !== "generating") return false;
+  return getPackScreensReady(row.content as BirthIntelligencePackContent).length === 0;
+}
+
+function isEmptyGeneratingStale(
+  row: BirthPackRow & { updated_at?: string },
+): boolean {
+  return isEmptyGeneratingPack(row) &&
+    isStaleGeneration(row.updated_at, PACK_GENERATION_EMPTY_STALE_MS);
+}
+
+function isAllowedBirthPackProvider(provider: string | null | undefined): boolean {
+  const p = (provider ?? "").trim().toLowerCase();
+  return p === "openai" || p === "openrouter" || p === "gemini" || p === "pending";
+}
+
+/** Serve LLM packs to the client: full `ready` or partial `generating` with unlockable screens. */
+function isClientServablePack(
+  row: BirthPackRow | null | undefined,
+): row is BirthPackRow {
+  if (!row) return false;
+  if (row.status === "fallback") return false;
+  if (!isAllowedBirthPackProvider(row.provider)) return false;
+  if (row.status === "ready") return true;
+  if (row.status === "generating") {
+    const phases = (row.content as BirthIntelligencePackContent)?._generation
+      ?.phases_done ?? [];
+    if (phases.includes("deterministic_seed")) return false;
+    const screens = getPackScreensReady(row.content as BirthIntelligencePackContent);
+    if (screens.length === 0) return false;
+    if (
+      row.provider === "pending" &&
+      row.model === "pending" &&
+      phases.length === 0
+    ) {
+      return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 async function fetchPackByFactSignature(
@@ -967,8 +996,9 @@ async function waitForPackCompletion(
   locale: AppLocale,
   factSignature: string,
   dateStr: string,
+  maxWaitMs: number = PACK_GENERATION_WAIT_MS,
 ): Promise<BirthPackRow | null> {
-  const deadline = Date.now() + PACK_GENERATION_WAIT_MS;
+  const deadline = Date.now() + maxWaitMs;
   while (Date.now() < deadline) {
     const row = await fetchPackByFactSignature(
       supabase,
@@ -978,7 +1008,7 @@ async function waitForPackCompletion(
       factSignature,
       dateStr,
     );
-    if (row && (row.status === "ready" || row.status === "fallback")) {
+    if (row && row.status === "ready") {
       return row;
     }
     if (!row || row.status !== "generating" || isStaleGeneration(
@@ -997,7 +1027,8 @@ async function clearStalePackGenerations(
   birthInputId: string,
   locale: AppLocale,
 ) {
-  const staleBefore = new Date(Date.now() - PACK_GENERATION_STALE_MS).toISOString();
+  const emptyStaleBefore = new Date(Date.now() - PACK_GENERATION_EMPTY_STALE_MS)
+    .toISOString();
   await supabase
     .from("birth_intelligence_packs")
     .delete()
@@ -1006,7 +1037,29 @@ async function clearStalePackGenerations(
     .eq("locale", locale)
     .eq("pack_version", BIRTH_PACK_VERSION)
     .eq("status", "generating")
+    .lt("updated_at", emptyStaleBefore);
+
+  const staleBefore = new Date(Date.now() - PACK_GENERATION_STALE_MS).toISOString();
+  const { data: staleRows, error: staleError } = await supabase
+    .from("birth_intelligence_packs")
+    .select("id, content")
+    .eq("profile_id", profileId)
+    .eq("birth_input_id", birthInputId)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("status", "generating")
     .lt("updated_at", staleBefore);
+  if (staleError) throw staleError;
+  for (const row of staleRows ?? []) {
+    const screens = getPackScreensReady(
+      (row.content ?? {}) as BirthIntelligencePackContent,
+    );
+    if (screens.length > 0) continue;
+    await supabase
+      .from("birth_intelligence_packs")
+      .delete()
+      .eq("id", row.id);
+  }
 }
 
 async function tryClaimPackGeneration(
@@ -1022,7 +1075,7 @@ async function tryClaimPackGeneration(
 
   const { data: inFlight, error: inFlightError } = await supabase
     .from("birth_intelligence_packs")
-    .select("id, updated_at")
+    .select("id, updated_at, content, status")
     .eq("profile_id", profile.id)
     .eq("birth_input_id", bi.id)
     .eq("locale", locale)
@@ -1030,8 +1083,30 @@ async function tryClaimPackGeneration(
     .eq("status", "generating")
     .maybeSingle();
   if (inFlightError) throw inFlightError;
-  if (inFlight && !isStaleGeneration(inFlight.updated_at as string)) {
+  if (
+    inFlight &&
+    !isStaleGeneration(inFlight.updated_at as string) &&
+    !isEmptyGeneratingStale(inFlight as BirthPackRow & { updated_at?: string })
+  ) {
     return false;
+  }
+
+  if (inFlight?.id) {
+    const screens = getPackScreensReady(
+      (inFlight.content ?? {}) as BirthIntelligencePackContent,
+    );
+    const emptyStale = isEmptyGeneratingStale(
+      inFlight as BirthPackRow & { updated_at?: string },
+    );
+    const fullStale = isStaleGeneration(inFlight.updated_at as string);
+    if (emptyStale || (fullStale && screens.length === 0)) {
+      await supabase
+        .from("birth_intelligence_packs")
+        .delete()
+        .eq("id", inFlight.id);
+    } else if (inFlight) {
+      return false;
+    }
   }
 
   const nowIso = new Date().toISOString();
@@ -1095,16 +1170,14 @@ async function findBestExistingPack(
     .eq("birth_input_id", birthInputId)
     .eq("locale", locale)
     .eq("pack_version", BIRTH_PACK_VERSION)
-    .in("status", ["ready", "fallback"])
+    .eq("status", "ready")
     .order("created_at", { ascending: false })
     .limit(8);
   if (error) throw error;
   const rows = (data ?? []) as BirthPackRow[];
-  const readyFull = rows.find((row) =>
+  return rows.find((row) =>
     row.status === "ready" && countTodayCards(row.content) >= PACK_DAILY_DAYS
-  );
-  if (readyFull) return readyFull;
-  return rows.find((row) => countTodayCards(row.content) >= PACK_DAILY_DAYS) ?? null;
+  ) ?? null;
 }
 
 async function pruneStalePacks(
@@ -1122,6 +1195,20 @@ async function pruneStalePacks(
     .eq("locale", locale)
     .eq("pack_version", BIRTH_PACK_VERSION)
     .neq("id", keepId);
+}
+
+function lifeMapChapterHasQuality(chapter: Record<string, unknown>): boolean {
+  const theme = safeString(chapter.theme);
+  const career = safeString(chapter.career);
+  if (theme.length < 6 || career.length < 6) return false;
+  if (
+    career.includes("Career / Work / Business") ||
+    career.includes("పని / కెరీర్ / వ్యాపారం") ||
+    safeString(chapter.money).includes("turns messy details into something usable")
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function phasePlanLifeMapChapter(plan: PhasePlan, locked = false): Record<string, unknown> {
@@ -1161,12 +1248,19 @@ function ensureLifeMapCoverage(
   const pastPlans = phasePlans.filter((plan) => plan.tense === "past");
   const futurePlans = phasePlans.filter((plan) => plan.tense === "future");
   const currentPlan = phasePlans.find((plan) => plan.tense === "current");
+  const currentPeriod = currentPlan?.periodLabel ?? safeString(existingCurrent?.period);
 
   content.life_map = {
     ...currentLifeMap,
-    past_chapters: pastPlans.map((plan) =>
-      pastByPeriod.get(plan.periodLabel) ?? phasePlanLifeMapChapter(plan)
-    ),
+    past_chapters: pastPlans.map((plan, idx) => {
+      const fromPeriod = pastByPeriod.get(plan.periodLabel);
+      if (fromPeriod && lifeMapChapterHasQuality(fromPeriod)) return fromPeriod;
+      const fromIndex = existingPast[idx];
+      if (fromIndex && lifeMapChapterHasQuality(fromIndex)) {
+        return { ...fromIndex, period: plan.periodLabel };
+      }
+      return fromPeriod ?? fromIndex ?? phasePlanLifeMapChapter(plan);
+    }).filter((row) => safeString(row.period) !== currentPeriod),
     current_chapter: existingCurrent && Object.keys(existingCurrent).length > 0
       ? existingCurrent
       : currentPlan
@@ -1176,13 +1270,99 @@ function ensureLifeMapCoverage(
       }
       : currentLifeMap.current_chapter,
     future_chapters: fillLifeMapFutureGaps(
-      futurePlans.map((plan, idx) =>
-        futureByPeriod.get(plan.periodLabel) ??
-          phasePlanLifeMapChapter(plan, idx > 0)
-      ),
+      futurePlans.map((plan, idx) => {
+        const fromPeriod = futureByPeriod.get(plan.periodLabel);
+        if (fromPeriod && lifeMapChapterHasQuality(fromPeriod)) {
+          return { ...fromPeriod, locked: fromPeriod.locked ?? idx > 0 };
+        }
+        const fromIndex = existingFuture[idx];
+        if (fromIndex && lifeMapChapterHasQuality(fromIndex)) {
+          return { ...fromIndex, period: plan.periodLabel, locked: fromIndex.locked ?? idx > 0 };
+        }
+        return fromPeriod ?? fromIndex ?? phasePlanLifeMapChapter(plan, idx > 0);
+      }),
       locale,
     ),
   };
+}
+
+function phasePlanToJourneyPhase(
+  plan: PhasePlan,
+  sortOrder: number,
+  proLocked: boolean,
+): PackJourneyPhase {
+  return {
+    sortOrder,
+    periodLabel: plan.periodLabel,
+    mahadashaLord: plan.mahadashaLord,
+    antardashaLord: plan.antardashaLord,
+    title: plan.fallbackTitle,
+    highlight: plan.evidenceLine,
+    sentences: plan.fallbackSentences.slice(0, 2),
+    focusAreas: plan.activeDomains,
+    tone: plan.supportThemes,
+    pressureThemes: plan.pressureThemes,
+    phasePulse: plan.phasePulse,
+    transitionNote: plan.transitionNote,
+    evidenceLine: plan.evidenceLine,
+    shareHook: plan.shareHook,
+    kernelSignals: plan.kernelSignals,
+    domainLenses: plan.domainLenses,
+    proLocked,
+    subPhases: [],
+  };
+}
+
+/** Backfill missing journey phases / facts when planner timeline advances. */
+function repairPackTimelineCoverage(
+  content: BirthIntelligencePackContent,
+  phasePlans: PhasePlan[],
+  locale: AppLocale,
+): boolean {
+  if (!phasePlans.length) return false;
+
+  const existing = asArray<PackJourneyPhase>(content.journey_phases);
+  const byPeriod = new Map(
+    existing.map((phase) => [safeString(phase.periodLabel), phase]),
+  );
+  let futureSeen = false;
+
+  const repaired = phasePlans.map((plan, idx) => {
+    const kept = byPeriod.get(plan.periodLabel);
+    let defaultLocked = false;
+    if (plan.tense === "future") {
+      defaultLocked = futureSeen;
+      futureSeen = true;
+    }
+    if (kept) {
+      return {
+        ...kept,
+        sortOrder: idx,
+        proLocked: kept.proLocked ?? defaultLocked,
+      };
+    }
+    return phasePlanToJourneyPhase(plan, idx, defaultLocked);
+  });
+
+  const changed = repaired.length !== existing.length ||
+    repaired.some((phase, idx) =>
+      safeString(existing[idx]?.periodLabel) !== phase.periodLabel
+    );
+
+  content.journey_phases = repaired;
+  content.journey_phase_facts = phasePlans.map((plan, idx) => ({
+    sortOrder: idx,
+    periodLabel: plan.periodLabel,
+    mahadashaLord: plan.mahadashaLord,
+    antardashaLord: plan.antardashaLord,
+    tense: plan.tense,
+    phasePulse: plan.phasePulse,
+    transitionNote: plan.transitionNote,
+    supportThemes: plan.supportThemes.slice(0, 3),
+    pressureThemes: plan.pressureThemes.slice(0, 2),
+  }));
+  ensureLifeMapCoverage(content, phasePlans, locale);
+  return changed;
 }
 
 function parsePeriodEndMonth(period: string): DateTime | null {
@@ -1329,6 +1509,46 @@ async function persistNotificationSchedule(
   }
 }
 
+async function persistPartialBirthPack(
+  supabase: SupabaseClient,
+  profileId: string,
+  birthInputId: string,
+  locale: AppLocale,
+  factSignature: string,
+  partial: BirthIntelligencePackContent,
+  llm?: { provider: string; model: string },
+): Promise<void> {
+  const update: Record<string, unknown> = {
+    content: partial,
+    updated_at: new Date().toISOString(),
+  };
+  if (llm?.provider) {
+    update.provider = llm.provider;
+    if (llm.model) update.model = llm.model;
+  }
+  const { error } = await supabase
+    .from("birth_intelligence_packs")
+    .update(update)
+    .eq("profile_id", profileId)
+    .eq("birth_input_id", birthInputId)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("fact_signature", factSignature)
+    .eq("status", "generating");
+  if (error) {
+    console.warn(`[birth-pack] partial persist failed: ${error.message}`);
+    await logAppEvent(
+      supabase,
+      profileId,
+      "birth_pack",
+      "warn",
+      "partial_persist_failed",
+      undefined,
+      { locale, factSignature: factSignature.slice(0, 80), error: error.message },
+    );
+  }
+}
+
 async function persistNotificationScheduleBestEffort(
   supabase: SupabaseClient,
   pack: BirthPackRow,
@@ -1353,6 +1573,369 @@ async function persistNotificationScheduleBestEffort(
         locale,
       },
     );
+  }
+}
+
+function packAdvanceAgeMs(
+  row: BirthPackRow & { updated_at?: string },
+): number {
+  const ts = Date.parse(row.updated_at ?? "");
+  if (!Number.isFinite(ts)) return Number.POSITIVE_INFINITY;
+  return Date.now() - ts;
+}
+
+function shouldSchedulePackAdvance(
+  row: BirthPackRow & { updated_at?: string },
+): boolean {
+  if (row.status !== "generating") return false;
+  const content = row.content as BirthIntelligencePackContent;
+  if (isPhaseAdvanceLocked(content)) return false;
+  const remaining = birthPackPhasesRemaining(content);
+  if (remaining.length === 0) return false;
+  return packAdvanceAgeMs(row) >= PACK_ADVANCE_DEBOUNCE_MS;
+}
+
+function isPackGenerationStalled(
+  row: BirthPackRow & { updated_at?: string },
+): boolean {
+  if (row.status !== "generating") return false;
+  const content = row.content as BirthIntelligencePackContent;
+  if (isPhaseAdvanceLocked(content)) return false;
+  const remaining = birthPackPhasesRemaining(content);
+  if (remaining.length === 0) return false;
+  return packAdvanceAgeMs(row) >= PACK_ADVANCE_STALL_MS;
+}
+
+async function tryAcquirePhaseLock(
+  supabase: SupabaseClient,
+  profileId: string,
+  birthInputId: string,
+  locale: AppLocale,
+  factSignature: string,
+  row: BirthPackRow & { updated_at?: string },
+): Promise<boolean> {
+  const content = (row.content ?? {}) as BirthIntelligencePackContent;
+  if (isPhaseAdvanceLocked(content)) return false;
+
+  const nextPhase = nextBirthPackPhase(content);
+  if (!nextPhase) return false;
+
+  const until = new Date(Date.now() + PACK_PHASE_LOCK_MS).toISOString();
+  const nowIso = new Date().toISOString();
+  const lockedContent: BirthIntelligencePackContent = {
+    ...content,
+    _generation: {
+      phases_done: content._generation?.phases_done ?? [],
+      screens_ready: content._generation?.screens_ready ??
+        getPackScreensReady(content),
+      updated_at: nowIso,
+      advancing_phase: nextPhase,
+      advancing_until: until,
+    },
+  };
+
+  let query = supabase
+    .from("birth_intelligence_packs")
+    .update({ content: lockedContent, updated_at: nowIso })
+    .eq("profile_id", profileId)
+    .eq("birth_input_id", birthInputId)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("fact_signature", factSignature)
+    .eq("status", "generating");
+
+  if (row.updated_at) {
+    query = query.eq("updated_at", row.updated_at);
+  }
+
+  const { data, error } = await query.select("id").maybeSingle();
+  if (error) {
+    console.warn(`[birth-pack] phase lock acquire failed: ${error.message}`);
+    return false;
+  }
+  return Boolean(data);
+}
+
+async function releasePhaseLock(
+  supabase: SupabaseClient,
+  profileId: string,
+  birthInputId: string,
+  locale: AppLocale,
+  factSignature: string,
+  dateStr: string,
+): Promise<void> {
+  const row = await fetchPackByFactSignature(
+    supabase,
+    profileId,
+    birthInputId,
+    locale,
+    factSignature,
+    dateStr,
+  );
+  if (!row) return;
+  const content = (row.content ?? {}) as BirthIntelligencePackContent;
+  if (!content._generation?.advancing_until) return;
+
+  const cleared: BirthIntelligencePackContent = {
+    ...content,
+    _generation: {
+      phases_done: content._generation?.phases_done ?? [],
+      screens_ready: getPackScreensReady(content),
+      updated_at: new Date().toISOString(),
+    },
+  };
+
+  await supabase
+    .from("birth_intelligence_packs")
+    .update({
+      content: cleared,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("profile_id", profileId)
+    .eq("birth_input_id", birthInputId)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("fact_signature", factSignature)
+    .eq("status", "generating");
+}
+
+type BirthPackContinuationContext = {
+  supabase: SupabaseClient;
+  profile: ProfRow;
+  bi: BioRow;
+  locale: AppLocale;
+  dateStr: string;
+  factSignature: string;
+  expiresOn: string;
+  packFacts: Record<string, unknown>;
+  packQualityExpected: Parameters<typeof validateBirthPackQuality>[1];
+  timing: DailyTimingFact[];
+};
+
+function scheduleBirthPackAdvanceIfNeeded(
+  ctx: BirthPackContinuationContext,
+  row: BirthPackRow | null | undefined,
+): void {
+  if (!row || row.status !== "generating") return;
+  const remaining = birthPackPhasesRemaining(
+    row.content as BirthIntelligencePackContent,
+  );
+  if (remaining.length === 0) return;
+  scheduleBirthPackAdvance(ctx);
+}
+
+function scheduleBirthPackAdvance(ctx: BirthPackContinuationContext): void {
+  const task = continueBirthPackGeneration(ctx, {
+    maxPhases: PACK_ADVANCE_MAX_PHASES,
+  });
+  const edgeRuntime = (globalThis as {
+    EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void };
+  }).EdgeRuntime;
+  if (edgeRuntime?.waitUntil) {
+    edgeRuntime.waitUntil(task);
+  } else {
+    task.catch((error) => {
+      console.error("[birth-pack] phased advance failed", error);
+    });
+  }
+}
+
+async function maybeResumeBirthPackGeneration(
+  ctx: BirthPackContinuationContext,
+  row: BirthPackRow & { updated_at?: string },
+): Promise<BirthPackRow | null> {
+  if (!shouldSchedulePackAdvance(row)) return row;
+
+  if (isPackGenerationStalled(row)) {
+    await continueBirthPackGeneration(ctx, { maxPhases: PACK_ADVANCE_MAX_PHASES });
+    const refreshed = await fetchPackByFactSignature(
+      ctx.supabase,
+      ctx.profile.id,
+      ctx.bi.id,
+      ctx.locale,
+      ctx.factSignature,
+      ctx.dateStr,
+    );
+    return refreshed;
+  }
+
+  scheduleBirthPackAdvance(ctx);
+  return row;
+}
+
+async function continueBirthPackGeneration(
+  ctx: BirthPackContinuationContext,
+  opts?: { maxPhases?: number },
+): Promise<void> {
+  const {
+    supabase,
+    profile,
+    bi,
+    locale,
+    dateStr,
+    factSignature,
+    expiresOn,
+    packFacts,
+    packQualityExpected,
+    timing,
+  } = ctx;
+  const maxPhases = opts?.maxPhases ?? PACK_ADVANCE_MAX_PHASES;
+
+  try {
+    const row = await fetchPackByFactSignature(
+      supabase,
+      profile.id,
+      bi.id,
+      locale,
+      factSignature,
+      dateStr,
+    );
+    if (!row || row.status !== "generating") return;
+
+    const rowWithTs = row as BirthPackRow & { updated_at?: string };
+    const existing = (row.content ?? {}) as BirthIntelligencePackContent;
+    if (isPhaseAdvanceLocked(existing)) return;
+
+    if (!(await tryAcquirePhaseLock(
+      supabase,
+      profile.id,
+      bi.id,
+      locale,
+      factSignature,
+      rowWithTs,
+    ))) {
+      return;
+    }
+
+    try {
+      const lockedRow = await fetchPackByFactSignature(
+        supabase,
+        profile.id,
+        bi.id,
+        locale,
+        factSignature,
+        dateStr,
+      );
+      const lockedContent = (lockedRow?.content ?? existing) as BirthIntelligencePackContent;
+
+      const result = await advanceBirthPackPhases(locale, packFacts, {
+        supabase,
+        profileId: profile.id,
+        existingContent: lockedContent,
+        maxPhases,
+        onPhaseComplete: async (_phase, merged, llm) => {
+          await persistPartialBirthPack(
+            supabase,
+            profile.id,
+            bi.id,
+            locale,
+            factSignature,
+            merged,
+            llm,
+          );
+        },
+      });
+
+      if (result.complete && result.envelope) {
+      const content = result.merged;
+      const provider = result.envelope.provider;
+      const model = result.envelope.model;
+      attachNatalLuckToContent(
+        content as Record<string, unknown>,
+        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        locale,
+      );
+      const { data: saved, error: saveError } = await supabase
+        .from("birth_intelligence_packs")
+        .upsert({
+          profile_id: profile.id,
+          birth_input_id: bi.id,
+          locale,
+          pack_version: BIRTH_PACK_VERSION,
+          engine_version: ENGINE_V,
+          planner_version: PLANNER_VERSION,
+          kernel_version: KERNEL_VERSION,
+          provider,
+          model,
+          status: "ready",
+          fact_signature: factSignature,
+          content,
+          generated_for_date: dateStr,
+          expires_on: expiresOn,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: "profile_id,birth_input_id,locale,pack_version,fact_signature",
+        })
+        .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on")
+        .single();
+      if (saveError) throw saveError;
+      const pack = saved as BirthPackRow;
+      await pruneStalePacks(supabase, profile.id, bi.id, locale, pack.id);
+      await persistNotificationScheduleBestEffort(
+        supabase,
+        pack,
+        profile,
+        bi,
+        locale,
+        timing,
+      );
+      return;
+    }
+
+    if (result.failedPhase) {
+      await logAppEvent(
+        supabase,
+        profile.id,
+        "birth_pack",
+        "warn",
+        "birth_pack_phase_failed",
+        undefined,
+        {
+          locale,
+          phase: result.failedPhase,
+          phasesRun: result.phasesRun,
+        },
+      );
+    }
+    } finally {
+      await releasePhaseLock(
+        supabase,
+        profile.id,
+        bi.id,
+        locale,
+        factSignature,
+        dateStr,
+      );
+    }
+  } catch (error) {
+    await logAppEvent(
+      supabase,
+      profile.id,
+      "birth_pack",
+      "error",
+      "birth_pack_generation_failed",
+      error instanceof Error ? error.stack : undefined,
+      { locale, error: errorMessage(error) },
+    );
+    const current = await fetchPackByFactSignature(
+      supabase,
+      profile.id,
+      bi.id,
+      locale,
+      factSignature,
+      dateStr,
+    );
+    if (!isClientServablePack(current)) {
+      await supabase
+        .from("birth_intelligence_packs")
+        .delete()
+        .eq("profile_id", profile.id)
+        .eq("birth_input_id", bi.id)
+        .eq("locale", locale)
+        .eq("pack_version", BIRTH_PACK_VERSION)
+        .eq("status", "generating")
+        .eq("fact_signature", factSignature);
+    }
   }
 }
 
@@ -1496,29 +2079,33 @@ async function ensureBirthPack(
 
   const weeklyKeys = packFacts.weekly_keys as string[];
   const monthlyKeys = packFacts.monthly_keys as string[];
-  const packValidationExpected = {
+  const packQualityExpected = {
     dailyCount: timing.length,
     weeklyCount: weeklyKeys.length,
     monthlyCount: monthlyKeys.length,
     dailyKeys: timing.map((day) => day.date),
     weeklyKeys,
     monthlyKeys,
+    journeyPhaseCount: phasePlans.length,
+    pastChapterCount: phasePlans.filter((plan) => plan.tense === "past").length,
+    futureChapterCount: phasePlans.filter((plan) => plan.tense === "future").length,
   };
-
-  const fallbackBase = fallbackPackContent(locale, {
-    profile,
-    bi,
-    dateStr,
-    kernel,
-    phasePlans,
-    timing,
-    lifeChapter,
-    weeklyKeys,
-    monthlyKeys,
-  });
 
   const expiresOn = DateTime.fromISO(dateStr, { zone: tz }).plus({ days: PACK_DAILY_DAYS - 1 })
     .toISODate()!;
+
+  const continuationCtx: BirthPackContinuationContext = {
+    supabase,
+    profile,
+    bi,
+    locale,
+    dateStr,
+    factSignature,
+    expiresOn,
+    packFacts,
+    packQualityExpected,
+    timing,
+  };
 
   const exactRow = await fetchPackByFactSignature(
     supabase,
@@ -1528,13 +2115,24 @@ async function ensureBirthPack(
     factSignature,
     dateStr,
   );
-  if (exactRow?.status === "fallback" && countTodayCards(exactRow.content) >= PACK_DAILY_DAYS) {
+  if (isClientServablePack(exactRow)) {
     attachNatalLuckToContent(
       exactRow.content as Record<string, unknown>,
       birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
       locale,
     );
     await persistNotificationScheduleBestEffort(supabase, exactRow, profile, bi, locale, timing);
+    if (exactRow.status === "generating") {
+      const resumed = await maybeResumeBirthPackGeneration(continuationCtx, exactRow);
+      if (resumed && isClientServablePack(resumed)) {
+        attachNatalLuckToContent(
+          resumed.content as Record<string, unknown>,
+          birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+          locale,
+        );
+        return resumed;
+      }
+    }
     return exactRow;
   }
 
@@ -1548,7 +2146,7 @@ async function ensureBirthPack(
     expiresOn,
   );
   if (!claimed) {
-    const waited = await waitForPackCompletion(
+    const inFlight = await fetchPackByFactSignature(
       supabase,
       profile.id,
       bi.id,
@@ -1556,7 +2154,34 @@ async function ensureBirthPack(
       factSignature,
       dateStr,
     );
-    if (waited) {
+    if (isClientServablePack(inFlight)) {
+      attachNatalLuckToContent(
+        inFlight.content as Record<string, unknown>,
+        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        locale,
+      );
+      const resumed = await maybeResumeBirthPackGeneration(continuationCtx, inFlight);
+      if (resumed && isClientServablePack(resumed)) {
+        attachNatalLuckToContent(
+          resumed.content as Record<string, unknown>,
+          birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+          locale,
+        );
+        return resumed;
+      }
+      return inFlight;
+    }
+
+    const waited = await waitForPackCompletion(
+      supabase,
+      profile.id,
+      bi.id,
+      locale,
+      factSignature,
+      dateStr,
+      isEmptyGeneratingPack(inFlight) ? PACK_GENERATION_EMPTY_WAIT_MS : PACK_GENERATION_WAIT_MS,
+    );
+    if (isClientServablePack(waited)) {
       attachNatalLuckToContent(
         waited.content as Record<string, unknown>,
         birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
@@ -1566,7 +2191,7 @@ async function ensureBirthPack(
       return waited;
     }
     const bestAfterWait = await findBestExistingPack(supabase, profile.id, bi.id, locale);
-    if (bestAfterWait && countTodayCards(bestAfterWait.content) >= PACK_DAILY_DAYS) {
+    if (isClientServablePack(bestAfterWait)) {
       attachNatalLuckToContent(
         bestAfterWait.content as Record<string, unknown>,
         birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
@@ -1575,22 +2200,7 @@ async function ensureBirthPack(
       await persistNotificationScheduleBestEffort(supabase, bestAfterWait, profile, bi, locale, timing);
       return bestAfterWait;
     }
-    ensureLifeMapCoverage(fallbackBase, phasePlans, locale);
-    attachNatalLuckToContent(
-      fallbackBase as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
-      locale,
-    );
-    return {
-      id: "",
-      content: fallbackBase,
-      provider: "deterministic",
-      model: "none",
-      status: "fallback",
-      fact_signature: factSignature,
-      generated_for_date: dateStr,
-      expires_on: expiresOn,
-    };
+    return null;
   }
 
   await logAppEvent(
@@ -1600,104 +2210,68 @@ async function ensureBirthPack(
     "info",
     "birth_pack_llm_started",
     undefined,
-    { locale, factSignature: factSignature.slice(0, 120) },
+    { locale, factSignature: factSignature.slice(0, 120), mode: "phased-openai-mini-3" },
   );
 
-  let generated = await generateBirthIntelligencePack(locale, packFacts, {
-    supabase,
-    profileId: profile.id,
+  await continueBirthPackGeneration(continuationCtx, {
+    maxPhases: PACK_ADVANCE_MAX_PHASES,
   });
-  if (generated) {
-    let validationError = validateBirthPackContent(
-      generated.data,
-      packValidationExpected,
-    );
-    if (validationError) {
-      console.warn(
-        `[birth-pack] validation failed locale=${locale} profile=${profile.id}: ${validationError} — merging fallback gaps`,
-      );
-      const merged = mergeBirthPackWithFallback(
-        generated.data,
-        fallbackBase,
-        {
-          dailyKeys: timing.map((day) => day.date),
-          weeklyKeys,
-          monthlyKeys,
-        },
-      );
-      validationError = validateBirthPackContent(merged, packValidationExpected);
-      if (!validationError) {
-        generated = { ...generated, data: merged };
-      } else {
-        console.error(
-          `[birth-pack] merge still invalid locale=${locale}: ${validationError}`,
-        );
-        generated = null;
-      }
-    }
-  }
 
-  let content: BirthIntelligencePackContent;
-  let status: "ready" | "fallback";
-  if (generated) {
-    content = generated.data;
-    status = "ready";
-  } else {
-    const bestExisting = await findBestExistingPack(supabase, profile.id, bi.id, locale);
-    if (bestExisting && countTodayCards(bestExisting.content) >= PACK_DAILY_DAYS) {
-      attachNatalLuckToContent(
-        bestExisting.content as Record<string, unknown>,
-        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
-        locale,
-      );
-      await persistNotificationScheduleBestEffort(
-        supabase,
-        bestExisting,
-        profile,
-        bi,
-        locale,
-        timing,
-      );
-      return bestExisting;
-    }
-    content = fallbackBase;
-    status = "fallback";
-  }
-
-  ensureLifeMapCoverage(content, phasePlans, locale);
-  attachNatalLuckToContent(
-    content as Record<string, unknown>,
-    birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+  const afterFirstPhase = await fetchPackByFactSignature(
+    supabase,
+    profile.id,
+    bi.id,
     locale,
+    factSignature,
+    dateStr,
   );
-  const { data: saved, error: saveError } = await supabase
-    .from("birth_intelligence_packs")
-    .upsert({
-      profile_id: profile.id,
-      birth_input_id: bi.id,
+  if (isClientServablePack(afterFirstPhase)) {
+    attachNatalLuckToContent(
+      afterFirstPhase.content as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
       locale,
-      pack_version: BIRTH_PACK_VERSION,
-      engine_version: ENGINE_V,
-      planner_version: PLANNER_VERSION,
-      kernel_version: KERNEL_VERSION,
-      provider: generated?.provider ?? "deterministic",
-      model: generated?.model ?? "none",
-      status,
-      fact_signature: factSignature,
-      content,
-      generated_for_date: dateStr,
-      expires_on: expiresOn,
-      updated_at: new Date().toISOString(),
-    }, {
-      onConflict: "profile_id,birth_input_id,locale,pack_version,fact_signature",
-    })
-    .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on")
-    .single();
-  if (saveError) throw saveError;
-  const pack = saved as BirthPackRow;
-  await pruneStalePacks(supabase, profile.id, bi.id, locale, pack.id);
-  await persistNotificationScheduleBestEffort(supabase, pack, profile, bi, locale, timing);
-  return pack;
+    );
+    scheduleBirthPackAdvanceIfNeeded(continuationCtx, afterFirstPhase);
+    return afterFirstPhase;
+  }
+
+  scheduleBirthPackAdvanceIfNeeded(continuationCtx, afterFirstPhase);
+
+  const partial = await fetchPackByFactSignature(
+    supabase,
+    profile.id,
+    bi.id,
+    locale,
+    factSignature,
+    dateStr,
+  );
+  if (isClientServablePack(partial)) {
+    attachNatalLuckToContent(
+      partial.content as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      locale,
+    );
+    return partial;
+  }
+
+  const bestAfterGeneration = await findBestExistingPack(supabase, profile.id, bi.id, locale);
+  if (isClientServablePack(bestAfterGeneration)) {
+    attachNatalLuckToContent(
+      bestAfterGeneration.content as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      locale,
+    );
+    await persistNotificationScheduleBestEffort(
+      supabase,
+      bestAfterGeneration,
+      profile,
+      bi,
+      locale,
+      timing,
+    );
+    return bestAfterGeneration;
+  }
+  return null;
 }
 
 type AccessTier = "free" | "plus" | "pro";
@@ -1790,7 +2364,6 @@ function applyAccessMask(
   if (tier === "pro") return content;
   const out = { ...content };
   const teaser = lockedTeaser(locale);
-  const recognitionLimit = tier === "plus" ? 4 : 2;
   const lifeEventLimit = tier === "plus" ? 2 : 1;
 
   const lifeMap = typeof out.life_map === "object" && out.life_map
@@ -1811,21 +2384,6 @@ function applyAccessMask(
     );
     out.life_map = lifeMap;
   }
-
-  const maskRecognitionList = (key: string) => {
-    const rows = out[key];
-    if (!Array.isArray(rows)) return;
-    out[key] = (rows as Record<string, unknown>[]).map((row, idx) => idx < recognitionLimit
-      ? { ...row, locked: false }
-      : {
-        ...row,
-        locked: true,
-        what_may_match: teaser,
-        main_theme: safeString(row.main_theme) || safeString(row.theme),
-      });
-  };
-  maskRecognitionList("past_life_check");
-  maskRecognitionList("recognition");
 
   const timingPlan = typeof out.timing_plan === "object" && out.timing_plan
     ? { ...(out.timing_plan as Record<string, unknown>) }
@@ -1892,49 +2450,6 @@ async function consumeAskQuota(
   }, { onConflict: "profile_id,usage_date" });
   if (writeError) throw writeError;
   return { planCode: "free", remaining: Math.max(0, FREE_ASKS_PER_DAY - current - 1) };
-}
-
-function cachedAskAnswer(
-  pack: BirthPackRow | null,
-  question: string,
-  locale: AppLocale,
-  goodWindows: { start: string; end: string; label?: string }[],
-  cautionWindows: { start: string; end: string; label?: string }[],
-) {
-  const knowledge = pack?.content.ask_knowledge;
-  const compact = safeString(knowledge?.compact_summary);
-  const normalized = question.toLowerCase();
-  const templates = asArray<{
-    label?: string;
-    answer_frame?: string;
-    best_for?: string;
-    caution?: string;
-    share_line?: string;
-    free_sample?: boolean;
-  }>(pack?.content.ask_templates);
-  const template = templates.find((item) => {
-    const label = safeString(item.label).toLowerCase();
-    const bestFor = safeString(item.best_for).toLowerCase();
-    return (label && normalized.includes(label)) || (bestFor && normalized.includes(bestFor));
-  }) ?? templates.find((item) => safeString(item.free_sample)) ?? templates[0];
-  const common = asArray<{ topic?: string; answer?: string }>(knowledge?.common_answers)
-    .find((item) => {
-      const topic = safeString(item.topic).toLowerCase();
-      return topic && normalized.includes(topic);
-    });
-  const answer = safeString(common?.answer) || safeString(template?.answer_frame) || compact;
-  if (!answer) return null;
-  const fallback = askFallbackCopy(locale, goodWindows, cautionWindows);
-  return {
-    direct_answer: answer,
-    best_time: fallback.best_time,
-    caution_time: fallback.caution_time,
-    better_option: safeString(template?.best_for) || fallback.better_option,
-    simple_why: safeString(template?.caution) || fallback.simple_why,
-    action_line: safeString(template?.answer_frame) || fallback.action_line,
-    share_hook: safeString(template?.share_line) || pack?.content.me_profile?.share_hook ||
-      fallback.share_hook,
-  };
 }
 
 export async function logAppEvent(
@@ -2372,14 +2887,48 @@ async function _handleInternal(
     if (!bi) {
       throw new ActionError("birth_input_missing", "No birth input", 409);
     }
-    const pack = await ensureBirthPack(supabase, profile, bi, locale, dateStr);
-    if (!pack || !["ready", "fallback"].includes(pack.status ?? "ready")) {
+    const pack = await ensureBirthPack(adminSupabase, profile, bi, locale, dateStr);
+    if (!pack) {
       throw new ActionError(
         "birth_pack_not_ready",
         "Birth pack is not ready yet",
         503,
       );
     }
+
+    if (!isClientServablePack(pack)) {
+      throw new ActionError(
+        "birth_pack_not_ready",
+        "Birth pack is not ready yet",
+        503,
+      );
+    }
+
+    const refInstant = parseDateAsUtcInstant(dateStr, tz);
+    const { segments } = computeTimeline(bi, tz);
+    const currentLords = segments.length ? vimshottariLordsAt(segments, refInstant) : null;
+    const kernel = buildKernelForBirthInput(
+      bi,
+      profile,
+      locale,
+      refInstant,
+      currentLords?.mdLord,
+      currentLords?.adLord,
+    );
+    const phasePlans = buildPackPhasePlans(bi, profile, locale, refInstant, kernel);
+    const packContent = pack.content as BirthIntelligencePackContent;
+    if (repairPackTimelineCoverage(packContent, phasePlans, locale)) {
+      await adminSupabase
+        .from("birth_intelligence_packs")
+        .update({ content: packContent, updated_at: new Date().toISOString() })
+        .eq("id", pack.id);
+      pack.content = packContent;
+    }
+
+    const packStatus = pack.status ?? "ready";
+    const screensReady = getPackScreensReady(
+      pack.content as BirthIntelligencePackContent,
+    );
 
     const access = await getSubscriptionAccess(supabase, profile.id);
     const maskedContent = applyAccessMask(
@@ -2397,7 +2946,8 @@ async function _handleInternal(
       packVersion: BIRTH_PACK_VERSION,
       provider: pack.provider,
       model: pack.model,
-      status: pack.status,
+      status: packStatus,
+      screensReady,
       content: maskedContent,
       access: buildAccessPayload(access),
       natalLuck: buildNatalLuck(
@@ -2924,7 +3474,7 @@ async function _handleInternal(
 
     const pastFeedback = await getValidationFeedback(supabase, profile.id);
     const lifeChapter = lifeChapterInfo(kernel, locale);
-    const pack = await ensureBirthPack(supabase, profile, bi, locale, dateStr);
+    const pack = await ensureBirthPack(adminSupabase, profile, bi, locale, dateStr);
     const packCard = packRangeCard(pack, scope, dateStr, tz);
     let provenance = pack
       ? buildProvenance({
@@ -3098,7 +3648,7 @@ async function _handleInternal(
         currentSubLord = current?.adLord ?? "";
       }
     }
-    // Ask never calls live LLM — free and pro both use pack templates + deterministic copy.
+    // Ask uses pack templates + live timing windows — no per-question LLM call.
     const pack = await loadBirthPack(supabase, profile, bi, locale, targetDate);
 
     const { error: userMessageError } = await supabase.from("chat_messages").insert({
@@ -3110,14 +3660,25 @@ async function _handleInternal(
     });
     if (userMessageError) throw userMessageError;
 
-    const cachedAnswer = cachedAskAnswer(pack, question, locale, goodWindows, cautionWindows);
-    const copy = cachedAnswer ?? askFallbackCopy(locale, goodWindows, cautionWindows);
-    const provenance = cachedAnswer && pack
+    const copy = resolveAskFromPack(
+      pack?.content,
+      question,
+      locale,
+      goodWindows,
+      cautionWindows,
+    );
+    const hadPackAnswer = Boolean(
+      pack?.content &&
+        (normalizeAskTemplates(pack.content, locale).length > 0 ||
+          safeString(pack.content.ask_knowledge?.compact_summary) ||
+          safeString((pack.content.ask_knowledge as Record<string, unknown> | undefined)?.body)),
+    );
+    const provenance = hadPackAnswer && pack
       ? buildProvenance({
         promptVersion: BIRTH_PACK_VERSION,
         provider: pack.provider,
         model: pack.model,
-        source: pack.provider === "deterministic" ? "fallback" : "llm",
+        source: "deterministic",
         factSignature: pack.fact_signature,
       })
       : buildProvenance({
@@ -3547,7 +4108,7 @@ async function _handleInternal(
       return cached;
     }
 
-    const pack = await ensureBirthPack(supabase, profile, bi, locale, cacheDate);
+    const pack = await ensureBirthPack(adminSupabase, profile, bi, locale, cacheDate);
     const packPhases = asArray<PackJourneyPhase>(pack?.content.journey_phases);
     if (pack && packPhases.length) {
       const phases = packPhases.map((phase, idx) => ({

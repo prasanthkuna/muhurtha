@@ -1,0 +1,24 @@
+appId: com.example.muhurta
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Begin"
+    timeout: 20000
+- tapOn: "Begin"
+- extendedWaitUntil:
+    visible: "Sign in with phone"
+    timeout: 15000
+- assertVisible: "Sign in with phone"
+# Phone picker may appear; wait for manual form (Send code button).
+- extendedWaitUntil:
+    visible: "Send code"
+    timeout: 45000
+- assertVisible: "Mobile number"
+- assertVisible: "Send code"
+- tapOn: "Send code"
+# Should reach OTP entry (not infinite spinner).
+- extendedWaitUntil:
+    visible: "Verification code"
+    timeout: 35000
+- assertVisible: "Verification code"

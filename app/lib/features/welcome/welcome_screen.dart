@@ -44,14 +44,16 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   void _onBegin() {
     if (!Env.hasSupabase) {
-      context.go('/onboarding/birth-basics');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.errorNeedSupabase)),
+      );
       return;
     }
     final session = Supabase.instance.client.auth.currentSession;
     if (session != null) {
       context.go('/onboarding/birth-basics');
     } else {
-      context.push('/auth');
+      context.go('/auth');
     }
   }
 

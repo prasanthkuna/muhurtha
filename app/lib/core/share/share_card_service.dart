@@ -1,13 +1,17 @@
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../app/muh_theme.dart';
+import '../../design_system/design_system.dart';
+import '../data/muhurtha_engine_api.dart';
 import '../locale/locale_provider.dart';
+import '../../shared/widgets/muhurtha_loading_view.dart';
 import '../../shared/widgets/share_story_card.dart';
 
 const kMuhurtaDownloadLink = 'https://muhurta.app';
@@ -21,6 +25,7 @@ class ShareCardService {
 
   final Ref _ref;
   final ScreenshotController _controller = ScreenshotController();
+  bool _sharing = false;
 
   Future<void> shareInsight({
     required BuildContext context,
@@ -29,7 +34,7 @@ class ShareCardService {
     String? sourceId,
     String? sectionLabel,
   }) async {
-    final locale = _ref.read(localeProvider).languageCode;
+    final locale = _resolveShareLocale();
     await shareExact(
       context: context,
       title: _first(payload, const ['title', 'headline'],
@@ -47,6 +52,7 @@ class ShareCardService {
         ],
         _sectionLabel(locale, sourceType),
       ),
+      contextLine: _first(payload, const ['context', 'period_label', 'period'], ''),
       sourceType: sourceType,
       sourceId: sourceId,
       sectionLabel: sectionLabel,
@@ -62,67 +68,130 @@ class ShareCardService {
     String? sourceId,
     String? sectionLabel,
   }) async {
-    final locale = _ref.read(localeProvider).languageCode;
-    if (!context.mounted) return;
-    final id = (sourceId?.trim().isNotEmpty == true
-            ? sourceId!.trim()
-            : DateTime.now().millisecondsSinceEpoch.toString())
-        .replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-');
+    if (_sharing) return;
+    _sharing = true;
+    try {
+      final locale = _resolveShareLocale();
+      if (!context.mounted) return;
 
-    final brand = _brand(locale);
+      await _showShareOverlay(context);
 
-    final view = View.maybeOf(context) ?? ui.PlatformDispatcher.instance.implicitView;
-    if (view == null) {
-      throw StateError('No Flutter view available for share capture');
-    }
+      final id = (sourceId?.trim().isNotEmpty == true
+              ? sourceId!.trim()
+              : DateTime.now().millisecondsSinceEpoch.toString())
+          .replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-');
 
-    final theme = Theme.of(context);
-    final textDirection = Directionality.of(context);
-    final mediaQuery = MediaQuery.of(context).copyWith(
-      size: const Size(ShareStoryCard.cardWidth, ShareStoryCard.cardHeight),
-      devicePixelRatio: 3,
-    );
-
-    final bytes = await _controller.captureFromWidget(
-      View(
-        view: view,
-        child: Directionality(
-          textDirection: textDirection,
-          child: MediaQuery(
-            data: mediaQuery,
-            child: Theme(
-              data: theme,
-              child: Material(
-                type: MaterialType.transparency,
-                child: Center(
-                  child: ShareStoryCard(
-                    title: title,
-                    body: body,
-                    brandLabel: brand,
-                    downloadLink: kMuhurtaDownloadLink,
-                    footerTagline: _footer(locale),
-                    sectionLabel:
-                        sectionLabel ?? _sectionLabel(locale, sourceType),
-                  ),
-                ),
-              ),
+      final brand = _brand(locale);
+      await _ensureShareFonts(locale);
+      final theme = MuhTheme.darkForLocale(Locale(locale));
+      final shareEyebrow = contextLine.trim();
+      final shareTitle = title.trim();
+      final shareBody = body.trim();
+      final card = Directionality(
+        textDirection: TextDirection.ltr,
+        child: Theme(
+          data: theme,
+          child: Material(
+            type: MaterialType.transparency,
+            child: ShareStoryCard(
+              title: shareTitle,
+              body: shareBody,
+              eyebrow: shareEyebrow.isNotEmpty ? shareEyebrow : null,
+              brandLabel: brand,
+              downloadLink: kMuhurtaDownloadLink,
+              footerTagline: _footer(locale),
+              sectionLabel:
+                  sectionLabel ?? _sectionLabel(locale, sourceType),
             ),
           ),
         ),
+      );
+
+      // Offscreen capture only — do not pass `context` or InheritedTheme can
+      // flash Latin fonts before Telugu/Hindi glyphs are ready.
+      final bytes = await _controller.captureFromLongWidget(
+        card,
+        pixelRatio: 3,
+        delay: const Duration(milliseconds: 120),
+        constraints: const BoxConstraints(maxWidth: ShareStoryCard.cardWidth),
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final file =
+          File('${tempDir.path}${Platform.pathSeparator}muhurta-$id.png');
+      await file.writeAsBytes(bytes, flush: true);
+
+      if (context.mounted) {
+        await _hideShareOverlay(context);
+      }
+
+      if (!context.mounted) return;
+
+      final box = context.findRenderObject() as RenderBox?;
+      final origin = box == null
+          ? null
+          : box.localToGlobal(Offset.zero) & box.size;
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'image/png')],
+        sharePositionOrigin: origin,
+      );
+    } finally {
+      _sharing = false;
+      if (context.mounted) {
+        await _hideShareOverlay(context);
+      }
+    }
+  }
+
+  /// Prefer pack content locale so share image matches Telugu/Hindi copy.
+  String _resolveShareLocale() {
+    final packLocale = _ref.read(birthPackProvider).valueOrNull?.locale;
+    if (packLocale != null && packLocale.trim().isNotEmpty) {
+      return packLocale.trim().toLowerCase();
+    }
+    return _ref.read(localeProvider).languageCode.toLowerCase();
+  }
+
+  Future<void> _ensureShareFonts(String locale) async {
+    switch (locale.toLowerCase()) {
+      case 'te':
+        await GoogleFonts.pendingFonts([GoogleFonts.notoSansTelugu()]);
+        return;
+      case 'hi':
+        await GoogleFonts.pendingFonts([GoogleFonts.notoSansDevanagari()]);
+        return;
+      default:
+        await GoogleFonts.pendingFonts([
+          GoogleFonts.fraunces(),
+          GoogleFonts.instrumentSans(),
+        ]);
+    }
+  }
+
+  Future<void> _showShareOverlay(BuildContext context) {
+    return showGeneralDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      barrierColor: MuhColors.bg.withValues(alpha: 0.72),
+      pageBuilder: (ctx, _, __) => const PopScope(
+        canPop: false,
+        child: Center(
+          child: MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.share,
+            compact: true,
+          ),
+        ),
       ),
-      pixelRatio: 3,
-      targetSize: const Size(ShareStoryCard.cardWidth, ShareStoryCard.cardHeight),
     );
+  }
 
-    final tempDir = await getTemporaryDirectory();
-    final file =
-        File('${tempDir.path}${Platform.pathSeparator}muhurta-$id.png');
-    await file.writeAsBytes(bytes, flush: true);
-
-    // Card image already has brand, copy, and download link — no duplicate caption.
-    await Share.shareXFiles(
-      [XFile(file.path, mimeType: 'image/png')],
-    );
+  Future<void> _hideShareOverlay(BuildContext context) async {
+    final nav = Navigator.of(context, rootNavigator: true);
+    if (nav.canPop()) {
+      nav.pop();
+    }
   }
 
   String _first(

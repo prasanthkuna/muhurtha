@@ -20,11 +20,24 @@ After changing `dart_defines.json`, do a **full restart** (`R` in `flutter run`,
 
 ### Server secrets (Supabase dashboard / CLI — already on project)
 
-LLM keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`, …), `SUPABASE_SERVICE_ROLE_KEY`, etc. live in **Supabase Edge Function secrets**, not in the Flutter app. Check with:
+LLM keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, …), `SUPABASE_SERVICE_ROLE_KEY`, etc. live in **Supabase Edge Function secrets**, not in the Flutter app. Check with:
 
 ```powershell
 cd c:\Users\PrashanthKuna\muhurtha
 supabase secrets list --project-ref kdngizqrybkrckvphyin
+```
+
+**Birth pack (screen-by-screen multiturn):** primary is **Nemotron** via OpenRouter (`nvidia/nemotron-3-super-120b-a12b:free`), then Owl alternate, then Gemini, then OpenAI. Override with `BIRTH_PACK_OPENROUTER_MODEL` secret. Deploy + warm-up:
+
+```powershell
+.\scripts\deploy-muhurtha-api.ps1 -SkipRevenueCat
+```
+
+Probe Nemotron/Owl directly:
+
+```powershell
+$env:SUPABASE_SERVICE_ROLE_KEY = '<service_role_jwt>'
+.\scripts\test-openrouter-owl-nemotron.ps1 -BirthPackProbe
 ```
 
 ---
@@ -66,6 +79,36 @@ supabase secrets list --project-ref kdngizqrybkrckvphyin
    That turns on `Env.verboseLogs` so `appLog` runs even outside strict `kDebugMode` when you need it, and keeps **Supabase** `debug` on for that build.
 
 **Note:** The red sliver assert on the phone-OTP screen was addressed by **not** swapping large subtrees inside a **`ListView` sliver**; the auth UI now uses **`SingleChildScrollView` + `Column`** with a **`ValueKey`** when switching phone ↔ OTP.
+
+### Auth funnel (phone OTP)
+
+Auth steps are logged **even in release builds** via `app/lib/core/debug/auth_telemetry.dart`:
+
+| Where | How |
+|-------|-----|
+| **Device logcat** | `adb logcat -s flutter` then filter `[auth]` — e.g. `send_start`, `send_ok`, `picker_cancelled` |
+| **Supabase `app_logs`** | Same events inserted with `service = 'auth'` (anon insert allowed pre-login) |
+
+**Typical funnel:** `screen_open` → `send_start` → `send_ok` → `verify_start` → `verify_ok`
+
+**If typing a number “does nothing”:** you must tap **Continue** (keyboard Done also works). Old UI hid the field behind “Type manually” and used a small Send link.
+
+**Pull remote auth logs:**
+
+```powershell
+cd c:\Users\PrashanthKuna\muhurtha
+.\scripts\check-auth-logs.ps1
+```
+
+Or SQL Editor:
+
+```sql
+select created_at, message, context
+from public.app_logs
+where service = 'auth'
+order by created_at desc
+limit 30;
+```
 
 ---
 
@@ -276,11 +319,22 @@ Invoke-RestMethod -Uri "$($defines.SUPABASE_URL)/auth/v1/health" -Headers @{ api
 
 Expect a healthy response (empty JSON or 200). Edge function without a logged-in user returns **401** — that is normal.
 
-Deploy / check edge function:
+Deploy / check edge function (includes automatic warm-up):
 
 ```powershell
 cd c:\Users\PrashanthKuna\muhurtha
+.\scripts\deploy-muhurtha-api.ps1
+# or full push (migrations + deploy + warm-up):
+.\scripts\push-supabase.ps1
+# warm-up only after a manual deploy:
+.\scripts\warmup-supabase.ps1
+```
+
+Manual deploy without warm-up helper:
+
+```powershell
 supabase functions deploy muhurtha-api --project-ref kdngizqrybkrckvphyin
+.\scripts\warmup-supabase.ps1
 ```
 
 ---

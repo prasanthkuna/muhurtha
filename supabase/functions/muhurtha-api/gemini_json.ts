@@ -1,13 +1,26 @@
-import { groqGenerateJsonEnvelope } from "./groq_json.ts";
-import { openRouterGenerateJsonEnvelope } from "./openrouter_json.ts";
 import { type JsonGenerationEnvelope, openAiGenerateJsonEnvelope } from "./openai_json.ts";
 import { logAppEvent } from "./engine.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  openRouterGenerateJsonEnvelope,
+  resolveBirthPackMaxTokens,
+  resolveBirthPackSectionMaxTokens,
+} from "./openrouter_json.ts";
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
+/** Gemini 3.5 Flash max output; birth pack needs most of this for the dossier JSON. */
+export const DEFAULT_BIRTH_PACK_MAX_OUTPUT_TOKENS = 65536;
 
 type GeminiResponse = {
-  candidates?: { content?: { parts?: { text?: string }[] } }[];
+  candidates?: {
+    content?: { parts?: { text?: string }[] };
+    finishReason?: string;
+  }[];
+  usageMetadata?: {
+    thoughtsTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
   error?: { message?: string };
 };
 
@@ -16,6 +29,51 @@ function resolveGeminiModel(modelEnvName?: string): string {
   return fromEnv ||
     Deno.env.get("GEMINI_MODEL")?.trim() ||
     DEFAULT_GEMINI_MODEL;
+}
+
+function resolveGeminiMaxOutputTokens(modelEnvName?: string): number | undefined {
+  if (modelEnvName === "BIRTH_PACK_GEMINI_MODEL" || modelEnvName === "BIRTH_PACK_MODEL") {
+    const parsed = Number(
+      Deno.env.get("BIRTH_PACK_MAX_COMPLETION_TOKENS") ??
+        String(DEFAULT_BIRTH_PACK_MAX_OUTPUT_TOKENS),
+    );
+    if (!Number.isFinite(parsed) || parsed < 4096) {
+      return DEFAULT_BIRTH_PACK_MAX_OUTPUT_TOKENS;
+    }
+    return Math.min(Math.floor(parsed), DEFAULT_BIRTH_PACK_MAX_OUTPUT_TOKENS);
+  }
+  return undefined;
+}
+
+function resolveGeminiThinkingConfig(
+  modelEnvName?: string,
+  explicitMaxOutput?: number,
+): Record<string, string> | undefined {
+  const isBirthPack = modelEnvName === "BIRTH_PACK_GEMINI_MODEL" ||
+    modelEnvName === "BIRTH_PACK_MODEL" ||
+    explicitMaxOutput != null;
+  if (!isBirthPack) return undefined;
+  const level = Deno.env.get("BIRTH_PACK_GEMINI_THINKING_LEVEL")?.trim().toUpperCase() ??
+    "MINIMAL";
+  return { thinkingLevel: level };
+}
+
+function resolveSectionMaxOutputTokens(phase?: string): number | undefined {
+  if (!phase) return undefined;
+  if (phase === "life_map_journey" || phase === "playbook") {
+    return resolveGeminiMaxOutputTokens("BIRTH_PACK_GEMINI_MODEL");
+  }
+  const parsed = Number(
+    Deno.env.get("BIRTH_PACK_SECTION_MAX_TOKENS") ?? "24576",
+  );
+  if (!Number.isFinite(parsed) || parsed < 4096) return 24576;
+  return Math.min(Math.floor(parsed), DEFAULT_BIRTH_PACK_MAX_OUTPUT_TOKENS);
+}
+
+function isBirthPackCall(modelEnvName?: string, phase?: string): boolean {
+  return modelEnvName === "BIRTH_PACK_GEMINI_MODEL" ||
+    modelEnvName === "BIRTH_PACK_MODEL" ||
+    phase != null;
 }
 
 export async function geminiGenerateJson(
@@ -36,8 +94,10 @@ export async function geminiGenerateJsonEnvelope(
   userText: string,
   opts?: {
     modelEnvName?: string;
+    maxOutputTokens?: number;
     supabase?: SupabaseClient;
     profileId?: string;
+    birthPackPhase?: string;
   },
 ): Promise<JsonGenerationEnvelope | null> {
   const apiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -54,22 +114,42 @@ export async function geminiGenerateJsonEnvelope(
     return null;
   }
   const model = resolveGeminiModel(opts?.modelEnvName);
+  const maxOutputTokens = opts?.maxOutputTokens ??
+    (opts?.birthPackPhase
+      ? resolveSectionMaxOutputTokens(opts.birthPackPhase)
+      : resolveGeminiMaxOutputTokens(opts?.modelEnvName));
   const supabase = opts?.supabase;
   const profileId = opts?.profileId;
   const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${
-      encodeURIComponent(apiKey)
-    }`;
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+  const generationConfig: Record<string, unknown> = {
+    responseMimeType: "application/json",
+  };
+  if (!isBirthPackCall(opts?.modelEnvName, opts?.birthPackPhase)) {
+    generationConfig.temperature = 0.72;
+  }
+  if (maxOutputTokens != null) {
+    generationConfig.maxOutputTokens = maxOutputTokens;
+  }
+  const thinkingConfig = resolveGeminiThinkingConfig(
+    opts?.modelEnvName,
+    maxOutputTokens,
+  );
+  if (thinkingConfig) {
+    generationConfig.thinkingConfig = thinkingConfig;
+  }
+
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemInstruction }] },
       contents: [{ role: "user", parts: [{ text: userText }] }],
-      generationConfig: {
-        temperature: 0.72,
-        responseMimeType: "application/json",
-      },
+      generationConfig,
     }),
   });
   if (!res.ok) {
@@ -87,6 +167,7 @@ export async function geminiGenerateJsonEnvelope(
           model,
           status: res.status,
           error: errorText.slice(0, 1200),
+          maxOutputTokens,
         },
       );
     }
@@ -97,18 +178,30 @@ export async function geminiGenerateJsonEnvelope(
     console.error(`Gemini JSON error (${model})`, body.error.message);
     return null;
   }
-  const text = body.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+  const candidate = body.candidates?.[0];
+  const text = candidate?.content?.parts?.[0]?.text ?? null;
+  const finishReason = candidate?.finishReason ?? null;
   if (text && supabase) {
     await logAppEvent(
       supabase,
       profileId ?? null,
       "gemini",
-      "info",
-      `Generated JSON with ${model}`,
+      finishReason === "MAX_TOKENS" ? "warn" : "info",
+      finishReason === "MAX_TOKENS"
+        ? `Generated JSON truncated at token cap (${model})`
+        : `Generated JSON with ${model}`,
       undefined,
       {
         model,
         promptLength: systemInstruction.length + userText.length,
+        outputLength: text.length,
+        maxOutputTokens,
+        finishReason,
+        thinkingLevel: thinkingConfig?.thinkingLevel ?? null,
+        birthPackPhase: opts?.birthPackPhase ?? null,
+        thoughtsTokenCount: body.usageMetadata?.thoughtsTokenCount ?? null,
+        candidatesTokenCount: body.usageMetadata?.candidatesTokenCount ?? null,
+        totalTokenCount: body.usageMetadata?.totalTokenCount ?? null,
       },
     );
   }
@@ -120,7 +213,6 @@ export async function generateJsonWithFallback(
   userText: string,
   opts?: {
     geminiModelEnvName?: string;
-    openRouterModelEnvName?: string;
     openAiModelEnvName?: string;
   },
 ): Promise<string | null> {
@@ -137,16 +229,14 @@ export async function generateJsonWithFallbackEnvelope(
   userText: string,
   opts?: {
     geminiModelEnvName?: string;
-    openRouterModelEnvName?: string;
     openAiModelEnvName?: string;
-    groqModelEnvName?: string;
     supabase?: SupabaseClient;
     profileId?: string;
-    /** te/hi: prefer non-OpenAI providers first. */
-    preferFastProviders?: boolean;
-    /** Birth pack / large JSON: skip Groq (free tier TPM too small). */
+    /** Birth pack / large JSON dossier. */
     largePayload?: boolean;
-    /** Ops/testing: skip OpenAI entirely. */
+    /** Multi-turn birth pack phase label. */
+    birthPackPhase?: string;
+    /** Ops/testing: skip OpenAI fallback. */
     skipOpenAi?: boolean;
   },
 ): Promise<JsonGenerationEnvelope | null> {
@@ -158,49 +248,75 @@ export async function generateJsonWithFallbackEnvelope(
   const openAiDisabled = opts?.skipOpenAi ||
     Deno.env.get("DISABLE_OPENAI")?.trim().toLowerCase() === "true";
 
-  const tryGroq = () =>
-    groqGenerateJsonEnvelope(groundedSystem, userText, {
+  const isBirthPack = Boolean(opts?.birthPackPhase || opts?.largePayload);
+  const birthPackPrimary = (Deno.env.get("BIRTH_PACK_PRIMARY") ?? "openai")
+    .trim()
+    .toLowerCase();
+
+  const tryOpenRouterBirthPack = () =>
+    openRouterGenerateJsonEnvelope(groundedSystem, userText, {
       ...callOpts,
-      modelEnvName: opts?.groqModelEnvName,
+      modelEnvName: "BIRTH_PACK_OPENROUTER_MODEL",
+      birthPack: true,
+      birthPackPhase: opts?.birthPackPhase,
+      maxTokens: opts?.birthPackPhase
+        ? resolveBirthPackSectionMaxTokens(opts.birthPackPhase)
+        : resolveBirthPackMaxTokens(),
+    });
+  const tryGemini = () =>
+    geminiGenerateJsonEnvelope(groundedSystem, userText, {
+      ...callOpts,
+      modelEnvName: opts?.geminiModelEnvName,
+      birthPackPhase: opts?.birthPackPhase,
+      maxOutputTokens: opts?.birthPackPhase
+        ? resolveSectionMaxOutputTokens(opts.birthPackPhase)
+        : opts?.largePayload
+        ? resolveGeminiMaxOutputTokens(opts?.geminiModelEnvName ?? "BIRTH_PACK_GEMINI_MODEL")
+        : undefined,
     });
   const tryOpenAi = () =>
     openAiDisabled
       ? Promise.resolve(null)
       : openAiGenerateJsonEnvelope(groundedSystem, userText, {
         ...callOpts,
-        modelEnvName: opts?.openAiModelEnvName,
+        modelEnvName: opts?.openAiModelEnvName ?? "BIRTH_PACK_MODEL",
+        birthPackPhase: opts?.birthPackPhase,
       });
-  const tryOpenRouter = () =>
-    openRouterGenerateJsonEnvelope(groundedSystem, userText, {
-      ...callOpts,
-      modelEnvName: opts?.openRouterModelEnvName,
-    });
 
-  // Large birth-pack prompts (~50k tokens): Groq free tier rejects with 413.
-  if (opts?.largePayload) {
-    const openRouter = await tryOpenRouter();
-    if (openRouter) return openRouter;
+  if (isBirthPack) {
+    if (birthPackPrimary === "openrouter") {
+      const openRouter = await tryOpenRouterBirthPack();
+      if (openRouter) return openRouter;
+    }
     const openAi = await tryOpenAi();
     if (openAi) return openAi;
+    const gemini = await tryGemini();
+    if (gemini) return gemini;
+    if (birthPackPrimary !== "openrouter") {
+      const openRouter = await tryOpenRouterBirthPack();
+      if (openRouter) return openRouter;
+    }
+    if (opts?.supabase) {
+      await logAppEvent(
+        opts.supabase,
+        opts.profileId ?? null,
+        "openai",
+        "error",
+        "Birth pack failed: OpenAI + Gemini (+ OpenRouter if configured)",
+        undefined,
+        {
+          birthPackPhase: opts?.birthPackPhase ?? null,
+          promptLength: groundedSystem.length + userText.length,
+        },
+      );
+    }
     return null;
-  }
-
-  if (opts?.preferFastProviders) {
-    const openRouter = await tryOpenRouter();
-    if (openRouter) return openRouter;
-    const groq = await tryGroq();
-    if (groq) return groq;
+  } else {
+    const gemini = await tryGemini();
+    if (gemini) return gemini;
     const openAi = await tryOpenAi();
     if (openAi) return openAi;
-    return null;
   }
-
-  const openRouter = await tryOpenRouter();
-  if (openRouter) return openRouter;
-  const groq = await tryGroq();
-  if (groq) return groq;
-  const openAi = await tryOpenAi();
-  if (openAi) return openAi;
 
   if (opts?.supabase) {
     await logAppEvent(
@@ -212,7 +328,7 @@ export async function generateJsonWithFallbackEnvelope(
       undefined,
       {
         promptLength: groundedSystem.length + userText.length,
-        preferFastProviders: opts.preferFastProviders ?? false,
+        largePayload: opts?.largePayload ?? false,
       },
     );
   }

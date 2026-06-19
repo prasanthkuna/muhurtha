@@ -31,6 +31,20 @@ Write-Host "`nPushing DB migrations..."
 & $Supabase db push
 
 Write-Host "`nDeploying Edge Function muhurtha-api (--use-api avoids Docker)..."
-& $Supabase functions deploy muhurtha-api --use-api
+& $Supabase functions deploy muhurtha-api --use-api --project-ref $ProjectRef
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "`nDeploying Edge Function revenuecat-webhook..."
+& $Supabase functions deploy revenuecat-webhook --use-api --project-ref $ProjectRef
+if ($LASTEXITCODE -ne 0) {
+  Write-Warning "revenuecat-webhook deploy failed (continuing)"
+}
+
+Write-Host "`nPost-deploy warm-up (cold start + OpenRouter probe)..."
+& (Join-Path $PSScriptRoot "warmup-supabase.ps1") -ProjectRef $ProjectRef
+if ($LASTEXITCODE -ne 0) {
+  Write-Warning "Warm-up reported issues. Check output above."
+  exit $LASTEXITCODE
+}
 
 Write-Host "`nDone."

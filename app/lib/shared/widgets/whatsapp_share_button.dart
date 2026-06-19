@@ -3,16 +3,14 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../design_system/design_system.dart';
 
-/// White WhatsApp glyph on a subtle dark chip — same 30px tap target as before.
+/// WhatsApp share glyph — no background chip. Size comes from [MuhIcons].
 class WhatsAppShareButton extends StatelessWidget {
   const WhatsAppShareButton({
     super.key,
     required this.onTap,
-    this.size = 30,
   });
 
   final VoidCallback onTap;
-  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -20,22 +18,15 @@ class WhatsAppShareButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: size,
-          height: size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: MuhColors.surfaceGold.withValues(alpha: 0.4),
-            shape: BoxShape.circle,
-            border: Border.all(color: MuhColors.line),
-          ),
+        borderRadius: BorderRadius.circular(MuhRadius.chip),
+        child: Padding(
+          padding: const EdgeInsets.all(MuhIcons.whatsAppSharePadding),
           child: SvgPicture.asset(
             'assets/icons/whatsapp.svg',
-            width: 14,
-            height: 14,
+            width: MuhIcons.whatsAppShare,
+            height: MuhIcons.whatsAppShare,
             colorFilter: const ColorFilter.mode(
-              MuhColors.cream,
+              MuhColors.goldSoft,
               BlendMode.srcIn,
             ),
             semanticsLabel: 'Share on WhatsApp',

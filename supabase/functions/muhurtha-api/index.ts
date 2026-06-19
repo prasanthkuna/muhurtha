@@ -2,6 +2,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { handleRequest } from "./engine.ts";
 import { smokeTestLocaleLlm } from "./locale_smoke.ts";
+import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
+import { runWarmup } from "./warmup.ts";
 import type { AppLocale } from "./vedic_labels.ts";
 
 const cors: Record<string, string> = {
@@ -52,10 +54,45 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: cors });
   }
   try {
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+    if (req.method === "GET") {
+      const url = new URL(req.url);
+      if (url.searchParams.get("warmup") === "1" || url.pathname.endsWith("/warmup")) {
+        if (!isServiceRoleRequest(req, serviceKey)) {
+          return new Response(JSON.stringify({ error: "forbidden" }), {
+            status: 403,
+            headers: { ...cors, "Content-Type": "application/json" },
+          });
+        }
+        const probeLlm = url.searchParams.get("probe_llm") !== "0";
+        const result = await runWarmup({ probeLlm });
+        return new Response(JSON.stringify(result), {
+          status: result.ok ? 200 : 503,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
 
+    if (body.action === "warmup") {
+      if (!isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const result = await runWarmup({
+        probeLlm: body.probe_llm !== false,
+      });
+      return new Response(JSON.stringify(result), {
+        status: result.ok ? 200 : 503,
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
     if (body.action === "smoke_test_locale_llm") {
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
       if (!isServiceRoleRequest(req, serviceKey)) {
         return new Response(JSON.stringify({ error: "forbidden" }), {
           status: 403,
@@ -73,6 +110,28 @@ Deno.serve(async (req) => {
         loggingSupabase,
         null,
         { skipOpenAi },
+      );
+      return new Response(JSON.stringify(result), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    if (body.action === "smoke_test_openrouter_models") {
+      if (!isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const result = await smokeTestOpenRouterModels(
+        undefined,
+        null,
+        {
+          birthPackProbe: body.birth_pack_probe === true,
+          models: Array.isArray(body.models)
+            ? body.models.filter((m): m is string => typeof m === "string")
+            : undefined,
+        },
       );
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },

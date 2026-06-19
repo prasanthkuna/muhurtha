@@ -67,6 +67,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authResendCode => 'Resend code';
 
   @override
+  String get authTapPhone => 'Tap to choose your mobile number';
+
+  @override
+  String get authTypeNumberInstead => 'Type number manually';
+
+  @override
+  String get authUsePhonePicker => 'Use phone picker instead';
+
+  @override
+  String get authContinue => 'Continue';
+
+  @override
+  String get authChooseFromSim => 'Choose number from SIM';
+
+  @override
+  String get authPickerCancelled =>
+      'No number selected. Type yours above or try again.';
+
+  @override
+  String get authStuckRetry => 'That took too long. Tap Continue to try again.';
+
+  @override
   String get onboardingBirthTitle => 'Birth basics';
 
   @override

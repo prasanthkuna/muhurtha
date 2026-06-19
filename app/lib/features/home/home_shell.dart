@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
 
 import '../../core/config/env.dart';
+import '../../core/data/birth_pack_readiness.dart';
 import '../../core/data/birth_pack_views.dart';
 import '../../core/data/muhurtha_engine_api.dart';
 import '../../core/format/clock_format.dart';
@@ -117,7 +118,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     ref.listen(birthPackProvider, (_, next) {
-      if (next.hasValue && next.valueOrNull != null) {
+      final pack = next.valueOrNull;
+      if (pack != null && pack.isComplete) {
         ref.read(muhurthaNotificationServiceProvider).syncNextWeek();
       }
     });
@@ -293,28 +295,6 @@ class _DecodeTab extends ConsumerWidget {
   final AppLocalizations l10n;
   final WidgetRef ref;
 
-  Future<void> _share(BuildContext context, TodayPayload payload) async {
-    try {
-      await ref.read(shareCardServiceProvider).shareInsight(
-        context: context,
-        sourceType: 'decode',
-        sourceId: payload.date,
-        payload: {
-          'title': payload.displayName == null
-              ? 'Decoded'
-              : '${payload.displayName}, decoded',
-          'highlight': payload.shareHook ?? payload.oneLine ?? '',
-          'context': payload.currentLifePeriodSummary ?? '',
-        },
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${_V3Copy(l10n).failed}: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef _) {
     if (!Env.hasSupabase) {
@@ -330,10 +310,15 @@ class _DecodeTab extends ConsumerWidget {
     return packAsync.when(
       data: (pack) {
         if (pack == null) {
-          return _EmptyStateScreen(
-            headline: l10n.todayEmptyHeadline,
-            message: l10n.todayEmptyMessage,
-            icon: Icons.fingerprint_rounded,
+          return MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.screen,
+            message: l10n.loadingDecode,
+          );
+        }
+        if (!pack.isScreenReady(BirthPackScreen.decode)) {
+          return MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.screen,
+            message: l10n.loadingDecode,
           );
         }
         final payload = todayAsync.valueOrNull;
@@ -351,7 +336,6 @@ class _DecodeTab extends ConsumerWidget {
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
             ref.invalidate(todayPayloadProvider);
-            await ref.read(birthPackProvider.future);
           },
           children: [
             if (moon != null)
@@ -386,11 +370,16 @@ class _DecodeTab extends ConsumerWidget {
               _ShareableSignalCard(
                 title: copy.thisSounds,
                 body: decodeHit,
-                trailingAction: payload == null
-                    ? null
-                    : WhatsAppShareButton(
-                        onTap: () => _share(context, payload),
-                      ),
+                trailingAction: WhatsAppShareButton(
+                  onTap: () => _shareExactCard(
+                    ref,
+                    context,
+                    title: copy.thisSounds,
+                    body: decodeHit,
+                    sourceType: 'decode',
+                    sourceId: 'decode-hit-${pack.date}',
+                  ),
+                ),
               ),
             _InsightSection(
               title: copy.strengths,
@@ -448,24 +437,6 @@ class _DecodeTab extends ConsumerWidget {
                   ),
                 ),
               ),
-            ...views.recognition.map(
-              (card) => _V3ProseCard(
-                eyebrow: card.periodLabel,
-                title: card.theme,
-                body: card.whatMayMatch,
-                locked: card.locked,
-                onLockedTap: card.locked
-                    ? () => PaywallSheet.show(
-                          context,
-                          headline: views.paywallCopy['headline']?.toString(),
-                          subline: views.paywallCopy['subline']?.toString(),
-                          bullets: views.paywallBullets,
-                          cta: views.paywallCopy['cta']?.toString(),
-                          preferredPlan: PaywallPlan.pro,
-                        )
-                    : null,
-              ),
-            ),
           ],
         );
       },
@@ -521,12 +492,24 @@ class _TodayFocusTab extends ConsumerWidget {
     final copy = _V3Copy(l10n);
     return packAsync.when(
       data: (pack) {
+        if (pack == null) {
+          return MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.screen,
+            message: l10n.loadingToday,
+          );
+        }
+        if (!pack.isScreenReady(BirthPackScreen.today)) {
+          return MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.screen,
+            message: l10n.loadingToday,
+          );
+        }
         final payload = today.valueOrNull;
-        if (pack == null || payload == null) {
+        if (payload == null) {
           if (today.isLoading) {
             return MuhurthaLoadingView(
               mode: MuhurthaLoadingMode.screen,
-              message: l10n.loadingToday,
+              message: l10n.loadingTodayWindows,
             );
           }
           return _EmptyStateScreen(
@@ -537,7 +520,9 @@ class _TodayFocusTab extends ConsumerWidget {
         }
         final views = BirthPackViews(pack);
         final playbook = views.playbookFor(payload.date);
-        final mainAdvice = playbook?.oneLine ?? '';
+        final mainAdvice = playbook?.displayAdvice.isNotEmpty == true
+            ? playbook!.displayAdvice
+            : payload.oneLine ?? '';
         final goodSummary = playbook?.goodSummary ?? '';
         final avoidSummary = playbook?.avoidSummary ?? '';
         final betterFor = playbook?.betterFor.isNotEmpty == true
@@ -557,10 +542,7 @@ class _TodayFocusTab extends ConsumerWidget {
             ref.invalidate(birthPackProvider);
             ref.invalidate(todayPayloadProvider);
             ref.invalidate(remedyListProvider);
-            await Future.wait([
-              ref.read(birthPackProvider.future),
-              ref.read(todayPayloadProvider.future),
-            ]);
+            await ref.read(todayPayloadProvider.future);
           },
           children: [
             _ShareableSignalCard(
@@ -716,74 +698,81 @@ class _TimingTab extends ConsumerWidget {
     return packAsync.when(
       data: (pack) {
         if (pack == null) {
-          return _EmptyStateScreen(
-            headline: copy.timingTitle,
-            message: l10n.todayEmptyMessage,
-            icon: Icons.schedule_rounded,
+          return MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.screen,
+            message: l10n.loadingTimingPlan,
+          );
+        }
+        if (!pack.isScreenReady(BirthPackScreen.timing)) {
+          return MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.screen,
+            message: l10n.loadingTimingPlan,
           );
         }
         final views = BirthPackViews(pack);
+        final isPro = ref.watch(subscriptionAccessProvider).isPro;
         final week = views.week;
         final month = views.month;
+        final weekBody = [
+          week.body,
+          week.caution,
+        ].where((line) => line.isNotEmpty).join('\n\n');
+        final monthBody = [
+          month.body,
+          month.caution,
+        ].where((line) => line.isNotEmpty).join('\n\n');
         return _V3Scroll(
           title: copy.timingTitle,
           subtitle: copy.timingSub,
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
-            await ref.read(birthPackProvider.future);
           },
           children: [
-            _V3ProseCard(
-              eyebrow: copy.week,
-              title: week.headline,
-              body: [
-                week.body,
-                week.caution,
-              ].where((line) => line.isNotEmpty).join('\n\n'),
-              trailingAction: WhatsAppShareButton(
-                onTap: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: week.headline,
-                  body: [
-                    week.body,
-                    week.caution,
-                  ].where((line) => line.isNotEmpty).join('\n\n'),
-                  contextLine: copy.week,
-                  sourceId: 'timing-week-${pack.date}',
+            if (week.headline.isNotEmpty || weekBody.isNotEmpty)
+              _V3ProseCard(
+                eyebrow: copy.week,
+                title: week.headline,
+                body: weekBody,
+                trailingAction: WhatsAppShareButton(
+                  onTap: () => _shareExactCard(
+                    ref,
+                    context,
+                    title: week.headline,
+                    body: weekBody,
+                    sourceType: 'purpose_result',
+                    sourceId: 'timing-week-${pack.date}',
+                  ),
                 ),
               ),
-            ),
-            _V3ProseCard(
-              eyebrow: copy.month,
-              title: month.headline,
-              body: [
-                month.body,
-                month.caution,
-              ].where((line) => line.isNotEmpty).join('\n\n'),
-              locked: !ref.watch(subscriptionAccessProvider).isPro,
-              onLockedTap: () => PaywallSheet.show(
-                context,
-                headline: views.paywallCopy['headline']?.toString(),
-                subline: views.paywallCopy['subline']?.toString(),
-                bullets: views.paywallBullets,
-                cta: views.paywallCopy['cta']?.toString(),
-                preferredPlan: PaywallPlan.pro,
+            if (month.headline.isNotEmpty || monthBody.isNotEmpty)
+              _V3ProseCard(
+                eyebrow: copy.month,
+                title: month.headline,
+                body: monthBody,
+                locked: !isPro,
+                onLockedTap: !isPro
+                    ? () => PaywallSheet.show(
+                          context,
+                          headline: views.paywallCopy['headline']?.toString(),
+                          subline: views.paywallCopy['subline']?.toString(),
+                          bullets: views.paywallBullets,
+                          cta: views.paywallCopy['cta']?.toString(),
+                          preferredPlan: PaywallPlan.pro,
+                        )
+                    : null,
+                trailingAction: isPro
+                    ? WhatsAppShareButton(
+                        onTap: () => _shareExactCard(
+                          ref,
+                          context,
+                          title: month.headline,
+                          body: monthBody,
+                          sourceType: 'purpose_result',
+                          sourceId: 'timing-month-${pack.date}',
+                        ),
+                      )
+                    : null,
               ),
-              trailingAction: WhatsAppShareButton(
-                onTap: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: month.headline,
-                  body: [
-                    month.body,
-                    month.caution,
-                  ].where((line) => line.isNotEmpty).join('\n\n'),
-                  contextLine: copy.month,
-                  sourceId: 'timing-month-${pack.date}',
-                ),
-              ),
-            ),
           ],
         );
       },
@@ -814,13 +803,19 @@ class _LifeMapTab extends ConsumerWidget {
     return async.when(
       data: (pack) {
         if (pack == null) {
-          return _EmptyStateScreen(
-            headline: l10n.journeyEmptyHeadline,
-            message: l10n.journeyEmptyMessage,
-            icon: Icons.auto_graph_rounded,
+          return MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.screen,
+            message: l10n.loadingLifeMap,
+          );
+        }
+        if (!pack.isScreenReady(BirthPackScreen.lifeMap)) {
+          return MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.screen,
+            message: l10n.loadingLifeMap,
           );
         }
         final views = BirthPackViews(pack);
+        final isPro = ref.watch(subscriptionAccessProvider).isPro;
         final past = views.chaptersByTense('past');
         final future = views.chaptersByTense('future');
         final current = views.chaptersByTense('current').firstOrNull;
@@ -829,26 +824,19 @@ class _LifeMapTab extends ConsumerWidget {
           subtitle: copy.lifeSub,
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
-            await ref.read(birthPackProvider.future);
           },
           children: [
             ...past.map(
               (p) => _V3ProseCard(
                 eyebrow: p.periodLabel,
                 title: p.title,
-                body: [
-                  p.story,
-                  p.avoid,
-                ].where((line) => line.isNotEmpty).join('\n\n'),
+                body: p.displayBody,
                 trailingAction: WhatsAppShareButton(
                   onTap: () => _shareExactCard(
                     ref,
                     context,
                     title: p.title,
-                    body: [
-                      p.story,
-                      p.avoid,
-                    ].where((line) => line.isNotEmpty).join('\n\n'),
+                    body: p.displayBody,
                     contextLine: p.periodLabel,
                     sourceType: 'journey_phase',
                     sourceId: 'life-past-${p.periodLabel}',
@@ -856,41 +844,33 @@ class _LifeMapTab extends ConsumerWidget {
                 ),
               ),
             ),
-            if (current != null && current.title.isNotEmpty)
+            if (current != null &&
+                (current.title.isNotEmpty || current.displayBody.isNotEmpty))
               _V3ProseCard(
-                eyebrow: copy.currentPhase,
+                eyebrow: '${copy.currentPhase} · ${current.periodLabel}',
                 title: current.title,
-                body: [
-                  current.periodLabel,
-                  current.useFor,
-                  current.avoid,
-                ].where((line) => line.isNotEmpty).join('\n\n'),
+                body: current.displayBody,
                 trailingAction: WhatsAppShareButton(
                   onTap: () => _shareExactCard(
                     ref,
                     context,
                     title: current.title,
-                    body: [
-                      current.periodLabel,
-                      current.useFor,
-                      current.avoid,
-                    ].where((line) => line.isNotEmpty).join('\n\n'),
-                    contextLine: copy.currentPhase,
+                    body: current.displayBody,
+                    contextLine: '${copy.currentPhase} · ${current.periodLabel}',
                     sourceType: 'journey_phase',
                     sourceId: 'life-current-${pack.date}',
                   ),
                 ),
               ),
-            ...future.take(5).map(
-                  (p) => _V3ProseCard(
+            ...future.map(
+                  (p) {
+                    final locked = p.locked && !isPro;
+                    return _V3ProseCard(
                     eyebrow: p.periodLabel,
                     title: p.title,
-                    body: [
-                      p.story,
-                      p.avoid,
-                    ].where((line) => line.isNotEmpty).join('\n\n'),
-                    locked: p.locked,
-                    onLockedTap: p.locked
+                    body: p.displayBody,
+                    locked: locked,
+                    onLockedTap: locked
                         ? () => PaywallSheet.show(
                               context,
                               headline: views.paywallCopy['headline']?.toString(),
@@ -900,21 +880,21 @@ class _LifeMapTab extends ConsumerWidget {
                               preferredPlan: PaywallPlan.pro,
                             )
                         : null,
-                    trailingAction: WhatsAppShareButton(
+                    trailingAction: locked
+                        ? null
+                        : WhatsAppShareButton(
                       onTap: () => _shareExactCard(
                         ref,
                         context,
                         title: p.title,
-                        body: [
-                          p.story,
-                          p.avoid,
-                        ].where((line) => line.isNotEmpty).join('\n\n'),
+                        body: p.displayBody,
                         contextLine: p.periodLabel,
                         sourceType: 'journey_phase',
                         sourceId: 'life-future-${p.periodLabel}',
                       ),
                     ),
-                  ),
+                  );
+                  },
                 ),
           ],
         );
@@ -937,7 +917,6 @@ class _V3ProseCard extends StatelessWidget {
     required this.eyebrow,
     required this.title,
     required this.body,
-    this.chips = const <String>[],
     this.trailingAction,
     this.locked = false,
     this.onLockedTap,
@@ -946,7 +925,6 @@ class _V3ProseCard extends StatelessWidget {
   final String eyebrow;
   final String title;
   final String body;
-  final List<String> chips;
   final Widget? trailingAction;
   final bool locked;
   final VoidCallback? onLockedTap;
@@ -954,9 +932,81 @@ class _V3ProseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (title.trim().isEmpty && body.trim().isEmpty) {
+    if (!locked && title.trim().isEmpty && body.trim().isEmpty) {
       return const SizedBox.shrink();
     }
+    if (locked) {
+      final l10n = AppLocalizations.of(context)!;
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(MuhRadius.card),
+          onTap: onLockedTap,
+          child: Container(
+            padding: const EdgeInsets.all(MuhSpace.lg),
+            decoration: BoxDecoration(
+              color: MuhColors.surface,
+              borderRadius: BorderRadius.circular(MuhRadius.card),
+              border: Border.all(color: MuhColors.gold.withValues(alpha: 0.28)),
+              boxShadow: MuhShadows.cardSoft,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (eyebrow.trim().isNotEmpty)
+                  Text(
+                    eyebrow,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: MuhColors.goldSoft,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                if (eyebrow.trim().isNotEmpty) const SizedBox(height: MuhSpace.xs),
+                if (title.trim().isNotEmpty)
+                  Text(
+                    title.trim(),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: MuhColors.cream.withValues(alpha: 0.72),
+                      fontWeight: FontWeight.w800,
+                      height: 1.18,
+                    ),
+                  ),
+                const SizedBox(height: MuhSpace.md),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: MuhSpace.lg,
+                    vertical: MuhSpace.lg,
+                  ),
+                  decoration: BoxDecoration(
+                    color: MuhColors.surfaceSoft,
+                    borderRadius: BorderRadius.circular(MuhRadius.chip),
+                    border: Border.all(color: MuhColors.goldSoft.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.lock_rounded, color: MuhColors.goldSoft, size: 20),
+                      const SizedBox(width: MuhSpace.sm),
+                      Flexible(
+                        child: Text(
+                          l10n.paywallLockedTeaser,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: MuhColors.cream,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final card = Container(
       padding: const EdgeInsets.all(MuhSpace.lg),
       decoration: BoxDecoration(
@@ -1022,65 +1072,11 @@ class _V3ProseCard extends StatelessWidget {
               ),
             ),
           ],
-          if (chips.where((c) => c.trim().isNotEmpty).isNotEmpty) ...[
-            const SizedBox(height: MuhSpace.md),
-            Wrap(
-              spacing: MuhSpace.sm,
-              runSpacing: MuhSpace.sm,
-              children: chips
-                  .where((c) => c.trim().isNotEmpty)
-                  .map((c) => _TinyPhaseChip(c.trim()))
-                  .toList(),
-            ),
-          ],
         ],
       ),
     );
 
-    if (!locked) return card;
-
-    final l10n = AppLocalizations.of(context)!;
-    return Stack(
-      children: [
-        Opacity(opacity: 0.45, child: card),
-        Positioned.fill(
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(MuhRadius.card),
-              onTap: onLockedTap,
-              child: Center(
-                child: Container(
-                  margin: const EdgeInsets.all(MuhSpace.lg),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: MuhSpace.lg,
-                    vertical: MuhSpace.md,
-                  ),
-                  decoration: BoxDecoration(
-                    color: MuhColors.surface.withValues(alpha: 0.95),
-                    borderRadius: BorderRadius.circular(MuhRadius.chip),
-                    border: Border.all(color: MuhColors.goldSoft),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.lock_outline, color: MuhColors.goldSoft, size: 18),
-                      const SizedBox(width: MuhSpace.sm),
-                      Text(
-                        l10n.paywallLockedTeaser,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: MuhColors.cream,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+    return card;
   }
 }
 
@@ -1135,34 +1131,6 @@ class _V3Scroll extends StatelessWidget {
       color: MuhColors.gold,
       onRefresh: onRefresh!,
       child: list,
-    );
-  }
-}
-
-class _TinyPhaseChip extends StatelessWidget {
-  const _TinyPhaseChip(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: MuhSpace.sm,
-        vertical: MuhSpace.xs,
-      ),
-      decoration: BoxDecoration(
-        color: MuhColors.gold.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(MuhRadius.chip),
-        border: Border.all(color: MuhColors.gold.withValues(alpha: 0.16)),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: MuhColors.goldSoft,
-              fontWeight: FontWeight.w700,
-            ),
-      ),
     );
   }
 }
@@ -1247,7 +1215,11 @@ class _AskTabState extends State<_AskTab> {
     return en[key] ?? key;
   }
 
-  List<String> _suggestions() {
+  List<String> _suggestions(BirthPackPayload? pack) {
+    if (pack != null) {
+      final fromPack = BirthPackViews(pack).askSuggestions;
+      if (fromPack.isNotEmpty) return fromPack;
+    }
     if (_lang == 'te') {
       return const [
         'ఈరోజు ఇంటర్వ్యూకి బాగుందా?',
@@ -1292,7 +1264,11 @@ class _AskTabState extends State<_AskTab> {
     if (api == null) return;
     setState(() => _result = const AsyncValue.loading());
     try {
-      final loc = widget.ref.read(localeProvider).languageCode;
+      final packLocale =
+          widget.ref.read(birthPackProvider).valueOrNull?.locale;
+      final loc = (packLocale != null && packLocale.isNotEmpty)
+          ? packLocale
+          : widget.ref.read(localeProvider).languageCode;
       final r = await api.ask(
         question: question,
         sessionId: _sessionId,
@@ -1360,6 +1336,27 @@ class _AskTabState extends State<_AskTab> {
       );
     }
 
+    final packAsync = widget.ref.watch(birthPackProvider);
+    return packAsync.when(
+      data: (pack) {
+        if (pack != null && !pack.isScreenReady(BirthPackScreen.ask)) {
+          return MuhurthaLoadingView(
+            mode: MuhurthaLoadingMode.ask,
+            message: widget.l10n.loadingAsk,
+          );
+        }
+        return _askBody(theme, pack: pack);
+      },
+      loading: () => MuhurthaLoadingView(
+        mode: MuhurthaLoadingMode.ask,
+        message: widget.l10n.loadingAsk,
+      ),
+      error: (_, __) => _askBody(theme, pack: null),
+    );
+  }
+
+  Widget _askBody(ThemeData theme, {BirthPackPayload? pack}) {
+    final knowledgeHint = pack == null ? '' : BirthPackViews(pack).askKnowledgeHint;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -1377,7 +1374,7 @@ class _AskTabState extends State<_AskTab> {
           ),
           const SizedBox(height: MuhSpace.sm),
           Text(
-            _tx('sub'),
+            knowledgeHint.isNotEmpty ? knowledgeHint : _tx('sub'),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: MuhColors.creamMuted,
               height: 1.45,
@@ -1435,7 +1432,7 @@ class _AskTabState extends State<_AskTab> {
             spacing: MuhSpace.sm,
             runSpacing: MuhSpace.sm,
             children: [
-              ..._suggestions().map(
+              ..._suggestions(pack).map(
                 (q) => _PurposeChoiceChip(
                   label: q,
                   isSelected: false,

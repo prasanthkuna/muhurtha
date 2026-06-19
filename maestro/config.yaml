@@ -1,0 +1,4 @@
+# Maestro minimal smoke config — run: .\scripts\test-maestro-smoke.ps1
+flows:
+  - flows/smoke_launch.yaml
+  - flows/smoke_auth.yaml

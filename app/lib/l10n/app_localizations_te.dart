@@ -67,6 +67,29 @@ class AppLocalizationsTe extends AppLocalizations {
   String get authResendCode => 'కోడ్ మరలా పంపు';
 
   @override
+  String get authTapPhone => 'మొబైల్ నంబర్ ఎంచుకోవడానికి ట్యాప్ చేయండి';
+
+  @override
+  String get authTypeNumberInstead => 'నంబర్ చేతిగా టైప్ చేయండి';
+
+  @override
+  String get authUsePhonePicker => 'ఫోన్ పికర్ ఉపయోగించండి';
+
+  @override
+  String get authContinue => 'కొనసాగించు';
+
+  @override
+  String get authChooseFromSim => 'SIM నుండి నంబర్ ఎంచుకోండి';
+
+  @override
+  String get authPickerCancelled =>
+      'నంబర్ ఎంచుకోలేదు. పైన టైప్ చేయండి లేదా మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get authStuckRetry =>
+      'చాలా సమయం పట్టింది. మళ్లీ ప్రయత్నించడానికి కొనసాగించు నొక్కండి.';
+
+  @override
   String get onboardingBirthTitle => 'జనన వివరాలు';
 
   @override

@@ -6,6 +6,7 @@
 library;
 
 export 'muhurta_colors.dart';
+export 'muhurta_icons.dart';
 export 'muhurta_radius.dart';
 export 'muhurta_shadows.dart';
 export 'muhurta_spacing.dart';

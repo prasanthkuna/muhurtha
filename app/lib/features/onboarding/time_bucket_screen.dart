@@ -144,8 +144,15 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
                               clearJanmaNakshatra: true,
                             ),
                           );
+                        } else {
+                          notifier.update(
+                            (d) => d.copyWith(
+                              nakshatraUnknown: true,
+                              clearJanmaNakshatra: true,
+                            ),
+                          );
                         }
-                        context.push('/onboarding/nakshatra');
+                        context.push('/onboarding/accuracy');
                       },
               ),
             ],

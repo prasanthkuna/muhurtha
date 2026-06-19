@@ -11,6 +11,7 @@
 ehthumbs.db
 Thumbs.db
 Desktop.ini
+*.stackdump
 
 # --- IDE / editors / AI tooling ---
 .vscode/
@@ -19,12 +20,17 @@ Desktop.ini
 !.vscode/tasks.json
 .idea/
 .cursor/
+!.cursor/mcp.json
 .codex/
+.agents/
 *.iml
 *.iws
 *.ipr
 *.sublime-project
 *.sublime-workspace
+*.swp
+*.swo
+*~
 
 # --- Secrets & local config (never commit) ---
 .env
@@ -53,6 +59,7 @@ app/dart_defines.json
 *.dmg
 *.exe
 *.msi
+*.jar
 
 # --- Logs & temp ---
 *.log
@@ -60,11 +67,15 @@ logs/
 tmp/
 temp/
 .cache/
+*.hprof
 
 # --- Supabase local / CLI ---
 supabase/.temp/
 supabase/.branches/
 supabase/.env
+
+# --- Vendored tooling (install locally; never commit binaries) ---
+tools/
 
 # --- Flutter / Dart (app/) ---
 app/.dart_tool/
@@ -73,6 +84,7 @@ app/.pub-cache/
 app/.pub/
 app/build/
 app/coverage/
+app/.flutter-plugins
 app/.flutter-plugins-dependencies
 app/**/doc/api/
 app/**/*.freezed.dart
@@ -113,8 +125,15 @@ app/web/.dart_tool/
 # --- Deno / Edge Functions (local only) ---
 **/.deno/
 
+# Dev-only edge smoke tests (local model experiments)
+supabase/functions/muhurtha-api/openrouter_model_smoke.ts
+
 # --- Docs: local phone dumps (use curated assets if needed for docs) ---
 docs/screenshots/
+
+# --- Local dev scripts (read API keys from supabase/.env) ---
+scripts/compare-nemotron-models.ps1
+scripts/test-openrouter-*.ps1
 
 # --- Node (if added later for tooling) ---
 node_modules/
@@ -122,3 +141,4 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+dist/

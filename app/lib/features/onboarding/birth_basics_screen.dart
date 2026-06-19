@@ -42,6 +42,9 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
           await ref.read(locationLocaleServiceProvider).detectAndApply();
       if (!mounted) return;
       if (result.city != null) _city.text = result.city!;
+      if (result.languageCode != null) {
+        ref.read(localeProvider.notifier).setLanguageCode(result.languageCode!);
+      }
     } finally {
       if (mounted) setState(() => _detectingLocation = false);
     }

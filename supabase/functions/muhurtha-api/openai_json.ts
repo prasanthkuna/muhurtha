@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAppEvent } from "./engine.ts";
+import {
+  resolveBirthPackMaxTokens,
+  resolveBirthPackSectionMaxTokens,
+} from "./openrouter_json.ts";
 
 const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
+const BIRTH_PACK_TEMPERATURE = 0.55;
 
 export type JsonGenerationEnvelope = {
   text: string;
@@ -22,11 +27,19 @@ function resolveModel(modelEnvName?: string): string {
     DEFAULT_OPENAI_MODEL;
 }
 
-function maxCompletionTokens(modelEnvName?: string): number | null {
-  if (modelEnvName !== "BIRTH_PACK_MODEL") return null;
-  const parsed = Number(Deno.env.get("BIRTH_PACK_MAX_COMPLETION_TOKENS") ?? "36000");
-  if (!Number.isFinite(parsed) || parsed < 4096) return 36000;
-  return Math.floor(parsed);
+function maxCompletionTokens(
+  modelEnvName?: string,
+  birthPackPhase?: string,
+): number | null {
+  const isBirthPack = modelEnvName === "BIRTH_PACK_MODEL" || birthPackPhase != null;
+  if (!isBirthPack) return null;
+  if (birthPackPhase === "playbook" || birthPackPhase === "life_map_journey") {
+    return resolveBirthPackMaxTokens();
+  }
+  if (birthPackPhase) {
+    return resolveBirthPackSectionMaxTokens(birthPackPhase);
+  }
+  return resolveBirthPackMaxTokens();
 }
 
 export async function openAiGenerateJson(
@@ -49,6 +62,7 @@ export async function openAiGenerateJsonEnvelope(
     modelEnvName?: string;
     supabase?: SupabaseClient;
     profileId?: string;
+    birthPackPhase?: string;
   },
 ): Promise<JsonGenerationEnvelope | null> {
   const modelEnvName = typeof optsOrModelEnvName === "string"
@@ -60,13 +74,17 @@ export async function openAiGenerateJsonEnvelope(
   const profileId = typeof optsOrModelEnvName === "string"
     ? undefined
     : optsOrModelEnvName?.profileId;
+  const birthPackPhase = typeof optsOrModelEnvName === "string"
+    ? undefined
+    : optsOrModelEnvName?.birthPackPhase;
   const apiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
   if (!apiKey) return null;
   const model = resolveModel(modelEnvName);
-  const maxTokens = maxCompletionTokens(modelEnvName);
+  const isBirthPack = modelEnvName === "BIRTH_PACK_MODEL" || birthPackPhase != null;
+  const maxTokens = maxCompletionTokens(modelEnvName, birthPackPhase);
   const payload: Record<string, unknown> = {
     model,
-    temperature: 0.72,
+    temperature: isBirthPack ? BIRTH_PACK_TEMPERATURE : 0.72,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: systemInstruction },
@@ -136,6 +154,7 @@ export async function openAiGenerateJsonEnvelope(
       {
         model,
         modelEnvName,
+        birthPackPhase: birthPackPhase ?? null,
         promptLength: systemInstruction.length + userText.length,
         outputLength: text.length,
         maxCompletionTokens: maxTokens,

@@ -40,6 +40,30 @@ function msToIso(ms: number | null | undefined): string | null {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "authorization, content-type",
+      },
+    });
+  }
+  if (req.method === "GET") {
+    const url = new URL(req.url);
+    if (url.searchParams.get("warmup") === "1") {
+      return new Response(
+        JSON.stringify({
+          ok: Boolean(supabaseUrl && serviceKey),
+          service: "revenuecat-webhook",
+          warmedAt: new Date().toISOString(),
+        }),
+        {
+          status: supabaseUrl && serviceKey ? 200 : 503,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+  }
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }

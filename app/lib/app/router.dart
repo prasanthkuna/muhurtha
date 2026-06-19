@@ -29,7 +29,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
       final session = Supabase.instance.client.auth.currentSession;
       final isPublic = path == '/welcome' || path == '/auth';
-      if (session == null && !isPublic && !path.startsWith('/splash')) {
+      if (session == null && !isPublic) {
         return '/welcome';
       }
       if (session != null && path == '/welcome') {

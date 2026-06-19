@@ -57,13 +57,10 @@ async function generateCopy(
     system,
     JSON.stringify({ facts }),
     {
-      openRouterModelEnvName: "OPENROUTER_MODEL",
-      groqModelEnvName: "GROQ_MODEL",
       geminiModelEnvName: "GEMINI_MODEL",
       openAiModelEnvName: "CONTENT_LLM_MODEL",
       supabase: opts?.supabase,
       profileId: opts?.profileId,
-      preferFastProviders: true,
     },
   );
   if (!raw) return null;
@@ -243,13 +240,10 @@ Rules:
 - better_options may be empty, but if present they must be realistic and simple.`;
 
   const raw = await generateJsonWithFallbackEnvelope(system, JSON.stringify({ facts }), {
-    openRouterModelEnvName: "OPENROUTER_MODEL",
-    groqModelEnvName: "GROQ_MODEL",
     geminiModelEnvName: "GEMINI_MODEL",
     openAiModelEnvName: "CONTENT_LLM_MODEL",
     supabase: opts?.supabase,
     profileId: opts?.profileId,
-    preferFastProviders: true,
   });
   if (!raw) return null;
   try {
@@ -300,13 +294,10 @@ Rules:
 - keep_it_simple must remove pressure and perfectionism.`;
 
   const raw = await generateJsonWithFallbackEnvelope(system, JSON.stringify({ facts }), {
-    openRouterModelEnvName: "OPENROUTER_MODEL",
-    groqModelEnvName: "GROQ_MODEL",
     geminiModelEnvName: "GEMINI_MODEL",
     openAiModelEnvName: "CONTENT_LLM_MODEL",
     supabase: opts?.supabase,
     profileId: opts?.profileId,
-    preferFastProviders: true,
   });
   if (!raw) return null;
   try {

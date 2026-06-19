@@ -25,7 +25,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   Future<void> _route() async {
     if (!Env.hasSupabase) {
-      if (mounted) context.go('/onboarding/birth-basics');
+      if (mounted) context.go('/welcome');
       return;
     }
 
