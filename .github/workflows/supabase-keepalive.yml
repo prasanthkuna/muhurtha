@@ -1,0 +1,31 @@
+# Prevents Supabase free-tier auto-pause (~7 days idle). Uses publishable anon key only.
+# Setup: GitHub repo → Settings → Secrets → Actions → SUPABASE_ANON_KEY
+#        (same value as app/dart_defines.json SUPABASE_ANON_KEY)
+name: Supabase keep-alive
+
+on:
+  schedule:
+    # Daily 01:00 UTC (~06:30 IST)
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Supabase (auth + edge)
+        env:
+          ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$ANON_KEY" ]; then
+            echo "Missing SUPABASE_ANON_KEY secret — add it under repo Settings → Secrets → Actions"
+            exit 1
+          fi
+          BASE="https://kdngizqrybkrckvphyin.supabase.co"
+          curl -sfS -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" \
+            "$BASE/auth/v1/health" > /dev/null
+          echo "auth OK"
+          curl -sfS -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" \
+            "$BASE/functions/v1/revenuecat-webhook?warmup=1" > /dev/null
+          echo "edge OK"
