@@ -8,7 +8,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/analytics/app_analytics.dart';
 import '../../core/config/env.dart';
+import '../../core/data/profile_repository.dart';
+import '../../core/session/session_preferences.dart';
 import '../../design_system/design_system.dart';
+import '../../shared/widgets/muh_brand_mark.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/editorial/muh_page_scaffold.dart';
 
@@ -35,7 +38,24 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen>
     _c.forward();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(ref.read(appAnalyticsProvider).welcomeViewed());
+      unawaited(_maybeAutoContinueForSignedInUser());
     });
+  }
+
+  /// Skip welcome when already signed in and chart exists (common after reinstall).
+  Future<void> _maybeAutoContinueForSignedInUser() async {
+    if (!Env.hasSupabase) return;
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) return;
+    final repo = ref.read(profileRepositoryProvider);
+    if (repo == null) return;
+    try {
+      final target = await repo.initialSignedInRoute();
+      if (!mounted || target != 'home') return;
+      final tab = await SessionPreferences.defaultHomeTabQuery();
+      if (!mounted) return;
+      context.go('/home?tab=$tab');
+    } catch (_) {}
   }
 
   @override
@@ -44,7 +64,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen>
     super.dispose();
   }
 
-  void _onBegin() {
+  Future<void> _onBegin() async {
     unawaited(ref.read(appAnalyticsProvider).welcomeCtaTapped());
     unawaited(ref.read(appAnalyticsProvider).setupStarted(entry: 'welcome'));
     if (!Env.hasSupabase) {
@@ -54,10 +74,32 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen>
       return;
     }
     final session = Supabase.instance.client.auth.currentSession;
-    if (session != null) {
-      context.go('/onboarding/concern');
-    } else {
-      context.go('/auth');
+    if (session == null) {
+      if (mounted) context.go('/auth');
+      return;
+    }
+    final repo = ref.read(profileRepositoryProvider);
+    if (repo == null) {
+      if (mounted) context.go('/auth');
+      return;
+    }
+    try {
+      final target = await repo.initialSignedInRoute();
+      if (!mounted) return;
+      switch (target) {
+        case 'home':
+          final tab = await SessionPreferences.defaultHomeTabQuery();
+          if (!mounted) return;
+          context.go('/home?tab=$tab');
+        case 'onboarding':
+          context.go('/onboarding/concern');
+        default:
+          await Supabase.instance.client.auth.signOut();
+          if (mounted) context.go('/auth');
+      }
+    } catch (_) {
+      await Supabase.instance.client.auth.signOut();
+      if (mounted) context.go('/auth');
     }
   }
 
@@ -74,10 +116,12 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: MuhSpace.hero),
-              Text(
-                l10n.appTitle,
-                style: theme.textTheme.displayMedium,
+              const SizedBox(height: MuhSpace.xxl),
+              MuhBrandMark(
+                title: l10n.appTitle,
+                subtitle: 'purpose-first timing',
+                markSize: 52,
+                compact: true,
               ),
               const SizedBox(height: MuhSpace.xl),
               Text(

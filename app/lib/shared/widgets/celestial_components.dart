@@ -129,7 +129,7 @@ class CelestialHeaderCard extends StatelessWidget {
                         Text(
                           heroTitle,
                           style: theme.textTheme.titleLarge?.copyWith(
-                            color: MuhColors.goldSoft,
+                            color: MuhColors.goldDeep,
                             fontWeight: FontWeight.w700,
                             height: 1.1,
                           ),
@@ -185,13 +185,13 @@ class CelestialHeaderCard extends StatelessWidget {
                   child: Row(
                     children: [
                       const Icon(Icons.info_outline_rounded,
-                          size: 14, color: MuhColors.goldSoft),
+                          size: 14, color: MuhColors.goldDeep),
                       const SizedBox(width: MuhSpace.sm),
                       Expanded(
                         child: Text(
                           disclaimer!,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: MuhColors.goldSoft.withValues(alpha: 0.8),
+                            color: MuhColors.goldDeep.withValues(alpha: 0.85),
                             fontSize: 11,
                             fontStyle: FontStyle.italic,
                           ),
@@ -250,7 +250,7 @@ class MoonSunPill extends StatelessWidget {
           Text(
             data.symbol,
             style: const TextStyle(
-              color: MuhColors.goldSoft,
+              color: MuhColors.goldDeep,
               fontSize: 16,
               height: 1,
             ),
@@ -539,7 +539,7 @@ class DashaTimelineCard extends StatelessWidget {
             Text(
               phasePulse,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: MuhColors.goldSoft,
+                color: MuhColors.goldDeep,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -707,7 +707,7 @@ class _SignMedallion extends StatelessWidget {
         child: Text(
           symbol,
           style: TextStyle(
-            color: MuhColors.goldSoft,
+            color: MuhColors.goldDeep,
             fontSize: size * 0.44,
             fontWeight: FontWeight.w700,
             height: 1,

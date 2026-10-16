@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:muhurta/l10n/app_localizations.dart';
@@ -21,7 +22,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _route());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+      _route();
+    });
   }
 
   Future<void> _route() async {
@@ -41,20 +45,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       ref.read(localeProvider.notifier).setLanguageCode(lang);
     }
 
-    final target = await repo.initialSignedInRoute();
-    if (!mounted) return;
+    try {
+      final target = await repo.initialSignedInRoute();
+      if (!mounted) return;
 
-    switch (target) {
-      case 'home':
-        final tab = await SessionPreferences.defaultHomeTabQuery();
-        if (!mounted) return;
-        context.go('/home?tab=$tab');
-        return;
-      case 'onboarding':
-        context.go('/onboarding/birth-basics');
-        return;
-      default:
-        context.go('/welcome');
+      switch (target) {
+        case 'home':
+          final tab = await SessionPreferences.defaultHomeTabQuery();
+          if (!mounted) return;
+          context.go('/home?tab=$tab');
+          return;
+        case 'onboarding':
+          context.go('/onboarding/concern');
+          return;
+        default:
+          context.go('/welcome');
+      }
+    } catch (_) {
+      if (mounted) context.go('/welcome');
     }
   }
 

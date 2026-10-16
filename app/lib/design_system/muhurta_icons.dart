@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 abstract final class MuhTabIcons {
   static const IconData today = Icons.wb_sunny_outlined;
   static const IconData todaySelected = Icons.wb_sunny_rounded;
-  static const IconData lifeMap = Icons.menu_book_outlined;
-  static const IconData lifeMapSelected = Icons.menu_book_rounded;
+  static const IconData lifeMap = Icons.landscape_outlined;
+  static const IconData lifeMapSelected = Icons.landscape_rounded;
   static const IconData decode = Icons.auto_stories_outlined;
   static const IconData decodeSelected = Icons.auto_stories_rounded;
   static const IconData timing = Icons.schedule_outlined;

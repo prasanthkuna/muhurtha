@@ -11,8 +11,11 @@ import '../../../core/data/active_chart_profile.dart';
 import '../../../core/data/birth_pack_readiness.dart';
 import '../../../core/data/birth_pack_views.dart';
 import '../../../core/data/muhurtha_engine_api.dart';
+import '../../../core/engagement/engagement_scope.dart';
 import '../../../core/engagement/user_engagement_store.dart';
+import '../widgets/pack_coverage_banner.dart';
 import '../../../core/session/session_preferences.dart';
+import '../../../design_system/design_system.dart';
 import '../../../shared/widgets/editorial/editorial.dart';
 import '../../../shared/widgets/muhurtha_loading_view.dart';
 import '../home_copy.dart';
@@ -31,6 +34,7 @@ class DecodeEditorialTab extends ConsumerStatefulWidget {
 
 class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
   var _loggedFirstInsight = false;
+  String? _openDomainKey;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +73,7 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
           );
           unawaited(
             UserEngagementStore.instance.recordExposure(
+              scope: engagementScope(ref),
               contentKey: 'decode-${pack.date}',
               screen: 'decode',
               completed: true,
@@ -84,9 +89,15 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
             views.strengths.isNotEmpty ||
             views.watchouts.isNotEmpty;
 
+        final subtitle = identitySummary.isNotEmpty &&
+                decodeHit.isNotEmpty &&
+                identitySummary.trim() != decodeHit.trim()
+            ? identitySummary
+            : '';
+
         return HomeEditorialScroll(
           title: name.isEmpty ? copy.decodeTitle : '$name, decoded',
-          subtitle: identitySummary.isNotEmpty ? identitySummary : '',
+          subtitle: subtitle,
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
             ref.invalidate(todayPayloadProvider);
@@ -124,6 +135,7 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
                 message: l10n.loadingDecode,
                 kind: MuhInlineStatusKind.loading,
               ),
+            PackCoverageBanner(pack: pack),
             if (hasCopy) ...[
               MuhReadingSection(
                 title: decodeHit.isNotEmpty ? copy.thisSounds : copy.decodeTitle,
@@ -132,8 +144,8 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
                   label: 'Why this reading',
                   onPressed: () => MuhWhyDrawer.show(
                     context,
-                    plain: identitySummary,
-                    traditional: views.identitySummary,
+                    plain: views.decodePlainWhy,
+                    traditional: views.decodeTraditionalWhy,
                   ),
                 ),
               ),
@@ -141,6 +153,7 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
                 onSelected: (value) {
                   unawaited(
                     UserEngagementStore.instance.saveReflection(
+                      scope: engagementScope(ref),
                       contentKey: 'decode-${pack.date}',
                       feedback: value,
                     ),
@@ -161,18 +174,61 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
                   title: copy.watchouts,
                   body: views.watchouts.map((s) => '• $s').join('\n'),
                 ),
-              if (views.workMoney.isNotEmpty)
-                MuhReadingSection(
-                  eyebrow: copy.workMoney,
-                  title: copy.workMoney,
-                  body: views.workMoney,
+              if (views.categoryReports.isNotEmpty) ...[
+                const SizedBox(height: MuhSpace.sm),
+                Text(
+                  'Explore by life area',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: MuhColors.ink,
+                      ),
                 ),
-              if (views.relationship.isNotEmpty)
-                MuhReadingSection(
-                  eyebrow: copy.relationship,
-                  title: copy.relationship,
-                  body: views.relationship,
-                ),
+                const SizedBox(height: MuhSpace.sm),
+                for (final report in views.categoryReports)
+                  ExpansionTile(
+                    key: ValueKey(report.key),
+                    initiallyExpanded: _openDomainKey == report.key,
+                    onExpansionChanged: (open) {
+                      setState(() => _openDomainKey = open ? report.key : null);
+                    },
+                    title: Text(
+                      report.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          MuhSpace.md,
+                          0,
+                          MuhSpace.md,
+                          MuhSpace.md,
+                        ),
+                        child: Text(
+                          report.body,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                height: 1.45,
+                                color: MuhColors.ink,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+              ] else ...[
+                if (views.workMoney.isNotEmpty)
+                  MuhReadingSection(
+                    eyebrow: copy.workMoney,
+                    title: copy.workMoney,
+                    body: views.workMoney,
+                  ),
+                if (views.relationship.isNotEmpty)
+                  MuhReadingSection(
+                    eyebrow: copy.relationship,
+                    title: copy.relationship,
+                    body: views.relationship,
+                  ),
+              ],
             ],
           ],
         );

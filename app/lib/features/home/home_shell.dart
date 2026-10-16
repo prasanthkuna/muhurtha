@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
@@ -11,31 +12,35 @@ import '../../core/data/chart_profile_repository.dart';
 import '../../core/data/active_chart_profile.dart';
 import '../../core/data/birth_pack_views.dart';
 import '../../core/data/muhurtha_engine_api.dart';
-import '../../core/format/clock_format.dart';
-import '../../core/format/day_window_label.dart';
 import '../../core/locale/locale_provider.dart';
 import '../../core/notifications/muhurtha_notification_service.dart';
 import '../../core/growth/referral_service.dart';
 import '../../core/share/share_card_service.dart';
 import '../../core/data/profile_repository.dart';
 import '../../core/analytics/app_analytics.dart';
-import '../../core/subscription/subscription_access.dart';
 import '../../core/subscription/subscription_service.dart';
 import '../../shared/widgets/paywall_sheet.dart';
 import '../../design_system/design_system.dart';
 import '../../shared/widgets/chart_profile_switcher.dart';
 import '../../shared/widgets/celestial_components.dart';
 import '../../shared/widgets/lucky_strip.dart';
-import '../../core/engagement/user_engagement_store.dart';
 import '../../shared/widgets/editorial/editorial.dart';
+import '../../shared/widgets/muh_purpose_chip.dart';
+import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
 import 'home_editorial_scroll.dart';
 import 'home_prose_card.dart';
 import '../../shared/widgets/muh_timeline_hero.dart';
-import '../../shared/widgets/muh_timing_split.dart';
 import 'tabs/decode_editorial_tab.dart';
 import 'tabs/life_atlas_tab.dart';
+import 'tabs/timing_editorial_tab.dart';
+import 'home_purpose_provider.dart';
 import 'home_share.dart';
+import 'widgets/pack_coverage_banner.dart';
+import 'widgets/today_timing_panel.dart';
+import '../../core/data/birth_pack_coverage.dart';
+import '../../core/engagement/ask_conversation_store.dart';
+import '../../core/engagement/engagement_scope.dart';
 
 const _purposeEntries = <({String value, String labelKey})>[
   (value: 'career_interview', labelKey: 'purposeCareerInterview'),
@@ -50,9 +55,16 @@ const _purposeEntries = <({String value, String labelKey})>[
 ];
 
 class HomeShell extends ConsumerStatefulWidget {
-  const HomeShell({super.key, this.initialIndex = 0});
+  const HomeShell({
+    super.key,
+    this.initialIndex = 0,
+    this.initialPurpose,
+    this.initialTimingDate,
+  });
 
   final int initialIndex;
+  final String? initialPurpose;
+  final String? initialTimingDate;
 
   @override
   ConsumerState<HomeShell> createState() => _HomeShellState();
@@ -64,19 +76,52 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _configureBilling());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _configureBilling();
+      if (widget.initialPurpose != null) {
+        ref.read(homeSelectedPurposeProvider.notifier).state =
+            widget.initialPurpose;
+      }
+      if (widget.initialTimingDate != null) {
+        ref.read(homeTimingTargetDateProvider.notifier).state =
+            widget.initialTimingDate;
+      }
+    });
   }
 
   static const _tabNames = ['today', 'life_map', 'decode', 'timing', 'ask'];
 
+  void _syncTabFromRoute() {
+    final tab = GoRouterState.of(context).uri.queryParameters['tab'];
+    if (tab == null || tab.isEmpty) return;
+    final i = _tabNames.indexOf(tab);
+    if (i >= 0 && i != _index) {
+      setState(() => _index = i);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncTabFromRoute();
+  }
+
   void _selectTab(int i) {
     final next = i.clamp(0, _tabNames.length - 1);
+    if (next != _index) {
+      HapticFeedback.selectionClick();
+    }
     setState(() => _index = next);
     final tab = _tabNames[next];
-    final current = GoRouterState.of(context).uri.queryParameters['tab'];
-    if (current != tab) {
-      context.go('/home?tab=$tab');
-    }
+    final uri = GoRouterState.of(context).uri;
+    final params = Map<String, String>.from(uri.queryParameters);
+    if (params['tab'] == tab) return;
+    params['tab'] = tab;
+    final q = params.entries
+        .map((e) =>
+            '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    context.go('/home?$q');
   }
 
   Future<void> _configureBilling() async {
@@ -154,7 +199,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       _TodayFocusTab(l10n: l10n, purposeLabel: _purposeLabel),
       LifeAtlasTab(l10n: l10n),
       DecodeEditorialTab(l10n: l10n),
-      _TimingTab(l10n: l10n, ref: ref),
+      TimingEditorialTab(l10n: l10n, purposeLabel: _purposeLabel),
       _AskTab(
         l10n: l10n,
         ref: ref,
@@ -207,32 +252,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                     ),
                   ),
                   Expanded(
-                    child: AnimatedSwitcher(
-                      duration: MuhMotion.medium,
-                      switchInCurve: MuhMotion.enterCurve,
-                      switchOutCurve: MuhMotion.exitCurve,
-                      transitionBuilder: (child, animation) {
-                        final slide = Tween<Offset>(
-                          begin: const Offset(0, 0.018),
-                          end: Offset.zero,
-                        ).animate(
-                          CurvedAnimation(
-                            parent: animation,
-                            curve: MuhMotion.enterCurve,
+                    child: IndexedStack(
+                      index: _index,
+                      children: [
+                        for (var i = 0; i < pages.length; i++)
+                          _HomeTabKeepAlive(
+                            active: _index == i,
+                            child: KeyedSubtree(
+                              key: ValueKey('$chartScope-$i-$localeCode'),
+                              child: pages[i],
+                            ),
                           ),
-                        );
-                        return FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(
-                            position: slide,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: KeyedSubtree(
-                        key: ValueKey('$chartScope-$_index-$localeCode'),
-                        child: pages[_index],
-                      ),
+                      ],
                     ),
                   ),
                 ],
@@ -346,24 +377,8 @@ class _TodayFocusTab extends ConsumerStatefulWidget {
 class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
   var _loggedOpen = false;
   var _planningExpanded = false;
-  String? _selectedPurpose;
-
-  List<TimeWindowData> _windows(
-    List<TimingWindow> windows,
-    AppLocalizations l10n,
-  ) {
-    return windows
-        .take(3)
-        .map(
-          (w) => TimeWindowData(
-            timeText:
-                '${clock12h(clockHm(w.start))} - ${clock12h(clockHm(w.end))}',
-            tag: localizeWindowLabel(l10n, w.label),
-            note: w.whyItWorks,
-          ),
-        )
-        .toList();
-  }
+  var _traditionsExpanded = false;
+  var _outlookExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -420,9 +435,8 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
                 personalizing: true,
               ),
               const SizedBox(height: MuhSpace.md),
-              MuhTimingSplit(
-                goodWindows: payload.goodWindows,
-                cautionWindows: payload.cautionWindows,
+              TodayTimingPanel(
+                payload: payload,
                 goodTitle: copy.goodWindow,
                 cautionTitle: copy.cautionWindow,
               ),
@@ -481,9 +495,29 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
             ),
           ),
           children: [
+            PackCoverageBanner(pack: pack),
+            if (!pack.hasTodayCardFor(payload.date) && pack.dailyCardCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: MuhSpace.md),
+                child: MuhInlineStatus(
+                  message:
+                      'No dedicated reading for this date yet. Windows below are calculated; narrative may be limited.',
+                  kind: MuhInlineStatusKind.empty,
+                ),
+              ),
             MuhTimelineHero(
               payload: payload,
               headline: mainAdvice.isNotEmpty ? mainAdvice : (payload.oneLine ?? ''),
+            ),
+            const SizedBox(height: MuhSpace.md),
+            TodayTimingPanel(
+              payload: payload,
+              goodTitle: copy.goodWindow,
+              cautionTitle: copy.cautionWindow,
+              goodSummary: goodSummary.isNotEmpty ? goodSummary : null,
+              avoidSummary: avoidSummary.isNotEmpty ? avoidSummary : null,
+              betterFor: betterFor,
+              beCareful: beCareful,
             ),
             const SizedBox(height: MuhSpace.md),
             MuhQuietButton(
@@ -504,12 +538,14 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
                 children: _purposeEntries.map((entry) {
                   final purposeLabel =
                       widget.purposeLabel(l10n, entry.labelKey);
-                  final selected = _selectedPurpose == entry.value;
-                  return _PurposeChoiceChip(
+                  final selected =
+                      ref.watch(homeSelectedPurposeProvider) == entry.value;
+                  return MuhPurposeChip(
                     label: purposeLabel,
                     isSelected: selected,
                     onTap: () {
-                      setState(() => _selectedPurpose = entry.value);
+                      ref.read(homeSelectedPurposeProvider.notifier).state =
+                          entry.value;
                       unawaited(
                         ref.read(appAnalyticsProvider).purposeSelected(
                               purpose: entry.value,
@@ -519,56 +555,80 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
                   );
                 }).toList(),
               ),
-              if (_selectedPurpose != null) ...[
+              if (ref.watch(homeSelectedPurposeProvider) != null) ...[
                 const SizedBox(height: MuhSpace.sm),
-                TextButton(
-                  onPressed: () => context.go('/home?tab=timing'),
-                  child: Text(l10n.purposeCheck),
+                MuhPrimaryButton(
+                  expanded: false,
+                  label: l10n.purposeCheck,
+                  onPressed: () {
+                    final purpose = ref.read(homeSelectedPurposeProvider)!;
+                    ref.read(homeTimingTargetDateProvider.notifier).state =
+                        payload.date;
+                    context.go(
+                      '/home?tab=timing&purpose=${Uri.encodeComponent(purpose)}&date=${Uri.encodeComponent(payload.date)}',
+                    );
+                  },
                 ),
               ],
             ],
-            const SizedBox(height: MuhSpace.md),
-            MuhTimingSplit(
-              goodWindows: payload.goodWindows,
-              cautionWindows: payload.cautionWindows,
-              goodTitle: copy.goodWindow,
-              cautionTitle: copy.cautionWindow,
-            ),
-            const SizedBox(height: MuhSpace.lg),
-            if (luck.luckyNumbers.isNotEmpty ||
-                luck.luckyDays.isNotEmpty ||
-                luck.luckyColours.isNotEmpty)
-              LuckyStrip(luck: luck),
-            TimeWindowRail(
-              title: copy.goodWindow,
-              subtitle: goodSummary.isNotEmpty ? goodSummary : null,
-              windows: _windows(payload.goodWindows, l10n),
-              tone: WindowTone.good,
-            ),
-            TimeWindowRail(
-              title: copy.cautionWindow,
-              subtitle: avoidSummary.isNotEmpty ? avoidSummary : null,
-              windows: _windows(payload.cautionWindows, l10n),
-              tone: WindowTone.caution,
-            ),
-            _InsightSection(
-              title: copy.betterFor,
-              items: betterFor,
-              accent: MuhColors.successInk,
-            ),
-            _InsightSection(
-              title: copy.carefulWith,
-              items: beCareful,
-              accent: MuhColors.warningInk,
-            ),
-            if (remedy != null)
-              RitualCard(
-                typeLabel: remedy.remedyCategoryLabel,
-                title: remedy.title,
-                whyNow: remedy.whyNow,
-                whatToDo: remedy.simpleLine,
-                keepItSimple: remedy.keepItSimple,
+            if (views.week.headline.isNotEmpty || views.month.headline.isNotEmpty) ...[
+              const SizedBox(height: MuhSpace.md),
+              MuhQuietButton(
+                label: _outlookExpanded ? 'Hide outlook' : 'This week / month',
+                icon: _outlookExpanded
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+                onPressed: () =>
+                    setState(() => _outlookExpanded = !_outlookExpanded),
               ),
+              if (_outlookExpanded) ...[
+                const SizedBox(height: MuhSpace.sm),
+                if (views.week.headline.isNotEmpty || views.week.body.isNotEmpty)
+                  HomeProseCard(
+                    eyebrow: copy.week,
+                    title: views.week.headline,
+                    body: views.week.body,
+                  ),
+                if (views.month.headline.isNotEmpty || views.month.body.isNotEmpty)
+                  HomeProseCard(
+                    eyebrow: copy.month,
+                    title: views.month.headline,
+                    body: views.month.body,
+                  ),
+              ],
+            ],
+            if (remedy != null ||
+                luck.luckyNumbers.isNotEmpty ||
+                luck.luckyDays.isNotEmpty ||
+                luck.luckyColours.isNotEmpty) ...[
+              const SizedBox(height: MuhSpace.md),
+              MuhQuietButton(
+                label: _traditionsExpanded
+                    ? 'Hide traditions'
+                    : 'Traditions & practice',
+                icon: _traditionsExpanded
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+                onPressed: () => setState(
+                  () => _traditionsExpanded = !_traditionsExpanded,
+                ),
+              ),
+              if (_traditionsExpanded) ...[
+                const SizedBox(height: MuhSpace.sm),
+                if (luck.luckyNumbers.isNotEmpty ||
+                    luck.luckyDays.isNotEmpty ||
+                    luck.luckyColours.isNotEmpty)
+                  LuckyStrip(luck: luck),
+                if (remedy != null)
+                  RitualCard(
+                    typeLabel: remedy.remedyCategoryLabel,
+                    title: remedy.title,
+                    whyNow: remedy.whyNow,
+                    whatToDo: remedy.simpleLine,
+                    keepItSimple: remedy.keepItSimple,
+                  ),
+              ],
+            ],
           ],
         );
       },
@@ -580,183 +640,6 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
         headline: l10n.todayEmptyHeadline,
         message: l10n.errorGeneric,
         icon: Icons.wb_sunny_outlined,
-      ),
-    );
-  }
-}
-
-class _TimingTab extends ConsumerWidget {
-  const _TimingTab({required this.l10n, required this.ref});
-
-  final AppLocalizations l10n;
-  final WidgetRef ref;
-
-  @override
-  Widget build(BuildContext context, WidgetRef _) {
-    final packAsync = ref.watch(birthPackProvider);
-    ref.watch(activeChartProfileIdProvider);
-    final subjectName = ref.watch(chartDisplayNameProvider);
-    final copy = _V3Copy(l10n);
-    return packAsync.when(
-      data: (pack) {
-        if (pack == null) {
-          return MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.screen,
-            message: l10n.loadingTimingPlan,
-          );
-        }
-        if (!pack.hasLlmPack) {
-          return MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.screen,
-            message: l10n.loadingTimingPlan,
-          );
-        }
-        final views = BirthPackViews(pack);
-        final isPro = ref.watch(subscriptionAccessProvider).isPro;
-        final week = views.week;
-        final month = views.month;
-        final weekBody = [
-          week.body,
-          week.caution,
-        ].where((line) => line.isNotEmpty).join('\n\n');
-        final monthBody = [
-          month.body,
-          month.caution,
-        ].where((line) => line.isNotEmpty).join('\n\n');
-        final timingTitle = subjectName.isNotEmpty
-            ? '${subjectName.trim()}, ${copy.timingTitle.toLowerCase()}'
-            : copy.timingTitle;
-        final shareBody = [
-          if (week.headline.isNotEmpty) week.headline,
-          if (weekBody.isNotEmpty) weekBody,
-          if (isPro && month.headline.isNotEmpty) month.headline,
-          if (isPro && monthBody.isNotEmpty) monthBody,
-        ].join('\n\n');
-        final extraWeekly = views.weeklyCards;
-        final extraMonthly = views.monthlyCards;
-        final hasHorizonCopy = week.headline.isNotEmpty ||
-            weekBody.isNotEmpty ||
-            month.headline.isNotEmpty ||
-            monthBody.isNotEmpty ||
-            extraWeekly.isNotEmpty ||
-            extraMonthly.isNotEmpty;
-        return HomeEditorialScroll(
-          title: timingTitle,
-          subtitle: '',
-          onRefresh: () async {
-            ref.invalidate(birthPackProvider);
-          },
-          footer: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              MuhQuietButton(
-                label: 'Save this plan',
-                icon: Icons.bookmark_outline_rounded,
-                onPressed: () {
-                  unawaited(
-                    UserEngagementStore.instance.saveIntention(
-                      id: 'timing-plan-${pack.date}',
-                      purpose: 'timing_plan',
-                      dateIso: pack.date,
-                    ),
-                  );
-                  unawaited(
-                    ref.read(appAnalyticsProvider).intentionSaved(
-                          purpose: 'timing_plan',
-                        ),
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l10n.profileSaved)),
-                  );
-                },
-              ),
-              if (shareBody.trim().isNotEmpty)
-                MuhQuietButton(
-                  label: 'Share timing',
-                  icon: Icons.ios_share_rounded,
-                  onPressed: () => _shareExactCard(
-                    ref,
-                    context,
-                    title: timingTitle,
-                    body: shareBody,
-                    sourceType: 'purpose_result',
-                    sourceId: 'timing-plan-${pack.date}',
-                  ),
-                ),
-            ],
-          ),
-          children: [
-            if (!hasHorizonCopy && pack.isGenerating)
-              MuhInlineStatus(
-                message: l10n.loadingTimingPlan,
-                kind: MuhInlineStatusKind.loading,
-              ),
-            if (week.headline.isNotEmpty || weekBody.isNotEmpty)
-              HomeProseCard(
-                eyebrow: copy.week,
-                title: week.headline,
-                body: weekBody,
-              ),
-            if (month.headline.isNotEmpty || monthBody.isNotEmpty)
-              HomeProseCard(
-                eyebrow: copy.month,
-                title: month.headline,
-                body: monthBody,
-                locked: !isPro,
-                onLockedTap: !isPro
-                    ? () => PaywallSheet.show(
-                          context,
-                          headline: views.paywallCopy['headline']?.toString(),
-                          subline: views.paywallCopy['subline']?.toString(),
-                          bullets: views.paywallBullets,
-                          cta: views.paywallCopy['cta']?.toString(),
-                          preferredPlan: PaywallPlan.pro,
-                        )
-                    : null,
-              ),
-            if (week.headline.isEmpty && weekBody.isEmpty)
-              for (final card in extraWeekly)
-                HomeProseCard(
-                  eyebrow: copy.week,
-                  title: card.headline,
-                  body: [
-                    card.body,
-                    card.caution,
-                  ].where((line) => line.isNotEmpty).join('\n\n'),
-                ),
-            if (month.headline.isEmpty && monthBody.isEmpty)
-              for (final card in extraMonthly)
-                HomeProseCard(
-                  eyebrow: copy.month,
-                  title: card.headline,
-                  body: [
-                    card.body,
-                    card.caution,
-                  ].where((line) => line.isNotEmpty).join('\n\n'),
-                  locked: !isPro,
-                  onLockedTap: !isPro
-                      ? () => PaywallSheet.show(
-                            context,
-                            headline: views.paywallCopy['headline']?.toString(),
-                            subline: views.paywallCopy['subline']?.toString(),
-                            bullets: views.paywallBullets,
-                            cta: views.paywallCopy['cta']?.toString(),
-                            preferredPlan: PaywallPlan.pro,
-                          )
-                      : null,
-                ),
-          ],
-        );
-      },
-      loading: () => MuhurthaLoadingView(
-        mode: MuhurthaLoadingMode.screen,
-        message: l10n.loadingTimingPlan,
-      ),
-      error: (_, __) => _EmptyStateScreen(
-        headline: copy.timingTitle,
-        message:
-            'Birth pack is not ready yet. Pull to retry after generation finishes.',
-        icon: Icons.schedule_rounded,
       ),
     );
   }
@@ -782,6 +665,8 @@ class _AskTabState extends State<_AskTab> {
   AsyncValue<AskAnswerResult?>? _result;
   String? _sessionId;
   bool? _answerUseful;
+  List<AskTurn> _history = const [];
+  var _loadedHistory = false;
 
   String get _lang =>
       widget.ref.read(localeProvider).languageCode.toLowerCase();
@@ -872,6 +757,23 @@ class _AskTabState extends State<_AskTab> {
     ];
   }
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadHistory());
+  }
+
+  void _loadHistory() {
+    if (_loadedHistory) return;
+    _loadedHistory = true;
+    final scope = engagementScope(widget.ref);
+    final store = AskConversationStore.instance;
+    setState(() {
+      _sessionId = store.sessionIdFor(scope);
+      _history = store.turnsFor(scope);
+    });
+  }
+
   Future<void> _ask() async {
     final question = _controller.text.trim();
     if (question.isEmpty) {
@@ -897,9 +799,22 @@ class _AskTabState extends State<_AskTab> {
         sessionId: _sessionId,
         locale: loc,
       );
+      final scope = engagementScope(widget.ref);
+      final store = AskConversationStore.instance;
+      await store.saveSessionId(scope, r.sessionId);
+      await store.appendTurn(
+        scope,
+        AskTurn(
+          question: question,
+          directAnswer: r.directAnswer,
+          askedMs: DateTime.now().millisecondsSinceEpoch,
+          sessionId: r.sessionId,
+        ),
+      );
       setState(() {
         _sessionId = r.sessionId;
         _result = AsyncValue.data(r);
+        _history = store.turnsFor(scope);
       });
     } catch (e, st) {
       setState(() => _result = AsyncValue.error(e, st));
@@ -1034,7 +949,7 @@ class _AskTabState extends State<_AskTab> {
             spacing: MuhSpace.sm,
             runSpacing: MuhSpace.sm,
             children: _suggestions(pack).map(
-              (q) => _PurposeChoiceChip(
+              (q) => MuhPurposeChip(
                 label: q,
                 isSelected: false,
                 onTap: () {
@@ -1046,6 +961,49 @@ class _AskTabState extends State<_AskTab> {
               ),
             ).toList(),
           ),
+          if (_history.isNotEmpty) ...[
+            const SizedBox(height: MuhSpace.lg),
+            Text(
+              'Recent',
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: MuhColors.inkSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: MuhSpace.sm),
+            for (final turn in _history.reversed.take(6))
+              Padding(
+                padding: const EdgeInsets.only(bottom: MuhSpace.md),
+                child: Container(
+                  padding: const EdgeInsets.all(MuhSpace.md),
+                  decoration: BoxDecoration(
+                    color: MuhColors.paper,
+                    borderRadius: BorderRadius.circular(MuhRadius.card),
+                    border: Border.all(color: MuhColors.line),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        turn.question,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: MuhColors.goldDeep,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: MuhSpace.xs),
+                      Text(
+                        turn.directAnswer,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: MuhColors.ink,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
           const SizedBox(height: MuhSpace.xl),
           if (_result != null)
             _result!.when(
@@ -1089,56 +1047,6 @@ class _AskTabState extends State<_AskTab> {
                     : widget.l10n.errorGeneric,
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InsightSection extends StatelessWidget {
-  const _InsightSection({
-    required this.title,
-    required this.items,
-    required this.accent,
-  });
-
-  final String title;
-  final List<String> items;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(MuhSpace.lg),
-      decoration: BoxDecoration(
-        color: MuhColors.paper,
-        borderRadius: BorderRadius.circular(MuhRadius.card),
-        border: Border.all(color: MuhColors.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: accent,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: MuhSpace.md),
-          ...items.map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: MuhSpace.sm),
-              child: Text(
-                '- $item',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: MuhColors.ink,
-                  height: 1.5,
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -1207,7 +1115,7 @@ class _AskAnswerCard extends StatelessWidget {
             label: labels['better'] ?? 'Better option',
             value: result.betterOption,
             icon: Icons.alt_route_rounded,
-            color: MuhColors.goldSoft,
+            color: MuhColors.goldDeep,
           ),
           const SizedBox(height: MuhSpace.md),
           Text(
@@ -1317,48 +1225,6 @@ class _AskAnswerRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _PurposeChoiceChip extends StatelessWidget {
-  const _PurposeChoiceChip({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg =
-        isSelected ? MuhColors.gold.withValues(alpha: 0.14) : MuhColors.surface;
-    final border = isSelected ? MuhColors.gold : MuhColors.line;
-    final text = isSelected ? MuhColors.goldDeep : MuhColors.ink;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(MuhRadius.button),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: MuhSpace.md,
-          vertical: MuhSpace.sm,
-        ),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(MuhRadius.button),
-          border: Border.all(color: border),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: text,
-                fontWeight: FontWeight.w600,
-              ),
-        ),
       ),
     );
   }
@@ -1485,5 +1351,27 @@ class _EmptyStateScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _HomeTabKeepAlive extends StatefulWidget {
+  const _HomeTabKeepAlive({required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_HomeTabKeepAlive> createState() => _HomeTabKeepAliveState();
+}
+
+class _HomeTabKeepAliveState extends State<_HomeTabKeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Offstage(offstage: !widget.active, child: widget.child);
   }
 }

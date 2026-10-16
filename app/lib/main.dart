@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,11 +9,14 @@ import 'app/muh_app.dart';
 import 'core/config/env.dart';
 
 import 'core/data/muhurtha_engine_api.dart';
+import 'core/engagement/ask_conversation_store.dart';
 import 'core/engagement/user_engagement_store.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
   await UserEngagementStore.ensureInitialized();
+  await AskConversationStore.ensureInitialized();
 
   // Maestro / accessibility drivers need an explicit semantics tree in release.
   if (const bool.fromEnvironment('MAESTRO_SEMANTICS', defaultValue: false)) {

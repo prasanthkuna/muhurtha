@@ -260,12 +260,20 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
                       }),
                     ),
                     const SizedBox(height: MuhSpace.md),
-                    TextFormField(
-                      initialValue: _draft.birthPlace ?? '',
-                      readOnly: true,
-                      enabled: false,
+                    InputDecorator(
                       decoration: InputDecoration(
                         labelText: l10n.fieldBirthPlace,
+                        filled: true,
+                        fillColor: MuhColors.surface,
+                      ),
+                      child: Text(
+                        (_draft.birthPlace ?? '').trim().isEmpty
+                            ? '—'
+                            : _draft.birthPlace!.trim(),
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: MuhColors.ink,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                     const SizedBox(height: MuhSpace.md),

@@ -9,11 +9,11 @@ import '../../../core/data/birth_pack_readiness.dart';
 import '../../../core/data/birth_pack_views.dart';
 import '../../../core/data/active_chart_profile.dart';
 import '../../../core/data/muhurtha_engine_api.dart';
+import '../../../core/engagement/engagement_scope.dart';
 import '../../../core/engagement/user_engagement_store.dart';
 import '../../../core/subscription/subscription_access.dart';
 import '../../../design_system/design_system.dart';
 import '../../../shared/widgets/editorial/editorial.dart';
-import '../../../shared/widgets/muh_enter.dart';
 import '../../../shared/widgets/muhurtha_loading_view.dart';
 import '../../../core/subscription/subscription_service.dart';
 import '../../../shared/widgets/paywall_sheet.dart';
@@ -47,6 +47,7 @@ class LifeAtlasTab extends ConsumerStatefulWidget {
 class _LifeAtlasTabState extends ConsumerState<LifeAtlasTab> {
   String? _selectedId;
   var _loggedOpen = false;
+  var _initializedSelection = false;
 
   @override
   Widget build(BuildContext context) {
@@ -100,11 +101,23 @@ class _LifeAtlasTabState extends ConsumerState<LifeAtlasTab> {
             ],
           );
         }
+        if (!_initializedSelection) {
+          _initializedSelection = true;
+          final current = views.currentChapter;
+          _selectedId = current?.periodLabel ?? chapters.first.$1.periodLabel;
+        }
         final selectedId = _selectedId ?? chapters.first.$1.periodLabel;
-        final selected = chapters.firstWhere(
-          (e) => e.$1.periodLabel == selectedId,
-          orElse: () => chapters.first,
-        );
+        (ChapterView, String) resolveSelected() {
+          for (final e in chapters) {
+            if (e.$1.periodLabel == selectedId) return e;
+          }
+          for (final e in chapters) {
+            if (e.$2 == 'current') return e;
+          }
+          return chapters.first;
+        }
+
+        final selected = resolveSelected();
         final chapter = selected.$1;
         final tense = selected.$2;
         final chapterKey = 'life-$tense-${chapter.periodLabel}';
@@ -128,15 +141,21 @@ class _LifeAtlasTabState extends ConsumerState<LifeAtlasTab> {
                   )
                   .toList(),
               onSelected: (id) {
+                final match = chapters.firstWhere(
+                  (e) => e.$1.periodLabel == id,
+                  orElse: () => chapters.first,
+                );
+                final phase = match.$2;
                 setState(() => _selectedId = id);
                 ref.read(appAnalyticsProvider).chapterOpened(
                       screen: 'life_map',
-                      chapterPhase: tense,
+                      chapterPhase: phase,
                       entryPoint: 'rail',
                     );
                 unawaited(
                   UserEngagementStore.instance.recordExposure(
-                    contentKey: 'life-$tense-$id',
+                    scope: engagementScope(ref),
+                    contentKey: 'life-$phase-$id',
                     screen: 'life_map',
                   ),
                 );
@@ -162,11 +181,24 @@ class _LifeAtlasTabState extends ConsumerState<LifeAtlasTab> {
               HomeProseCard(
                 eyebrow: chapter.periodLabel,
                 title: chapter.title,
-                body: chapter.displayBody,
-                footer: MuhReflectionChoice(
+                body: chapter.detailBody,
+                footer: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (chapter.evidenceLine.isNotEmpty)
+                      MuhQuietButton(
+                        label: 'Why this chapter',
+                        onPressed: () => MuhWhyDrawer.show(
+                          context,
+                          plain: chapter.story,
+                          traditional: chapter.evidenceLine,
+                        ),
+                      ),
+                    MuhReflectionChoice(
                   onSelected: (feedback) {
                     unawaited(
                       UserEngagementStore.instance.saveReflection(
+                        scope: engagementScope(ref),
                         contentKey: chapterKey,
                         feedback: feedback,
                       ),
@@ -177,7 +209,17 @@ class _LifeAtlasTabState extends ConsumerState<LifeAtlasTab> {
                         );
                   },
                 ),
+                  ],
+                ),
               ),
+            if (tense == 'past' && views.likelyLifeEvents.isNotEmpty)
+              ...views.likelyLifeEvents.take(5).map(
+                    (event) => HomeProseCard(
+                      eyebrow: event.periodLabel,
+                      title: event.eventTheme,
+                      body: event.whyItMayFit,
+                    ),
+                  ),
           ],
         );
       },

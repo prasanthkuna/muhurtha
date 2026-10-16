@@ -3361,6 +3361,14 @@ async function _handleInternal(
       locale,
       access.tier,
     );
+    const { buildPackCoverageMeta } = await import("./birth_intelligence_pack.ts");
+    const packMeta = buildPackCoverageMeta(
+      pack.content as BirthIntelligencePackContent,
+      { status: packStatus },
+    );
+    if (maskedContent && typeof maskedContent === "object") {
+      (maskedContent as Record<string, unknown>).pack_meta = packMeta;
+    }
 
     return {
       date: dateStr,
@@ -3374,6 +3382,7 @@ async function _handleInternal(
       status: packStatus,
       screensReady,
       content: maskedContent,
+      packMeta,
       access: buildAccessPayload(access),
       natalLuck: buildNatalLuck(
         birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,

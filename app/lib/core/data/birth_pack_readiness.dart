@@ -33,11 +33,14 @@ extension BirthPackPayloadReadiness on BirthPackPayload {
           model.isNotEmpty &&
           content.isNotEmpty);
 
-  /// Tabs show GPT output as-is; no strict count/quality gates.
+  /// Tabs unlock when content exists; partial packs may still show coverage warnings.
   bool isScreenReady(BirthPackScreen screen) {
+    if (!hasLlmPack && isGenerating) {
+      return _inferScreenReadyFromContent(screen);
+    }
     if (!hasLlmPack) return false;
     if (isComplete) return true;
-    return _inferScreenReadyFromContent(screen) || isGenerating;
+    return _inferScreenReadyFromContent(screen);
   }
 
   bool _inferScreenReadyFromContent(BirthPackScreen screen) {

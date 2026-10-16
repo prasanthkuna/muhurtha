@@ -326,6 +326,13 @@ class BirthPackPayload {
 
   factory BirthPackPayload.fromJson(Map<String, dynamic> j) {
     final rawContent = j['content'];
+    var content = rawContent is Map
+        ? Map<String, dynamic>.from(rawContent)
+        : <String, dynamic>{};
+    final topMeta = j['packMeta'];
+    if (topMeta is Map) {
+      content['pack_meta'] = Map<String, dynamic>.from(topMeta);
+    }
     final access = j['access'] is Map
         ? Map<String, dynamic>.from(j['access'] as Map)
         : const <String, dynamic>{};
@@ -337,9 +344,7 @@ class BirthPackPayload {
       locationLabel: j['locationLabel']?.toString() ?? '',
       provider: j['provider']?.toString() ?? '',
       model: j['model']?.toString() ?? '',
-      content: rawContent is Map
-          ? Map<String, dynamic>.from(rawContent)
-          : const <String, dynamic>{},
+      content: content,
       status: j['status']?.toString() ?? 'ready',
       screensReady: rawScreens is List
           ? rawScreens.map((e) => e.toString()).toList()
@@ -1046,6 +1051,22 @@ class MuhurthaEngineApi {
       },
     );
     return AskAnswerResult.fromJson(m);
+  }
+
+  Future<PurposeCheckResult> purposeCheck({
+    required String purposeType,
+    String? targetDate,
+    String? chartProfileId,
+  }) async {
+    final m = await _invoke(
+      'purpose_check',
+      chartProfileId: chartProfileId,
+      extra: {
+        'purpose_type': purposeType,
+        if (targetDate != null) 'target_date': targetDate,
+      },
+    );
+    return PurposeCheckResult.fromJson(m);
   }
 
   Future<List<RemedyItem>> remedyToday({

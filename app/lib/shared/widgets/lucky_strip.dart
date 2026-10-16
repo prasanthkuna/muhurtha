@@ -43,7 +43,7 @@ class LuckyStrip extends StatelessWidget {
                 child: Text(
                   l10n.luckyTitle,
                   style: theme.textTheme.labelLarge?.copyWith(
-                    color: MuhColors.goldSoft,
+                    color: MuhColors.goldDeep,
                     fontWeight: FontWeight.w800,
                   ),
                 ),

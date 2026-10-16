@@ -1,5 +1,10 @@
 import 'muhurtha_engine_api.dart';
 
+List<String> _listStrings(dynamic raw) {
+  if (raw is! List) return const [];
+  return raw.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+}
+
 /// Central projection layer over birth pack JSON — tabs should use this, not raw keys.
 class BirthPackViews {
   BirthPackViews(this.pack);
@@ -154,6 +159,95 @@ class BirthPackViews {
         .toList();
   }
 
+  List<LikelyLifeEvent> get likelyLifeEvents {
+    final raw = _content['likely_life_events'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => LikelyLifeEvent.fromJson(Map<String, dynamic>.from(e)))
+        .where((e) => e.eventTheme.isNotEmpty)
+        .toList();
+  }
+
+  List<DomainReport> get categoryReports {
+    final raw = _content['category_reports'];
+    if (raw is! Map) return const [];
+    const keys = [
+      'career',
+      'money',
+      'business',
+      'relationships',
+      'family',
+      'health_routine',
+    ];
+    final out = <DomainReport>[];
+    for (final key in keys) {
+      final section = raw[key];
+      if (section is! Map) continue;
+      final map = Map<String, dynamic>.from(section);
+      final body = _text(map, 'body').isNotEmpty
+          ? _text(map, 'body')
+          : _text(map, 'summary');
+      if (body.isEmpty && _text(map, 'headline').isEmpty) continue;
+      out.add(
+        DomainReport(
+          key: key,
+          title: _text(map, 'headline').isNotEmpty
+              ? _text(map, 'headline')
+              : key.replaceAll('_', ' '),
+          body: body,
+          shareHook: _text(map, 'share_hook'),
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// Plain-language identity line for Why drawer (not duplicated as "traditional").
+  String get decodePlainWhy => identitySummary;
+
+  /// Chart-linked factors when present in pack JSON.
+  String? get decodeTraditionalWhy {
+    final parts = <String>[];
+    final identity = _legacyIdentity();
+    final moon = _text(identity, 'moon_marker');
+    if (moon.isNotEmpty) parts.add('Moon marker: $moon');
+
+    final current = chaptersByTense('current');
+    if (current.isNotEmpty) {
+      final c = current.first;
+      if (c.mahadashaLord.isNotEmpty) {
+        parts.add('Mahadasha lord: ${c.mahadashaLord}');
+      }
+      if (c.antardashaLord.isNotEmpty) {
+        parts.add('Antardasha lord: ${c.antardashaLord}');
+      }
+      if (c.evidenceLine.isNotEmpty) {
+        parts.add(c.evidenceLine);
+      }
+    }
+
+    final kernel = _content['personalization_kernel'];
+    if (kernel is Map) {
+      final signals = kernel['personal_signals'];
+      if (signals is List) {
+        for (final raw in signals.take(4)) {
+          final line = raw.toString().trim();
+          if (line.isNotEmpty) parts.add(line);
+        }
+      }
+    }
+
+    if (parts.isEmpty) return null;
+    return parts.join('\n');
+  }
+
+  ChapterView? get currentChapter {
+    final current = chaptersByTense('current');
+    if (current.isNotEmpty) return current.first;
+    return null;
+  }
+
   /// Tap-ready Ask chips from pack `ask_templates` (strings or objects).
   List<String> get askSuggestions {
     final raw = _content['ask_templates'];
@@ -285,8 +379,16 @@ class BirthPackViews {
           title: title,
           story: body,
           useFor: j['phasePulse']?.toString().trim() ?? '',
-          avoid: j['transitionNote']?.toString().trim() ?? '',
+          avoid: j['avoid']?.toString().trim() ??
+              j['transitionNote']?.toString().trim() ??
+              '',
           shareHook: j['shareHook']?.toString().trim() ?? '',
+          evidenceLine: j['evidenceLine']?.toString().trim() ?? '',
+          transitionNote: j['transitionNote']?.toString().trim() ?? '',
+          focusAreas: _listStrings(j['focusAreas']),
+          domainLenses: _listStrings(j['domainLenses']),
+          mahadashaLord: j['mahadashaLord']?.toString().trim() ?? '',
+          antardashaLord: j['antardashaLord']?.toString().trim() ?? '',
           locked: j['proLocked'] == true,
         ),
       );
@@ -459,8 +561,7 @@ class BirthPackViews {
   static List<String> _strings(dynamic raw, String key) {
     if (raw is! Map) return const [];
     final list = raw[key];
-    if (list is! List) return const [];
-    return list.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+    return _listStrings(list);
   }
 }
 
@@ -600,6 +701,44 @@ class RecognitionCard {
       );
 }
 
+class DomainReport {
+  const DomainReport({
+    required this.key,
+    required this.title,
+    required this.body,
+    this.shareHook = '',
+  });
+
+  final String key;
+  final String title;
+  final String body;
+  final String shareHook;
+}
+
+class LikelyLifeEvent {
+  const LikelyLifeEvent({
+    required this.periodLabel,
+    required this.eventTheme,
+    required this.whyItMayFit,
+    this.confidence = '',
+    this.proLocked = false,
+  });
+
+  final String periodLabel;
+  final String eventTheme;
+  final String whyItMayFit;
+  final String confidence;
+  final bool proLocked;
+
+  factory LikelyLifeEvent.fromJson(Map<String, dynamic> j) => LikelyLifeEvent(
+        periodLabel: j['period_label']?.toString() ?? '',
+        eventTheme: j['event_theme']?.toString() ?? '',
+        whyItMayFit: j['why_it_may_fit']?.toString() ?? '',
+        confidence: j['confidence']?.toString() ?? '',
+        proLocked: j['pro_locked'] == true,
+      );
+}
+
 class ChapterView {
   const ChapterView({
     required this.tense,
@@ -609,6 +748,12 @@ class ChapterView {
     required this.useFor,
     required this.avoid,
     this.shareHook = '',
+    this.evidenceLine = '',
+    this.transitionNote = '',
+    this.focusAreas = const [],
+    this.domainLenses = const [],
+    this.mahadashaLord = '',
+    this.antardashaLord = '',
     this.locked = false,
   });
 
@@ -619,7 +764,24 @@ class ChapterView {
   final String useFor;
   final String avoid;
   final String shareHook;
+  final String evidenceLine;
+  final String transitionNote;
+  final List<String> focusAreas;
+  final List<String> domainLenses;
+  final String mahadashaLord;
+  final String antardashaLord;
   final bool locked;
+
+  String get detailBody {
+    final parts = <String>[story.trim()];
+    if (transitionNote.isNotEmpty) parts.add(transitionNote);
+    if (useFor.isNotEmpty) parts.add('Focus: $useFor');
+    if (focusAreas.isNotEmpty) {
+      parts.add('Themes: ${focusAreas.join(', ')}');
+    }
+    if (avoid.isNotEmpty) parts.add('Ease up on: $avoid');
+    return parts.where((p) => p.isNotEmpty).join('\n\n');
+  }
 
   factory ChapterView.fromJson(Map<String, dynamic> j) => ChapterView(
         tense: j['tense']?.toString() ?? '',
@@ -629,6 +791,12 @@ class ChapterView {
         useFor: j['use_for']?.toString() ?? j['use_it_for']?.toString() ?? '',
         avoid: j['avoid']?.toString() ?? '',
         shareHook: j['share_hook']?.toString() ?? '',
+        evidenceLine: j['evidence_line']?.toString() ?? '',
+        transitionNote: j['transition_note']?.toString() ?? '',
+        focusAreas: _listStrings(j['focus_areas']),
+        domainLenses: _listStrings(j['domain_lenses']),
+        mahadashaLord: j['mahadasha_lord']?.toString() ?? '',
+        antardashaLord: j['antardasha_lord']?.toString() ?? '',
         locked: j['locked'] == true || j['pro_locked'] == true,
       );
 

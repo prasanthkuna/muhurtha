@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../design_system/design_system.dart';
 
@@ -20,7 +21,20 @@ class MuhQuietButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return TextButton.icon(
-      onPressed: enabled ? onPressed : null,
+      onPressed: enabled
+          ? () {
+              HapticFeedback.lightImpact();
+              onPressed?.call();
+            }
+          : null,
+      style: TextButton.styleFrom(
+        minimumSize: const Size(0, MuhIcons.minTap),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: const EdgeInsets.symmetric(
+          horizontal: MuhSpace.sm,
+          vertical: MuhSpace.sm,
+        ),
+      ),
       icon: icon != null
           ? Icon(icon, size: 18, color: MuhColors.goldDeep)
           : const SizedBox.shrink(),

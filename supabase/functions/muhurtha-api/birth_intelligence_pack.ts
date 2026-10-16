@@ -483,3 +483,33 @@ export async function generateBirthIntelligencePack(
   const result = await advanceBirthPackPhases(loc, facts, opts);
   return result.envelope;
 }
+
+export function buildPackCoverageMeta(
+  content: BirthIntelligencePackContent,
+  opts?: { status?: string; expectedDaily?: number },
+): Record<string, unknown> {
+  const expectedDaily = opts?.expectedDaily ?? PACK_DAILY_DAYS;
+  const today = asArray<PackTodayCard>(content.today_cards);
+  const weekly = asArray<PackRangeCard>(content.weekly_cards);
+  const monthly = asArray<PackRangeCard>(content.monthly_cards);
+  const warnings: string[] = [];
+  if (today.length > 0 && today.length !== expectedDaily) {
+    warnings.push(`today_cards expected ${expectedDaily}, got ${today.length}`);
+  }
+  const quality = validateBirthPackContent(content, {
+    dailyCount: expectedDaily,
+    weeklyCount: 8,
+    monthlyCount: 12,
+  });
+  if (quality) warnings.push(quality);
+  const fullPackComplete = warnings.length === 0 && (opts?.status ?? "ready") === "ready";
+  return {
+    expected_daily_days: expectedDaily,
+    daily_card_count: today.length,
+    weekly_card_count: weekly.length,
+    monthly_card_count: monthly.length,
+    full_pack_complete: fullPackComplete,
+    quality_warnings: warnings,
+    usable: today.length > 0 || weekly.length > 0,
+  };
+}

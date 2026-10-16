@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
 
 import '../../design_system/design_system.dart';
+import 'muh_brand_mark.dart';
 import 'muh_progress_loader.dart';
 
 enum MuhurthaLoadingMode { boot, auth, generate, screen, ask, share, compact }
@@ -65,7 +66,39 @@ class MuhurthaLoadingView extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final headline = _message(l10n);
     final subline = _subline(l10n);
-    final loader = MuhProgressLoader(size: compact ? 56 : 88);
+    final loader = MuhProgressLoader(size: compact ? 56 : 72);
+
+    if (mode == MuhurthaLoadingMode.boot) {
+      return ColoredBox(
+        color: MuhColors.canvas,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(MuhSpace.page),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MuhBrandMark(
+                  title: l10n?.appTitle,
+                  subtitle: 'purpose-first timing',
+                  markSize: 64,
+                ),
+                const SizedBox(height: MuhSpace.xl),
+                loader,
+                const SizedBox(height: MuhSpace.lg),
+                Text(
+                  headline,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: MuhColors.inkSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     if (compact) {
       return Row(

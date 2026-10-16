@@ -66,10 +66,11 @@ class _ConcernScreenState extends ConsumerState<ConcernScreen> {
 
   Future<void> _continue() async {
     if (_finishing) return;
+    final l10n = AppLocalizations.of(context)!;
     final draft = ref.read(birthDraftProvider);
     if (draft.intent.mainConcern == null || draft.intent.mainConcern!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.errorGeneric)),
+        SnackBar(content: Text(l10n.concernMainLabel)),
       );
       return;
     }

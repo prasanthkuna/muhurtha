@@ -14,13 +14,23 @@ import '../features/onboarding/time_bucket_screen.dart';
 import '../features/profile/profile_tune_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/welcome/welcome_screen.dart';
+import 'go_router_refresh.dart';
 import 'muh_router_transitions.dart';
 
 final _rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
 final goRouterProvider = Provider<GoRouter>((ref) {
+  GoRouterRefreshStream? refresh;
+  if (Env.hasSupabase) {
+    refresh = GoRouterRefreshStream(
+      Supabase.instance.client.auth.onAuthStateChange,
+    );
+    ref.onDispose(refresh.dispose);
+  }
+
   return GoRouter(
     navigatorKey: _rootKey,
+    refreshListenable: refresh,
     initialLocation: '/splash',
     redirect: (context, state) {
       final path = state.matchedLocation;
@@ -83,7 +93,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             'ask' || 'purpose' => 4,
             _ => 0,
           };
-          return HomeShell(initialIndex: initialIndex);
+          final purpose = state.uri.queryParameters['purpose'];
+          final date = state.uri.queryParameters['date'];
+          return HomeShell(
+            initialIndex: initialIndex,
+            initialPurpose: purpose != null && purpose.isNotEmpty
+                ? Uri.decodeComponent(purpose)
+                : null,
+            initialTimingDate:
+                date != null && date.isNotEmpty ? date : null,
+          );
         },
       ),
       muhGoRoute(

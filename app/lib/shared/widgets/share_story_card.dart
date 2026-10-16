@@ -80,7 +80,7 @@ class ShareStoryCard extends StatelessWidget {
                             Text(
                               brandLabel,
                               style: theme.textTheme.labelLarge?.copyWith(
-                                color: MuhColors.goldSoft,
+                                color: MuhColors.goldDeep,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.4,
                               ),
@@ -104,7 +104,7 @@ class ShareStoryCard extends StatelessWidget {
                     Text(
                       eyebrow!.trim(),
                       style: theme.textTheme.labelLarge?.copyWith(
-                        color: MuhColors.goldSoft,
+                        color: MuhColors.goldDeep,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.2,
                         height: 1.25,
@@ -155,7 +155,7 @@ class ShareStoryCard extends StatelessWidget {
                       downloadLink,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.labelLarge?.copyWith(
-                        color: MuhColors.goldSoft,
+                        color: MuhColors.goldDeep,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.3,
                       ),
@@ -202,7 +202,7 @@ class _ShareMedallion extends StatelessWidget {
         child: Text(
           '☽',
           style: TextStyle(
-            color: MuhColors.goldSoft,
+            color: MuhColors.goldDeep,
             fontSize: 24,
             fontWeight: FontWeight.w700,
           ),

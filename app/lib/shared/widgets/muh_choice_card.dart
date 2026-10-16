@@ -54,7 +54,7 @@ class MuhChoiceCard extends StatelessWidget {
                       Text(
                         title,
                         style: theme.textTheme.titleSmall?.copyWith(
-                          color: MuhColors.cream,
+                          color: MuhColors.ink,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -63,7 +63,7 @@ class MuhChoiceCard extends StatelessWidget {
                         Text(
                           subtitle!,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: MuhColors.creamMuted,
+                            color: MuhColors.inkSecondary,
                           ),
                         ),
                       ],
