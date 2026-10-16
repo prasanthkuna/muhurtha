@@ -96,35 +96,33 @@ class MuhTimelineHero extends StatelessWidget {
             ),
           ],
           const SizedBox(height: MuhSpace.lg),
+          if (headline.isNotEmpty)
+            Text(
+              headline,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: MuhColors.ink,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              ),
+            ),
+          const SizedBox(height: MuhSpace.md),
           Container(
-            width: double.infinity,
             padding: const EdgeInsets.symmetric(
-              horizontal: MuhSpace.md,
-              vertical: MuhSpace.sm,
+              horizontal: MuhSpace.sm,
+              vertical: MuhSpace.xs,
             ),
             decoration: BoxDecoration(
-              color: biasColor.withValues(alpha: 0.12),
+              color: biasColor.withValues(alpha: 0.09),
               borderRadius: BorderRadius.circular(MuhRadius.input),
-              border: Border.all(color: biasColor.withValues(alpha: 0.35)),
             ),
             child: Text(
               biasLabel,
-              style: theme.textTheme.titleSmall?.copyWith(
+              style: theme.textTheme.labelSmall?.copyWith(
                 color: biasColor,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          if (headline.isNotEmpty) ...[
-            const SizedBox(height: MuhSpace.md),
-            Text(
-              headline,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                height: 1.45,
-                color: MuhColors.cream,
-              ),
-            ),
-          ],
         ],
       ),
     );
