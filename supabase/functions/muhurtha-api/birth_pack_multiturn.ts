@@ -55,22 +55,22 @@ export type BirthPackAdvanceResult = {
 
 function localeLine(loc: AppLocale): string {
   if (loc === "te") {
-    return "Write ONLY in natural Telugu script. Sound like a sharp Telugu friend: simple, scene-based, lightly witty. Every user-facing string — titles, highlights, sentences, life_map fields — must be Telugu. Zero English words anywhere in the JSON.";
+    return "Write ONLY in natural Telugu script. Sound like an experienced Indian Jyotish interpreter: simple, personal, calm and culturally familiar; no slang, false certainty or productivity-coach tone. Every user-facing string — titles, highlights, sentences, life_map fields — must be Telugu. Zero English words anywhere in the JSON.";
   }
   if (loc === "hi") {
     return "Write ONLY in simple conversational Hindi (Devanagari). Every user-facing string must be Hindi. Zero English words anywhere in the JSON.";
   }
-  return "Write ONLY in plain Indian English. Sound like a smart Indian friend: direct, practical, lightly witty.";
+  return "Write ONLY in clear Indian English. Sound like a thoughtful, experienced Jyotish interpreter: personal, precise, warm and understandable, never like a generic self-help or productivity coach.";
 }
 
 function journeySentenceRule(loc: AppLocale): string {
   if (loc === "te") {
-    return "sentences = exactly 2 items, each <= 28 words, ONLY Telugu script (no English words)";
+    return "sentences = 2 or 3 non-repetitive items, each <= 36 words, ONLY Telugu script (no English words)";
   }
   if (loc === "hi") {
-    return "sentences = exactly 2 items, each <= 28 words, ONLY Hindi Devanagari (no English words)";
+    return "sentences = 2 or 3 non-repetitive items, each <= 36 words, ONLY Hindi Devanagari (no English words)";
   }
-  return "sentences = exactly 2 items, each <= 28 words, direct Indian English";
+  return "sentences = 2 or 3 meaningful, distinct items, each <= 36 words, readable Indian English";
 }
 
 const SHARED_RULES = `
@@ -79,7 +79,7 @@ const SHARED_RULES = `
 - Each section must feel distinct in subject, reasoning and narrative. Do not reuse generic advice, key phrases or sentence structures across identity, life chapters, daily, weekly and monthly content.
 - Ground every personal claim in supplied chart facts or explicitly mark it as a traditional interpretation. Do not invent employment history, past events, medical outcomes, relationships, dates or guaranteed success.
 - Prefer a chart-specific contrast or genuine change in period over generic productivity advice such as clearing pending work, staying practical or fixing systems.
-- Sound like a sharp Indian friend on WhatsApp: punchy, direct, scene-based. No essay prose.
+- Give every section a clear editorial purpose: identity reveals an enduring pattern; Life Map explains the period transition; daily content is a concise briefing; timing explains calculated traditional factors. Use memorable but measured language, not WhatsApp slang or broad motivational advice.
 - BANNED openers: "This phase feels like", "The scene here is", "Picture a", "As of today, this feels".
 - Return valid JSON only for the requested keys. No markdown.`;
 
