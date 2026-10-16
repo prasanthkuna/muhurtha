@@ -14,7 +14,6 @@ import '../../../core/engagement/engagement_scope.dart';
 import '../../../core/engagement/user_engagement_store.dart';
 import '../../../core/subscription/subscription_access.dart';
 import '../../../design_system/design_system.dart';
-import '../../../shared/widgets/editorial/editorial.dart';
 import '../../../shared/widgets/muhurtha_loading_view.dart';
 import '../../../core/subscription/subscription_service.dart';
 import '../../../shared/widgets/paywall_sheet.dart';
