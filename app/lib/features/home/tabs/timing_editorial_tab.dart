@@ -12,7 +12,6 @@ import '../../../core/data/muhurtha_engine_api.dart';
 import '../../../core/engagement/engagement_scope.dart';
 import '../../../core/engagement/user_engagement_store.dart';
 import '../../../design_system/design_system.dart';
-import '../../../shared/widgets/editorial/editorial.dart';
 import '../../../shared/widgets/muh_purpose_chip.dart';
 import '../../../shared/widgets/muhurtha_loading_view.dart';
 import '../home_copy.dart';
@@ -347,7 +346,7 @@ class _OutlookSection extends ConsumerWidget {
         week.body.isEmpty &&
         month.headline.isEmpty &&
         month.body.isEmpty) {
-      return MuhInlineStatus(
+      return const MuhInlineStatus(
         message: 'Outlook cards not generated for this pack yet.',
         kind: MuhInlineStatusKind.empty,
       );
