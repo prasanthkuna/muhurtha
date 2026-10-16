@@ -7,6 +7,7 @@ import 'package:muhurta/l10n/app_localizations.dart';
 import '../../../core/analytics/app_analytics.dart';
 import '../../../core/data/birth_pack_readiness.dart';
 import '../../../core/data/birth_pack_views.dart';
+import '../../../core/data/life_period_matching.dart';
 import '../../../core/data/active_chart_profile.dart';
 import '../../../core/data/muhurtha_engine_api.dart';
 import '../../../core/engagement/engagement_scope.dart';
@@ -212,14 +213,16 @@ class _LifeAtlasTabState extends ConsumerState<LifeAtlasTab> {
                   ],
                 ),
               ),
-            if (tense == 'past' && views.likelyLifeEvents.isNotEmpty)
-              ...views.likelyLifeEvents.take(5).map(
-                    (event) => HomeProseCard(
-                      eyebrow: event.periodLabel,
-                      title: event.eventTheme,
-                      body: event.whyItMayFit,
-                    ),
-                  ),
+            if (tense == 'past')
+              ...views.likelyLifeEvents
+                  .where((event) => lifeEventMatchesChapter(
+                        event.periodLabel, chapter.periodLabel))
+                  .take(2)
+                  .map((event) => HomeProseCard(
+                        eyebrow: 'Possible theme for this period',
+                        title: event.eventTheme,
+                        body: event.whyItMayFit,
+                      )),
           ],
         );
       },
