@@ -24,7 +24,6 @@ import '../../design_system/design_system.dart';
 import '../../shared/widgets/chart_profile_switcher.dart';
 import '../../shared/widgets/celestial_components.dart';
 import '../../shared/widgets/lucky_strip.dart';
-import '../../shared/widgets/editorial/editorial.dart';
 import '../../shared/widgets/muh_purpose_chip.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
@@ -498,8 +497,8 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
           children: [
             PackCoverageBanner(pack: pack),
             if (!pack.hasTodayCardFor(payload.date) && pack.dailyCardCount > 0)
-              Padding(
-                padding: const EdgeInsets.only(bottom: MuhSpace.md),
+              const Padding(
+                padding: EdgeInsets.only(bottom: MuhSpace.md),
                 child: MuhInlineStatus(
                   message:
                       'No dedicated reading for this date yet. Windows below are calculated; narrative may be limited.',
@@ -1262,7 +1261,7 @@ class _PersonalizingBanner extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(MuhRadius.chip),
-            child: LinearProgressIndicator(
+            child: const LinearProgressIndicator(
               minHeight: 4,
               backgroundColor: MuhColors.line,
               color: MuhColors.brand,
