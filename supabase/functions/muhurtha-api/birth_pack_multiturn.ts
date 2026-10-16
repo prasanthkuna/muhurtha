@@ -15,11 +15,15 @@ export const PACK_DAILY_DAYS = 30;
 export const PACK_WEEKLY_WEEKS = 8;
 export const PACK_MONTHLY_MONTHS = 12;
 
-/** Three LLM steps — decode, life map, then all timing/playbook content in one call. */
+/** Small, independently resumable LLM outputs; never ask for a full 30-day
+ * calendar plus every other product surface in one generation call. */
 export const BIRTH_PACK_PHASE_ORDER = [
   "core_identity",
   "life_map_journey",
-  "playbook",
+  "today_cards_a",
+  "today_cards_b",
+  "weekly_monthly_timing",
+  "extras",
 ] as const;
 
 export type BirthPackPhaseId = typeof BIRTH_PACK_PHASE_ORDER[number];
@@ -55,7 +59,7 @@ export type BirthPackAdvanceResult = {
 
 function localeLine(loc: AppLocale): string {
   if (loc === "te") {
-    return "Write ONLY in natural Telugu script. Sound like an experienced Indian Jyotish interpreter: simple, personal, calm and culturally familiar; no slang, false certainty or productivity-coach tone. Every user-facing string — titles, highlights, sentences, life_map fields — must be Telugu. Zero English words anywhere in the JSON.";
+    return "Write ONLY in natural Telugu script. Sound like an experienced Indian Jyotish interpreter: simple, personal, calm and culturally familiar; no slang, false certainty or productivity-coach tone. Narrative fields — titles, highlights, sentences, life_map descriptions — must be Telugu. Preserve machine identifiers such as dates, periodLabel, keys, and planet codes exactly as supplied in deterministic facts.";
   }
   if (loc === "hi") {
     return "Write ONLY in simple conversational Hindi (Devanagari). Every user-facing string must be Hindi. Zero English words anywhere in the JSON.";
@@ -173,15 +177,30 @@ export function slimFactsForPhase(
         journey_phase_facts: slimJourneyPhaseFacts(facts.journey_phase_facts),
         kernel_period: slimKernel(facts.personalization_kernel)?.period,
       };
-    case "playbook":
+    case "today_cards_a":
+    case "today_cards_b": {
+      const start = phase === "today_cards_a" ? 0 : 15;
       return {
         ...base,
         current_life_chapter: facts.current_life_chapter,
-        daily_timing_facts: dailyFacts,
+        daily_timing_facts: dailyFacts.slice(start, start + 15),
+        kernel_period: slimKernel(facts.personalization_kernel)?.period,
+        kernel: slimKernel(facts.personalization_kernel),
+      };
+    }
+    case "weekly_monthly_timing":
+      return {
+        ...base,
+        current_life_chapter: facts.current_life_chapter,
         weekly_keys: facts.weekly_keys,
         monthly_keys: facts.monthly_keys,
         date_range: facts.date_range,
         kernel_period: slimKernel(facts.personalization_kernel)?.period,
+      };
+    case "extras":
+      return {
+        ...base,
+        current_life_chapter: facts.current_life_chapter,
         inferred_life_signals: facts.inferred_life_signals,
         kernel: slimKernel(facts.personalization_kernel),
       };
@@ -207,10 +226,8 @@ function phasesDoneSet(content: BirthIntelligencePackContent): Set<string> {
   if (set.has("today_cards_a")) {
     set.add("today_cards_a");
   }
-  if (
-    set.has("extras") ||
-    (set.has("today_cards_a") && set.has("today_cards_b") &&
-      set.has("weekly_monthly_timing"))
+  if (set.has("today_cards_a") && set.has("today_cards_b") &&
+    set.has("weekly_monthly_timing") && set.has("extras")
   ) {
     set.add("playbook");
   }
@@ -305,14 +322,6 @@ function mergePack(
 }
 
 function phasesRecordedForComplete(phase: BirthPackPhaseId): string[] {
-  if (phase === "playbook") {
-    return [
-      "playbook",
-      "today_cards",
-      "weekly_monthly_timing",
-      "extras",
-    ];
-  }
   return [phase];
 }
 
@@ -384,20 +393,32 @@ Rules: me_profile.summary <= 45 words. Do not generate past-life period cards he
   "journey_phases": [{"sortOrder":number,"periodLabel":string,"mahadashaLord":string,"antardashaLord":string,"title":string,"highlight":string,"sentences":[string],"focusAreas":[string],"tone":[string],"pressureThemes":[string],"phasePulse":string,"transitionNote":string,"evidenceLine":string,"shareHook":string,"kernelSignals":[string],"domainLenses":[string],"proLocked":boolean,"subPhases":[]}]
 }
 Rules: past_chapters = every facts.journey_phase_facts where tense=past (${counts.past} items, same order). current_chapter = the one facts.journey_phase_facts where tense=current (exactly 1). future_chapters = every tense=future (${counts.future} items). NEVER put current chapter in past_chapters. period/periodLabel must match facts exactly. journey_phases = all ${counts.total} phases sorted by sortOrder. Each phase: title 2-5 words; highlight 8-18 words (punchy, no metaphor openers); ${journeySentenceRule(loc)}; evidenceLine optional <= 20 words, same language as sentences. All life_map chapter strings (theme, career, money, family_relationship, avoid, share_line, use_it_for) must use the same language as journey_phases. First future chapter proLocked=false; later future proLocked=true.`;
-    case "playbook":
+    case "today_cards_a":
+    case "today_cards_b": {
+      const start = phase === "today_cards_a" ? 0 : 15;
+      const size = Math.min(15, Math.max(0, dailyFacts.length - start));
       return `{
-  "today_cards": [{"key":string,"title":string,"body":string,"one_line":string,"share_hook":string,"better_for":[string],"be_careful":[string],"good_window_notes":[{"category":string,"why_it_works":string,"best_for":[string],"avoid_for":[string],"share_line":string}],"caution_window_notes":[{"category":string,"why_it_works":string,"best_for":[string],"avoid_for":[string],"share_line":string}],"notification_title":string,"notification_body":string}],
+  "today_cards": [{"key":string,"title":string,"body":string,"one_line":string,"share_hook":string,"better_for":[string],"be_careful":[string],"good_window_notes":[{"category":string,"why_it_works":string}],"caution_window_notes":[{"category":string,"why_it_works":string}],"notification_title":string,"notification_body":string}]
+}
+Rules: Return exactly ${size} today_cards in the same order as facts.daily_timing_facts, retaining each date as key exactly. Every day must be derived from that day's supplied deterministic timing facts and life-period context. one_line <= 18 words, body <= 35 words. Do not repeat another day's advice or fill missing data with invented dates, windows or outcomes. No other JSON keys.`;
+    }
+    case "weekly_monthly_timing":
+      return `{
   "weekly_cards": [{"key":string,"title":string,"body":string,"share_hook":string,"better_for":[string],"be_careful":[string],"notification_title":string,"notification_body":string}],
   "monthly_cards": [{"key":string,"title":string,"body":string,"share_hook":string,"better_for":[string],"be_careful":[string],"notification_title":string,"notification_body":string}],
   "timing_plan": {"week":{"headline":string,"action_focus":string,"caution":string,"share_line":string},"month":{"headline":string,"strategy":string,"caution":string,"share_line":string},"current_phase":{"headline":string,"use_it_for":string,"avoid":string,"share_line":string}},
+  "horizons": {"week":{...},"month":{...}}
+}
+Rules: Exactly ${PACK_WEEKLY_WEEKS} weekly_cards and ${PACK_MONTHLY_MONTHS} monthly_cards, using the supplied keys in order. Each body <= 50 words. Each week/month should express one distinct theme grounded in the relevant period, not repeat an identical productivity message. timing_plan is a non-guaranteed traditional interpretation, not a substitute for purpose-specific timing.`;
+    case "extras":
+      return `{
   "remedy_cards": [...], "remedy_pack": [...],
   "ask_templates": [{"key":"career|money|relationship|family","question":string,"topics":[string],"direct_answer":string,"best_for":string,"caution":string,"better_option":string,"action_line":string,"share_line":string}],
   "ask_knowledge": {"compact_summary":string,"common_answers":[{"topic":string,"answer":string}],"boundaries":[string]},
-  "share_cards": [...],
-  "notification_pack": [...], "paywall_copy": {...},
-  "notification_copy": {...}, "pro_teasers": {...}, "horizons": {...}
+  "share_cards": [...], "notification_pack": [...], "paywall_copy": {...},
+  "notification_copy": {...}, "pro_teasers": {...}
 }
-Rules: exactly ${PACK_DAILY_DAYS} today_cards matching every facts.daily_timing_facts[i].date in order. Each today_cards[i]: one_line <= 18 words (primary), body <= 35 words (support only), unique per day. Exactly ${PACK_WEEKLY_WEEKS} weekly_cards and ${PACK_MONTHLY_MONTHS} monthly_cards — body <= 50 words each. ask_templates = exactly 4 items with distinct keys (career, money, relationship, family). Each question <= 14 words, ready to tap. Each direct_answer <= 28 words, specific to facts — not meta labels. common_answers = 4 topic-specific one-liners. timing_plan must differ from today_guidance.`;
+Rules: Exactly 4 unique ask_templates keyed career, money, relationship and family, each question <=14 words. Shares must not contain private birth details by default or invent biography. Remedies must be clearly framed as optional traditional practices, not medical or financial guarantees.`;
     default:
       return "{}";
   }
@@ -527,7 +548,7 @@ export async function advanceBirthPackPhases(
       data: merged,
       provider: llmRef.provider,
       model: llmRef.model,
-      promptVersion: `${BIRTH_PACK_VERSION}+openai-mini-3phase`,
+      promptVersion: `${BIRTH_PACK_VERSION}+openai-mini-6phase`,
     },
     phasesRun,
     failedPhase: null,
