@@ -447,9 +447,10 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
         }
         final views = BirthPackViews(pack);
         final playbook = views.playbookFor(payload.date);
-        final mainAdvice = playbook?.displayAdvice.isNotEmpty == true
-            ? playbook!.displayAdvice
+        final mainAdvice = playbook?.oneLine.trim().isNotEmpty == true
+            ? playbook!.oneLine.trim()
             : payload.oneLine ?? '';
+        final detailedAdvice = playbook?.body.trim() ?? '';
         final goodSummary = playbook?.goodSummary ?? '';
         final avoidSummary = playbook?.avoidSummary ?? '';
         final betterFor = playbook?.betterFor.isNotEmpty == true
@@ -509,6 +510,16 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
               payload: payload,
               headline: mainAdvice.isNotEmpty ? mainAdvice : (payload.oneLine ?? ''),
             ),
+            if (detailedAdvice.isNotEmpty && detailedAdvice != mainAdvice)
+              ExpansionTile(
+                title: Text(copy.todayTitle),
+                childrenPadding: const EdgeInsets.all(MuhSpace.md),
+                children: [
+                  Text(detailedAdvice,
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(height: 1.55)),
+                ],
+              ),
             const SizedBox(height: MuhSpace.md),
             TodayTimingPanel(
               payload: payload,
