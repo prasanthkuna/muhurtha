@@ -533,14 +533,6 @@ class DashaTimelineCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: MuhSpace.sm),
-            Text(
-              '$mahadashaLord ${_txt(context, 'chapter')} • $antardashaLord ${_txt(context, 'episode')}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: MuhColors.creamMuted,
-                height: 1.4,
-              ),
-            ),
           ],
           if (phasePulse.trim().isNotEmpty) ...[
             const SizedBox(height: MuhSpace.xs),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../design_system/design_system.dart';
 
@@ -16,11 +17,13 @@ class MuhPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onPressed != null;
     final child = FilledButton(
       style: FilledButton.styleFrom(
-        backgroundColor: MuhColors.gold,
-        foregroundColor: MuhColors.bg,
-        disabledBackgroundColor: MuhColors.gold.withValues(alpha: 0.35),
+        backgroundColor: enabled ? MuhColors.cta : MuhColors.surfaceSoft,
+        foregroundColor: enabled ? MuhColors.onCta : MuhColors.creamMuted,
+        disabledBackgroundColor: MuhColors.surfaceSoft,
+        disabledForegroundColor: MuhColors.creamMuted,
         padding: const EdgeInsets.symmetric(
           horizontal: MuhSpace.xl,
           vertical: MuhSpace.lg,
@@ -30,12 +33,18 @@ class MuhPrimaryButton extends StatelessWidget {
         ),
         elevation: 0,
       ),
-      onPressed: onPressed,
+      onPressed: enabled
+          ? () {
+              HapticFeedback.lightImpact();
+              onPressed!();
+            }
+          : null,
       child: Text(
         label,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w600,
               letterSpacing: 0.2,
+              color: enabled ? MuhColors.onCta : MuhColors.creamMuted,
             ),
       ),
     );

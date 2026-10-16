@@ -4,16 +4,20 @@ import 'package:flutter/material.dart';
 
 import '../../design_system/design_system.dart';
 
-/// Subtle sacred-geometry accent — warm lamp glow, not neon space UI.
+/// Optional backdrop gradient. Geometry off by default (pro / flat UI).
 class OrbitalBackdrop extends StatelessWidget {
   const OrbitalBackdrop({
     super.key,
     required this.child,
-    this.intensity = 1,
+    this.intensity = 0,
+    this.showGeometry = false,
   });
 
   final Widget child;
+
+  /// Legacy knob; geometry uses this when [showGeometry] is true.
   final double intensity;
+  final bool showGeometry;
 
   @override
   Widget build(BuildContext context) {
@@ -23,19 +27,19 @@ class OrbitalBackdrop extends StatelessWidget {
         const DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
               colors: [
                 MuhColors.bg,
                 MuhColors.bgElevated,
-                Color(0xFF0A0805),
               ],
             ),
           ),
         ),
-        CustomPaint(
-          painter: _OrbitalPainter(intensity: intensity),
-        ),
+        if (showGeometry && intensity > 0)
+          CustomPaint(
+            painter: _OrbitalPainter(intensity: intensity),
+          ),
         child,
       ],
     );
@@ -51,7 +55,7 @@ class _OrbitalPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width * 0.5, size.height * 0.22);
     final paint = Paint()
-      ..color = MuhColors.gold.withValues(alpha: 0.07 * intensity)
+      ..color = MuhColors.brand.withValues(alpha: 0.06 * intensity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
@@ -69,7 +73,7 @@ class _OrbitalPainter extends CustomPainter {
     final glow = Paint()
       ..shader = RadialGradient(
         colors: [
-          MuhColors.gold.withValues(alpha: 0.14 * intensity),
+          MuhColors.brand.withValues(alpha: 0.08 * intensity),
           Colors.transparent,
         ],
       ).createShader(Rect.fromCircle(center: center, radius: 200));

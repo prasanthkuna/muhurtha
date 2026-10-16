@@ -539,6 +539,76 @@ class AskAnswerResult {
   }
 }
 
+class QuickProofCard {
+  const QuickProofCard({
+    required this.phaseSegmentId,
+    required this.periodLabel,
+    required this.title,
+    required this.highlight,
+    required this.sentences,
+    required this.activeDomains,
+    required this.confidenceLabel,
+    this.shareHook,
+    this.phasePulse,
+    this.evidenceLine,
+    this.validationOptions = const <String>[],
+  });
+
+  final String phaseSegmentId;
+  final String periodLabel;
+  final String title;
+  final String highlight;
+  final List<String> sentences;
+  final List<String> activeDomains;
+  final String confidenceLabel;
+  final String? shareHook;
+  final String? phasePulse;
+  final String? evidenceLine;
+  final List<String> validationOptions;
+
+  factory QuickProofCard.fromJson(Map<String, dynamic> j) {
+    final s = j['sentences'];
+    return QuickProofCard(
+      phaseSegmentId: j['phaseSegmentId']?.toString() ?? '',
+      periodLabel: j['periodLabel']?.toString() ?? '',
+      title: j['title']?.toString() ?? '',
+      highlight: j['highlight']?.toString() ?? '',
+      sentences:
+          s is List ? s.map((e) => e.toString()).toList() : const <String>[],
+      activeDomains: _stringList(j['activeDomains']),
+      confidenceLabel: j['confidenceLabel']?.toString() ?? '',
+      shareHook: j['shareHook']?.toString(),
+      phasePulse: j['phasePulse']?.toString(),
+      evidenceLine: j['evidenceLine']?.toString(),
+      validationOptions: _stringList(j['validationOptions']),
+    );
+  }
+}
+
+class QuickProofResult {
+  const QuickProofResult({
+    required this.cards,
+    required this.engineMode,
+  });
+
+  final List<QuickProofCard> cards;
+  final String engineMode;
+
+  factory QuickProofResult.fromJson(Map<String, dynamic> j) {
+    final raw = j['cards'];
+    final cards = raw is List
+        ? raw
+            .whereType<Map>()
+            .map((e) => QuickProofCard.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : const <QuickProofCard>[];
+    return QuickProofResult(
+      cards: cards,
+      engineMode: j['engineMode']?.toString() ?? '',
+    );
+  }
+}
+
 class JourneyPhaseItem {
   const JourneyPhaseItem({
     required this.periodLabel,
@@ -798,6 +868,28 @@ class MuhurthaEngineApi {
       extra: {'birth_input_id': birthInputId},
     );
     return ChartInitializeResult.fromJson(m);
+  }
+
+  Future<QuickProofResult> quickProofGenerate({String? chartProfileId}) async {
+    final m = await _invoke(
+      'quick_proof_generate',
+      chartProfileId: chartProfileId,
+      timeout: _birthPackTimeout,
+    );
+    return QuickProofResult.fromJson(m);
+  }
+
+  Future<void> validationSubmit({
+    required String phaseSegmentId,
+    required String feedbackValue,
+  }) async {
+    await _invoke(
+      'validation_submit',
+      extra: {
+        'phase_segment_id': phaseSegmentId,
+        'feedback_value': feedbackValue,
+      },
+    );
   }
 
   Future<PlaceResolveResult> resolvePlace({

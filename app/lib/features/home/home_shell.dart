@@ -30,6 +30,9 @@ import '../../shared/widgets/lucky_strip.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
 import '../../shared/widgets/whatsapp_share_button.dart';
 import '../../shared/widgets/muh_primary_button.dart';
+import '../../shared/widgets/muh_enter.dart';
+import '../../shared/widgets/muh_timeline_hero.dart';
+import '../../shared/widgets/muh_timing_split.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 
 const _purposeEntries = <({String value, String labelKey})>[
@@ -114,6 +117,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       'timing': 'Timing',
       'life_map': 'Life Map',
       'ask': 'Ask',
+      'timeline': 'Today',
     };
     if (lang == 'te') return te[key] ?? en[key] ?? key;
     if (lang == 'hi') return hi[key] ?? en[key] ?? key;
@@ -134,8 +138,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     });
     final pages = <Widget>[
       _DecodeTab(l10n: l10n, ref: ref),
-      _LifeMapTab(l10n: l10n, ref: ref),
       _TodayFocusTab(l10n: l10n, ref: ref),
+      _LifeMapTab(l10n: l10n, ref: ref),
       _TimingTab(l10n: l10n, ref: ref),
       _AskTab(
         l10n: l10n,
@@ -145,7 +149,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     ];
 
     return OrbitalBackdrop(
-      intensity: 0.65,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Column(
@@ -179,7 +182,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                           IconButton(
                             tooltip: l10n.profileTuneTitle,
                             icon: const Icon(Icons.tune_rounded,
-                                color: MuhColors.gold),
+                                color: MuhColors.creamMuted),
                             onPressed: () => context.push('/profile'),
                           ),
                         ],
@@ -188,9 +191,27 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   ),
                   Expanded(
                     child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 280),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
+                      duration: MuhMotion.medium,
+                      switchInCurve: MuhMotion.enterCurve,
+                      switchOutCurve: MuhMotion.exitCurve,
+                      transitionBuilder: (child, animation) {
+                        final slide = Tween<Offset>(
+                          begin: const Offset(0, 0.018),
+                          end: Offset.zero,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: animation,
+                            curve: MuhMotion.enterCurve,
+                          ),
+                        );
+                        return FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(
+                            position: slide,
+                            child: child,
+                          ),
+                        );
+                      },
                       child: KeyedSubtree(
                         key: ValueKey('$chartScope-$_index-$localeCode'),
                         child: pages[_index],
@@ -207,7 +228,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             labelTextStyle: WidgetStateProperty.resolveWith((s) {
               if (s.contains(WidgetState.selected)) {
                 return const TextStyle(
-                  color: MuhColors.gold,
+                  color: MuhColors.brand,
                   fontWeight: FontWeight.w600,
                   fontSize: MuhType.bodyS,
                 );
@@ -220,7 +241,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             }),
             iconTheme: WidgetStateProperty.resolveWith((s) {
               if (s.contains(WidgetState.selected)) {
-                return const IconThemeData(color: MuhColors.gold);
+                return const IconThemeData(color: MuhColors.brand);
               }
               return const IconThemeData(color: MuhColors.muted);
             }),
@@ -229,7 +250,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             height: 72,
             backgroundColor: MuhColors.surface.withValues(alpha: 0.94),
             elevation: 0,
-            indicatorColor: MuhColors.gold.withValues(alpha: 0.14),
+            indicatorColor: MuhColors.brand.withValues(alpha: 0.14),
             selectedIndex: _index,
             onDestinationSelected: (i) => setState(() => _index = i),
             destinations: [
@@ -238,12 +259,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 label: _navLabel('decode'),
               ),
               NavigationDestination(
-                icon: const Icon(Icons.auto_graph_rounded),
-                label: _navLabel('life_map'),
-              ),
-              NavigationDestination(
                 icon: const Icon(Icons.wb_sunny_outlined),
                 label: _navLabel('today'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.auto_graph_rounded),
+                label: _navLabel('life_map'),
               ),
               NavigationDestination(
                 icon: const Icon(Icons.schedule_rounded),
@@ -358,7 +379,6 @@ class _DecodeTab extends ConsumerWidget {
       );
     }
     final packAsync = ref.watch(birthPackProvider);
-    final todayAsync = ref.watch(todayPayloadProvider);
     ref.watch(activeChartProfileIdProvider);
     final copy = _V3Copy(l10n);
     final subjectName = ref.watch(chartDisplayNameProvider);
@@ -376,12 +396,10 @@ class _DecodeTab extends ConsumerWidget {
             message: l10n.loadingDecode,
           );
         }
-        final payload = todayAsync.valueOrNull;
         final views = BirthPackViews(pack);
         final name = subjectName.isNotEmpty
             ? subjectName
             : pack.displayName.trim();
-        final moon = payload?.birthMoonSign;
         final decodeHit = views.displayHook;
         final identitySummary = views.identitySummary;
         final workMoney = views.workMoney;
@@ -409,34 +427,6 @@ class _DecodeTab extends ConsumerWidget {
                   body: shareLine,
                   sourceId: 'decode-test-friend-${pack.date}',
                 ),
-              ),
-            if (moon != null)
-              CelestialHeaderCard(
-                heroLabel: copy.moonLabel,
-                heroTitle: moon.label,
-                heroSymbol: moon.symbol,
-                heroSubline: payload?.birthMoonNakshatra,
-                explainer: copy.moonExplainer,
-                trailingAction: WhatsAppShareButton(
-                  onTap: () => _shareExactCard(
-                    ref,
-                    context,
-                    title: copy.moonLabel,
-                    body:
-                        '${moon.label}${payload?.birthMoonNakshatra == null ? '' : ' · ${payload!.birthMoonNakshatra}'}',
-                    contextLine: copy.moonExplainer,
-                    sourceId: 'decode-moon-${pack.date}',
-                  ),
-                ),
-                supportingPills: [
-                  if (payload?.sunSign != null)
-                    MoonSunPillData(
-                      label: copy.sunSign,
-                      value: payload!.sunSign!.label,
-                      symbol: payload.sunSign!.symbol,
-                      subtitle: payload.sunSign!.dateRange,
-                    ),
-                ],
               ),
             if (decodeHit.isNotEmpty)
               _ShareableSignalCard(
@@ -566,21 +556,12 @@ class _TodayFocusTab extends ConsumerWidget {
     final copy = _V3Copy(l10n);
     return packAsync.when(
       data: (pack) {
-        if (pack == null) {
-          return MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.screen,
-            message: l10n.loadingToday,
-          );
-        }
-        if (!pack.isScreenReady(BirthPackScreen.today)) {
-          return MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.screen,
-            message: l10n.loadingToday,
-          );
-        }
         final payload = today.valueOrNull;
+        final packReady =
+            pack != null && pack.isScreenReady(BirthPackScreen.today);
+
         if (payload == null) {
-          if (today.isLoading) {
+          if (today.isLoading || pack == null) {
             return MuhurthaLoadingView(
               mode: MuhurthaLoadingMode.screen,
               message: l10n.loadingTodayWindows,
@@ -590,6 +571,38 @@ class _TodayFocusTab extends ConsumerWidget {
             headline: l10n.todayEmptyHeadline,
             message: l10n.todayEmptyMessage,
             icon: Icons.wb_sunny_outlined,
+          );
+        }
+
+        if (!packReady) {
+          final instantHeadline = payload.oneLine ?? '';
+          final todayTitle = subjectName.isNotEmpty
+              ? '${subjectName.trim()}, ${copy.todayTitle.toLowerCase()}'
+              : copy.todayTitle;
+          return _V3Scroll(
+            title: todayTitle,
+            subtitle: copy.todaySub,
+            onRefresh: () async {
+              ref.invalidate(birthPackProvider);
+              ref.invalidate(todayPayloadProvider);
+              await ref.read(todayPayloadProvider.future);
+            },
+            children: [
+              MuhTimelineHero(
+                payload: payload,
+                headline: instantHeadline,
+                personalizing: true,
+              ),
+              const SizedBox(height: MuhSpace.md),
+              MuhTimingSplit(
+                goodWindows: payload.goodWindows,
+                cautionWindows: payload.cautionWindows,
+                goodTitle: copy.goodWindow,
+                cautionTitle: copy.cautionWindow,
+              ),
+              const SizedBox(height: MuhSpace.lg),
+              _PersonalizingBanner(message: l10n.loadingToday),
+            ],
           );
         }
         final views = BirthPackViews(pack);
@@ -622,6 +635,18 @@ class _TodayFocusTab extends ConsumerWidget {
             await ref.read(todayPayloadProvider.future);
           },
           children: [
+            MuhTimelineHero(
+              payload: payload,
+              headline: mainAdvice.isNotEmpty ? mainAdvice : (payload.oneLine ?? ''),
+            ),
+            const SizedBox(height: MuhSpace.md),
+            MuhTimingSplit(
+              goodWindows: payload.goodWindows,
+              cautionWindows: payload.cautionWindows,
+              goodTitle: copy.goodWindow,
+              cautionTitle: copy.cautionWindow,
+            ),
+            const SizedBox(height: MuhSpace.lg),
             _ShareableSignalCard(
               title: copy.mainAdvice,
               body: mainAdvice,
@@ -646,7 +671,6 @@ class _TodayFocusTab extends ConsumerWidget {
                   context,
                   title: l10n.luckyTitle,
                   body: [
-                    if (luck.moonSignLabel.isNotEmpty) luck.moonSignLabel,
                     if (luck.luckyNumbers.isNotEmpty)
                       '${l10n.luckyNumbers}: ${luck.luckyNumbers.join(', ')}',
                     if (luck.luckyDays.isNotEmpty)
@@ -1196,8 +1220,9 @@ class _V3Scroll extends StatelessWidget {
             color: MuhColors.cream,
             fontWeight: FontWeight.w800,
             height: 1.08,
+            letterSpacing: -0.4,
           ),
-        ),
+        ).muhEnter(0),
         const SizedBox(height: MuhSpace.sm),
         Text(
           subtitle,
@@ -1205,15 +1230,19 @@ class _V3Scroll extends StatelessWidget {
             color: MuhColors.creamMuted,
             height: 1.45,
           ),
-        ),
+        ).muhEnter(1),
         const SizedBox(height: MuhSpace.xl),
-        ...children
-            .expand((child) => [child, const SizedBox(height: MuhSpace.md)]),
+        ...children.asMap().entries.expand(
+              (entry) => [
+                entry.value.muhEnter(entry.key + 2),
+                const SizedBox(height: MuhSpace.md),
+              ],
+            ),
       ],
     );
     if (onRefresh == null) return list;
     return RefreshIndicator(
-      color: MuhColors.gold,
+      color: MuhColors.brand,
       onRefresh: onRefresh!,
       child: list,
     );
@@ -1984,6 +2013,47 @@ class _PurposeChoiceChip extends StatelessWidget {
   }
 }
 
+class _PersonalizingBanner extends StatelessWidget {
+  const _PersonalizingBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(MuhSpace.lg),
+      decoration: BoxDecoration(
+        color: MuhColors.surface,
+        borderRadius: BorderRadius.circular(MuhRadius.card),
+        border: Border.all(color: MuhColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(MuhRadius.chip),
+            child: LinearProgressIndicator(
+              minHeight: 4,
+              backgroundColor: MuhColors.line,
+              color: MuhColors.brand,
+            ),
+          ),
+          const SizedBox(height: MuhSpace.md),
+          Text(
+            message,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: MuhColors.creamMuted,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyStateScreen extends StatelessWidget {
   const _EmptyStateScreen({
     required this.headline,
@@ -2047,7 +2117,13 @@ class _EmptyStateScreen extends StatelessWidget {
                       const SizedBox(height: MuhSpace.lg),
                       OutlinedButton(
                         onPressed: onAction,
-                        child: Text(actionLabel!),
+                        child: Text(
+                          actionLabel!,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: MuhColors.cream,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ],
                   ],

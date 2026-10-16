@@ -261,6 +261,24 @@ class AppLocalizationsTe extends AppLocalizations {
   String get quickProofGoHome => 'ఈరోజుకు కొనసాగించు';
 
   @override
+  String get timelineSkyToday => 'ఈరోజు ఆకాశం';
+
+  @override
+  String get timelineBiasAct => 'చేయండి — సమయం అనుకూలం';
+
+  @override
+  String get timelineBiasSoft => 'మెల్లగా — మిశ్రమ దినం';
+
+  @override
+  String get timelineBiasWait => 'ఆగండి — జాగ్రత్త మంచిది';
+
+  @override
+  String get timelinePersonalizing => 'వ్యక్తిగత కాపీ లోడ్…';
+
+  @override
+  String get timelineNoWindows => 'సమయ విండోలు లేవు';
+
+  @override
   String get validationExactlyThis => 'ఖచ్చితంగా ఇదే';
 
   @override
@@ -296,13 +314,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get todayGoodWindowsHint =>
-      'ఈ స్లాట్లు సూర్యోదయం నుండి సూర్యాస్తమయం వరకు పగటిని ఎనిమిది భాగాలుగా విభజిస్తాయి. «రాహు కాలం» (జాగ్రత్తలో) ఈ వార రోజుకు అనుకూలం కాని ఎనిమిదో భాగం.';
+      'సమయాలు మీ ప్రాంతంలో సూర్యోదయం–సూర్యాస్తమయం ప్రకారం. జాగ్రత్త స్లాట్లలో నెమ్మదిగా—భయపెట్టేది కాదు, జాగ్రత్త మాత్రమే.';
 
   @override
-  String get todayWindowDaytimeSlice => 'పగటి ముక్క (రాహు కాకుండా)';
+  String get todayWindowDaytimeSlice => 'పగటి సమయం';
 
   @override
-  String get todayWindowRahuKalam => 'రాహు కాలం';
+  String get todayWindowRahuKalam => 'జాగ్రత్త సమయం';
 
   @override
   String get todayWindowPreferredDaylight => 'ఇష్టమైన పగటి విండో';

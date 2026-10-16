@@ -8,6 +8,7 @@ import '../../core/location/location_locale_service.dart';
 import '../../design_system/design_system.dart';
 import '../../core/locale/locale_provider.dart';
 import '../../shared/widgets/muh_primary_button.dart';
+import '../../shared/widgets/onboarding_motion.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 import 'birth_draft_notifier.dart';
 
@@ -31,24 +32,33 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
     _name = TextEditingController(text: d.displayName ?? '');
     _city = TextEditingController(text: d.currentCity ?? '');
     _place = TextEditingController(text: d.birthPlace ?? '');
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final svc = ref.read(locationLocaleServiceProvider);
       final lang = svc.inferLanguageCode();
       ref.read(localeProvider.notifier).setLanguageCode(lang);
       ref.read(birthDraftProvider.notifier).update(
             (draft) => draft.copyWith(languageCode: lang),
           );
+      await _autoDetectLocation();
     });
   }
 
   Future<void> _autoDetectLocation() async {
-    if (!mounted || ref.read(birthDraftProvider).locationDetected) return;
+    if (!mounted || _detectingLocation) return;
+    if (ref.read(birthDraftProvider).locationDetected) return;
     setState(() => _detectingLocation = true);
     try {
       final result =
           await ref.read(locationLocaleServiceProvider).detectAndApply();
       if (!mounted) return;
-      if (result.city != null) _city.text = result.city!;
+      final draft = ref.read(birthDraftProvider);
+      final city = result.city ?? draft.currentCity;
+      if (city != null && city.isNotEmpty) {
+        _city.text = city;
+        ref.read(birthDraftProvider.notifier).update(
+              (d) => d.copyWith(currentCity: city),
+            );
+      }
       if (result.languageCode != null) {
         ref.read(localeProvider.notifier).setLanguageCode(result.languageCode!);
       }
@@ -79,8 +89,7 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
           title: Text(l10n.onboardingBirthTitle),
         ),
         body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(MuhSpace.page),
+          child: MuhOnboardingList(
             children: [
               Text(
                 l10n.onboardingBirthSubtitle,

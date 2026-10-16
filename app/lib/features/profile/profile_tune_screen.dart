@@ -21,6 +21,7 @@ import '../../design_system/design_system.dart';
 import '../../features/onboarding/birth_draft.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
 import '../../shared/widgets/muh_primary_button.dart';
+import '../../shared/widgets/onboarding_motion.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 
 /// Edit display name, language, birth time window, nakshatra — then hard-refresh engine content.
@@ -253,8 +254,7 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
           foregroundColor: MuhColors.cream,
         ),
         body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(MuhSpace.page),
+          child: MuhOnboardingList(
             children: [
               const ChartProfileSwitcher(),
               const SizedBox(height: MuhSpace.lg),

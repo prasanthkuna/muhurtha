@@ -12,9 +12,9 @@ abstract final class MuhTheme {
       scaffoldBackgroundColor: MuhColors.bg,
       colorScheme: const ColorScheme.dark(
         surface: MuhColors.surface,
-        primary: MuhColors.gold,
-        onPrimary: MuhColors.bg,
-        secondary: MuhColors.goldDeep,
+        primary: MuhColors.brand,
+        onPrimary: MuhColors.cream,
+        secondary: MuhColors.gold,
         onSurface: MuhColors.cream,
         error: MuhColors.maroon,
         onError: MuhColors.cream,
@@ -33,6 +33,31 @@ abstract final class MuhTheme {
 
     return base.copyWith(
       textTheme: body,
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: MuhColors.cta,
+          foregroundColor: MuhColors.onCta,
+          disabledBackgroundColor: MuhColors.surfaceSoft,
+          disabledForegroundColor: MuhColors.creamMuted,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: MuhColors.cream,
+          disabledForegroundColor: MuhColors.muted,
+          side: const BorderSide(color: MuhColors.lineBright),
+          padding: const EdgeInsets.symmetric(
+            horizontal: MuhSpace.lg,
+            vertical: MuhSpace.md,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: MuhColors.brand,
+          disabledForegroundColor: MuhColors.muted,
+        ),
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -61,7 +86,7 @@ abstract final class MuhTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(MuhRadius.input),
-          borderSide: const BorderSide(color: MuhColors.gold, width: 1.4),
+          borderSide: const BorderSide(color: MuhColors.brand, width: 1.2),
         ),
         labelStyle: GoogleFonts.instrumentSans(color: MuhColors.creamMuted),
         hintStyle: GoogleFonts.instrumentSans(color: MuhColors.muted),

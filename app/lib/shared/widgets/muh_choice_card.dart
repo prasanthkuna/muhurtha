@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../design_system/design_system.dart';
 
@@ -24,10 +25,13 @@ class MuhChoiceCard extends StatelessWidget {
       curve: Curves.easeOutCubic,
       margin: const EdgeInsets.only(bottom: MuhSpace.md),
       child: Material(
-        color: selected ? MuhColors.surfaceGold : MuhColors.surface,
+        color: selected ? MuhColors.surfaceSoft : MuhColors.surface,
         borderRadius: BorderRadius.circular(MuhRadius.button),
         child: InkWell(
-          onTap: onTap,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
           borderRadius: BorderRadius.circular(MuhRadius.button),
           child: Container(
             padding: const EdgeInsets.symmetric(
@@ -37,18 +41,9 @@ class MuhChoiceCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(MuhRadius.button),
               border: Border.all(
-                color: selected ? MuhColors.gold : MuhColors.line,
-                width: selected ? 1.4 : 1,
+                color: selected ? MuhColors.brand : MuhColors.line,
+                width: selected ? 1.2 : 1,
               ),
-              boxShadow: selected
-                  ? [
-                      BoxShadow(
-                        color: MuhColors.gold.withValues(alpha: 0.18),
-                        blurRadius: 22,
-                        spreadRadius: -4,
-                      ),
-                    ]
-                  : null,
             ),
             child: Row(
               children: [
@@ -77,7 +72,7 @@ class MuhChoiceCard extends StatelessWidget {
                 ),
                 Icon(
                   selected ? Icons.check_circle_rounded : Icons.circle_outlined,
-                  color: selected ? MuhColors.gold : MuhColors.muted,
+                  color: selected ? MuhColors.brand : MuhColors.muted,
                 ),
               ],
             ),

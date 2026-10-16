@@ -34,18 +34,24 @@ Future<void> finishOnboardingToHome({
         .configureForProfile(ids.profileId);
     final api = ref.read(muhurthaEngineApiProvider);
     if (api != null) {
-      try {
-        await api.chartInitialize(ids.birthInputId);
-      } catch (e, st) {
-        await api.logEvent(
-          level: 'error',
-          message: 'chartInitialize failed during onboarding: $e',
-          stackTrace: st.toString(),
-          context: {
-            'birthInputId': ids.birthInputId,
-            'draft': draft.toLogContext(),
-          },
-        );
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          await api.chartInitialize(ids.birthInputId);
+          break;
+        } catch (e, st) {
+          await api.logEvent(
+            level: 'error',
+            message: 'chartInitialize failed (attempt ${attempt + 1}): $e',
+            stackTrace: st.toString(),
+            context: {
+              'birthInputId': ids.birthInputId,
+              'draft': draft.toLogContext(),
+            },
+          );
+          if (attempt == 0) {
+            await Future<void>.delayed(const Duration(seconds: 2));
+          }
+        }
       }
     }
     ref.read(localeProvider.notifier).setLanguageCode(draft.languageCode);

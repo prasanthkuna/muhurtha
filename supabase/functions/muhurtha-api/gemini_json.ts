@@ -94,6 +94,8 @@ export async function geminiGenerateJsonEnvelope(
   userText: string,
   opts?: {
     modelEnvName?: string;
+    /** Bypass env resolution (smoke tests only). */
+    modelOverride?: string;
     maxOutputTokens?: number;
     supabase?: SupabaseClient;
     profileId?: string;
@@ -113,7 +115,8 @@ export async function geminiGenerateJsonEnvelope(
     }
     return null;
   }
-  const model = resolveGeminiModel(opts?.modelEnvName);
+  const model = opts?.modelOverride?.trim() ||
+    resolveGeminiModel(opts?.modelEnvName);
   const maxOutputTokens = opts?.maxOutputTokens ??
     (opts?.birthPackPhase
       ? resolveSectionMaxOutputTokens(opts.birthPackPhase)

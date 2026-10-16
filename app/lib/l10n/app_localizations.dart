@@ -562,6 +562,42 @@ abstract class AppLocalizations {
   /// **'Continue to Today'**
   String get quickProofGoHome;
 
+  /// No description provided for @timelineSkyToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Sky today'**
+  String get timelineSkyToday;
+
+  /// No description provided for @timelineBiasAct.
+  ///
+  /// In en, this message translates to:
+  /// **'Act — windows are open'**
+  String get timelineBiasAct;
+
+  /// No description provided for @timelineBiasSoft.
+  ///
+  /// In en, this message translates to:
+  /// **'Go soft — mix good and caution'**
+  String get timelineBiasSoft;
+
+  /// No description provided for @timelineBiasWait.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait — lean cautious today'**
+  String get timelineBiasWait;
+
+  /// No description provided for @timelinePersonalizing.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal copy loading…'**
+  String get timelinePersonalizing;
+
+  /// No description provided for @timelineNoWindows.
+  ///
+  /// In en, this message translates to:
+  /// **'No windows listed'**
+  String get timelineNoWindows;
+
   /// No description provided for @validationExactlyThis.
   ///
   /// In en, this message translates to:
@@ -631,19 +667,19 @@ abstract class AppLocalizations {
   /// No description provided for @todayGoodWindowsHint.
   ///
   /// In en, this message translates to:
-  /// **'These slots divide daylight between sunrise and sunset. “Rahu Kalam” (under Caution) is the inauspicious eighth for this weekday.'**
+  /// **'Times follow sunrise and sunset where you are. Caution windows are shorter slots to go easier—not scary, just slower.'**
   String get todayGoodWindowsHint;
 
   /// No description provided for @todayWindowDaytimeSlice.
   ///
   /// In en, this message translates to:
-  /// **'Daytime slice (non–Rahu)'**
+  /// **'Daytime window'**
   String get todayWindowDaytimeSlice;
 
   /// No description provided for @todayWindowRahuKalam.
   ///
   /// In en, this message translates to:
-  /// **'Rahu Kalam'**
+  /// **'Caution window'**
   String get todayWindowRahuKalam;
 
   /// No description provided for @todayWindowPreferredDaylight.
@@ -1375,13 +1411,13 @@ abstract class AppLocalizations {
   /// No description provided for @loadingScreen.
   ///
   /// In en, this message translates to:
-  /// **'Reading your Moon rhythm...'**
+  /// **'Loading your view...'**
   String get loadingScreen;
 
   /// No description provided for @loadingBootSub.
   ///
   /// In en, this message translates to:
-  /// **'Moon sign, phase, and today are lining up.'**
+  /// **'Your profile and today are lining up.'**
   String get loadingBootSub;
 
   /// No description provided for @loadingAuthSub.
@@ -1411,7 +1447,7 @@ abstract class AppLocalizations {
   /// No description provided for @loadingScreenSub.
   ///
   /// In en, this message translates to:
-  /// **'Good windows and cautions are being checked.'**
+  /// **'This usually takes a few seconds.'**
   String get loadingScreenSub;
 
   /// No description provided for @v3DecodeTitle.

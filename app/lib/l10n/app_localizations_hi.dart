@@ -259,6 +259,24 @@ class AppLocalizationsHi extends AppLocalizations {
   String get quickProofGoHome => 'आज पर जाएँ';
 
   @override
+  String get timelineSkyToday => 'आज का आकाश';
+
+  @override
+  String get timelineBiasAct => 'करें — समय अनुकूल';
+
+  @override
+  String get timelineBiasSoft => 'धीरे — मिला-जुला दिन';
+
+  @override
+  String get timelineBiasWait => 'रुकें — सावधानी बेहतर';
+
+  @override
+  String get timelinePersonalizing => 'व्यक्तिगत कॉपी लोड…';
+
+  @override
+  String get timelineNoWindows => 'कोई समय-खिड़की नहीं';
+
+  @override
   String get validationExactlyThis => 'बिल्कुल ऐसा ही';
 
   @override
@@ -293,13 +311,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get todayGoodWindowsHint =>
-      'ये खंड सूर्योदय से सूर्यास्त के बीच दिन को आठ हिस्सों में बाँटते हैं। “राहु काल” (सावधानी) इस दिन का असुविधाजनक आठवाँ हिस्सा है।';
+      'समय आपके स्थान पर सूर्योदय और सूर्यास्त के अनुसार हैं। सावधानी वाले समय में धीरे चलें—डराने वाली बात नहीं, बस सावधानी।';
 
   @override
-  String get todayWindowDaytimeSlice => 'दिन का खंड (राहु के सिवा)';
+  String get todayWindowDaytimeSlice => 'दिन का समय';
 
   @override
-  String get todayWindowRahuKalam => 'राहु काल';
+  String get todayWindowRahuKalam => 'सावधानी का समय';
 
   @override
   String get todayWindowPreferredDaylight => 'पसंदीदा दिन-प्रकाश खिड़की';

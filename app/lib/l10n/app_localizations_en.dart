@@ -261,6 +261,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get quickProofGoHome => 'Continue to Today';
 
   @override
+  String get timelineSkyToday => 'Sky today';
+
+  @override
+  String get timelineBiasAct => 'Act — windows are open';
+
+  @override
+  String get timelineBiasSoft => 'Go soft — mix good and caution';
+
+  @override
+  String get timelineBiasWait => 'Wait — lean cautious today';
+
+  @override
+  String get timelinePersonalizing => 'Personal copy loading…';
+
+  @override
+  String get timelineNoWindows => 'No windows listed';
+
+  @override
   String get validationExactlyThis => 'Exactly this';
 
   @override
@@ -295,13 +313,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get todayGoodWindowsHint =>
-      'These slots divide daylight between sunrise and sunset. “Rahu Kalam” (under Caution) is the inauspicious eighth for this weekday.';
+      'Times follow sunrise and sunset where you are. Caution windows are shorter slots to go easier—not scary, just slower.';
 
   @override
-  String get todayWindowDaytimeSlice => 'Daytime slice (non–Rahu)';
+  String get todayWindowDaytimeSlice => 'Daytime window';
 
   @override
-  String get todayWindowRahuKalam => 'Rahu Kalam';
+  String get todayWindowRahuKalam => 'Caution window';
 
   @override
   String get todayWindowPreferredDaylight => 'Preferred daylight window';
@@ -677,10 +695,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loadingCompact => 'Reading the timing...';
 
   @override
-  String get loadingScreen => 'Reading your Moon rhythm...';
+  String get loadingScreen => 'Loading your view...';
 
   @override
-  String get loadingBootSub => 'Moon sign, phase, and today are lining up.';
+  String get loadingBootSub => 'Your profile and today are lining up.';
 
   @override
   String get loadingAuthSub => 'Keeping your decode ready.';
@@ -695,7 +713,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loadingShareSub => 'Branding it before it leaves the app.';
 
   @override
-  String get loadingScreenSub => 'Good windows and cautions are being checked.';
+  String get loadingScreenSub => 'This usually takes a few seconds.';
 
   @override
   String get v3DecodeTitle => 'Your Decode';

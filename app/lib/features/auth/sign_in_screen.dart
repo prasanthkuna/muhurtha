@@ -31,6 +31,7 @@ import '../../shared/widgets/legal_links.dart';
 
 import '../../shared/widgets/muh_primary_button.dart';
 
+import '../../shared/widgets/muh_enter.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 
 
@@ -357,17 +358,21 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     try {
 
-      if (defaultTargetPlatform == TargetPlatform.android) {
+      // Phone Number Hint via sms_autofill (otp_autofill mishandles the
 
-        return _otpInteractor.hint;
+      // credential picker result on Android — looks like "user denied").
 
-      }
+      if (defaultTargetPlatform == TargetPlatform.android ||
 
-      if (defaultTargetPlatform == TargetPlatform.iOS) {
+          defaultTargetPlatform == TargetPlatform.iOS) {
 
         return SmsAutoFill().hint;
 
       }
+
+    } on PlatformException catch (e, st) {
+
+      authLog('picker_hint_platform', level: 'warn', error: e, stackTrace: st);
 
     } catch (e, st) {
 
@@ -393,11 +398,31 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   String _normalizePhone(String raw) {
 
-    var t = raw.replaceAll(RegExp(r'[\s\-()]'), '');
+    var t = raw.trim();
+
+    if (t.toLowerCase().startsWith('tel:')) {
+
+      t = t.substring(4).trim();
+
+    }
+
+    t = t.replaceAll(RegExp(r'[\s\-().]'), '');
 
     if (t.startsWith('00')) {
 
       t = '+${t.substring(2)}';
+
+    }
+
+    if (!t.startsWith('+') &&
+
+        t.length == 11 &&
+
+        t.startsWith('0') &&
+
+        RegExp(r'^0[6-9]').hasMatch(t)) {
+
+      t = '+91${t.substring(1)}';
 
     }
 
@@ -969,7 +994,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
                   ),
 
-                ),
+                ).muhEnter(0),
 
                 const SizedBox(height: MuhSpace.sm),
 
@@ -985,7 +1010,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
                   ),
 
-                ),
+                ).muhEnter(1),
 
                 const SizedBox(height: MuhSpace.xl),
 
@@ -1148,11 +1173,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
                     style: OutlinedButton.styleFrom(
 
-                      foregroundColor: MuhColors.goldSoft,
+                      foregroundColor: MuhColors.cream,
 
-                      side: BorderSide(
+                      side: const BorderSide(
 
-                        color: MuhColors.creamMuted.withValues(alpha: 0.35),
+                        color: MuhColors.lineBright,
 
                       ),
 

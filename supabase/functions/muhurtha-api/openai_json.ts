@@ -60,6 +60,8 @@ export async function openAiGenerateJsonEnvelope(
   userText: string,
   optsOrModelEnvName?: string | {
     modelEnvName?: string;
+    /** Bypass env resolution (smoke tests only). */
+    modelOverride?: string;
     supabase?: SupabaseClient;
     profileId?: string;
     birthPackPhase?: string;
@@ -77,9 +79,12 @@ export async function openAiGenerateJsonEnvelope(
   const birthPackPhase = typeof optsOrModelEnvName === "string"
     ? undefined
     : optsOrModelEnvName?.birthPackPhase;
+  const modelOverride = typeof optsOrModelEnvName === "string"
+    ? undefined
+    : optsOrModelEnvName?.modelOverride;
   const apiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
   if (!apiKey) return null;
-  const model = resolveModel(modelEnvName);
+  const model = modelOverride?.trim() || resolveModel(modelEnvName);
   const isBirthPack = modelEnvName === "BIRTH_PACK_MODEL" || birthPackPhase != null;
   const maxTokens = maxCompletionTokens(modelEnvName, birthPackPhase);
   const payload: Record<string, unknown> = {

@@ -54,9 +54,9 @@ void main() {
       enToday = await StoreDemoFixtures.loadToday('en');
     });
 
-    _homeTabShot('01-today', tabIndex: 2, pack: () => enPack, today: () => enToday);
-    _homeTabShot('02-decode', tabIndex: 0, pack: () => enPack, today: () => enToday);
-    _homeTabShot('03-life-map', tabIndex: 1, pack: () => enPack, today: () => enToday);
+    _homeTabShot('01-decode', tabIndex: 0, pack: () => enPack, today: () => enToday);
+    _homeTabShot('02-today', tabIndex: 1, pack: () => enPack, today: () => enToday);
+    _homeTabShot('03-life-map', tabIndex: 2, pack: () => enPack, today: () => enToday);
     _homeTabShot('04-timing', tabIndex: 3, pack: () => enPack, today: () => enToday);
     _homeTabShot(
       '05-ask',

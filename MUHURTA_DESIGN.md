@@ -28,15 +28,15 @@ Muhūrta must feel like:
 
 ## 2. Aesthetic Direction
 
-### Chosen direction
+### Chosen direction (v2 — pro product)
 
-**Warm Vedic Streaming Interface**
+**Timeline-first Indian timing product** (RazorSense / Blade structure, not temple gold)
 
 Design inspiration mix:
 
-- **70% Spotify structure** — scrollable daily cards, strong hierarchy, personal feed, bottom navigation
-- **20% Mastercard warmth** — premium cream/gold warmth, trustworthy family-friendly tone
-- **10% Binance accent energy** — controlled gold highlights for timing, confidence, and action
+- **60% Linear / Stripe craft** — graphite surfaces, hairline borders, one accent per screen, white primary CTAs
+- **25% Razorpay Blade tokens** — role-based color (`brand`, `intent` good/caution/negative), state-driven motion
+- **15% Muhūrta heritage** — gold only as nakshatra/Pro accent; Jyotish semantics on timing cards
 
 ### What users should remember
 
@@ -78,35 +78,31 @@ Avoid:
 ### Keywords
 
 ```txt
-warm black
-vedic gold
-soft cream
-burnt amber
-quiet emerald
-deep maroon caution
-large cinematic cards
-fine grain texture
-subtle orbital geometry
-sunrise/sunset time energy
-premium Indian editorial
+cool near-black canvas
+graphite surfaces
+hairline borders
+brand azure (focus / selected)
+white primary buttons
+intent green / amber / red (timing only)
+heritage gold (max one use per screen)
+Inter / Instrument Sans UI
+8–12px card radius
+flutter_animate micro-motion + Rive for loaders (planned)
 ```
 
 ### Visual metaphor
 
-The UI should feel like **a warm brass lamp in a dark room**, not a neon horoscope app.
+The UI should feel like **a calm timing instrument in a dark room** — fintech-grade trust, not neon horoscope or brass overload.
 
 Use:
 
-- dark warm backgrounds
-- gold as timing/action highlight
-- cream text for readability
-- muted brown surfaces
-- soft gradients
-- thin sacred-geometry-style lines, very subtle
-- rounded cards
-- large typography
-- simple chips
-- non-distracting motion
+- cool dark backgrounds (`#0B0C0E` stack)
+- white CTAs; azure for focus/active nav
+- cream/gray ink for readability
+- borders for depth (no gold glow on every card)
+- timing good/caution/avoid via semantic colors only
+- subtle motion tied to **state** (loading → partial → ready)
+- timeline home: panchang strip + act/soft/wait + timing split
 
 ---
 

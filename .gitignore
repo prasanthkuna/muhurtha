@@ -23,7 +23,6 @@ Desktop.ini
 !.vscode/tasks.json
 .idea/
 .cursor/
-!.cursor/mcp.json
 .codex/
 .agents/
 *.iml

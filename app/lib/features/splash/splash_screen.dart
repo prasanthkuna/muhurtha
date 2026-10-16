@@ -61,7 +61,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     return Scaffold(
       body: MuhurthaLoadingView(
         mode: MuhurthaLoadingMode.boot,
-        moonSymbol: '☽',
         message: l10n.loadingOpening,
       ),
     );

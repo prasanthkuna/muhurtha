@@ -11,3 +11,4 @@ export 'muhurta_radius.dart';
 export 'muhurta_shadows.dart';
 export 'muhurta_spacing.dart';
 export 'muhurta_type_scale.dart';
+export 'muhurta_motion.dart';

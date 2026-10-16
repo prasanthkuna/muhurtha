@@ -7,6 +7,7 @@ import '../../design_system/design_system.dart';
 import '../../core/data/nakshatras.dart';
 import '../../shared/widgets/muh_choice_card.dart';
 import '../../shared/widgets/muh_primary_button.dart';
+import '../../shared/widgets/muh_enter.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 import 'birth_draft_notifier.dart';
 
@@ -46,7 +47,7 @@ class _NakshatraScreenState extends ConsumerState<NakshatraScreen> {
                     color: MuhColors.creamMuted,
                     height: 1.45,
                   ),
-                ),
+                ).muhEnter(0),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: MuhSpace.page),
@@ -61,7 +62,7 @@ class _NakshatraScreenState extends ConsumerState<NakshatraScreen> {
                       ),
                     );
                   },
-                ),
+                ).muhEnter(1),
               ),
               Expanded(
                 child: ListView.builder(
@@ -86,7 +87,7 @@ class _NakshatraScreenState extends ConsumerState<NakshatraScreen> {
                             ),
                           );
                         },
-                      ),
+                      ).muhEnter(i + 2),
                     );
                   },
                 ),
@@ -103,9 +104,9 @@ class _NakshatraScreenState extends ConsumerState<NakshatraScreen> {
                       );
                       return;
                     }
-                    context.push('/onboarding/accuracy');
+                    context.push('/onboarding/concern');
                   },
-                ),
+                ).muhEnter(2),
               ),
             ],
           ),

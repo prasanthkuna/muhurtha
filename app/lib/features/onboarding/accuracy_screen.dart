@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../design_system/design_system.dart';
 import '../../core/engine/accuracy_copy.dart';
 import '../../shared/widgets/muh_primary_button.dart';
+import '../../shared/widgets/onboarding_motion.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 import 'birth_draft_notifier.dart';
 import 'onboarding_finish.dart';
@@ -41,8 +42,7 @@ class _AccuracyScreenState extends ConsumerState<AccuracyScreen> {
         backgroundColor: Colors.transparent,
         appBar: AppBar(title: Text(l10n.accuracyTitle)),
         body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(MuhSpace.page),
+          child: MuhOnboardingList(
             children: [
               Text(
                 l10n.accuracySubtitle,
@@ -93,5 +93,5 @@ String _accuracyProfileNote(BuildContext context) {
   if (lang == 'hi') {
     return 'सटीक जन्म समय या नक्षत्र न होने पर कुछ परिणाम कम निश्चित हो सकते हैं। आप इसे बाद में Profile में बदल सकते हैं।';
   }
-  return 'Because exact birth time or Nakshatra is missing, some results may be less precise. You can update this anytime in Profile.';
+  return 'Without exact birth time, some results may be less precise. You can update this anytime in Profile.';
 }

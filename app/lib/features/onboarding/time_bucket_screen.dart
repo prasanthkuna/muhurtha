@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../design_system/design_system.dart';
 import '../../shared/widgets/muh_choice_card.dart';
 import '../../shared/widgets/muh_primary_button.dart';
+import '../../shared/widgets/onboarding_motion.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 import 'birth_draft.dart';
 import 'birth_draft_notifier.dart';
@@ -73,8 +74,7 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
         backgroundColor: Colors.transparent,
         appBar: AppBar(title: Text(l10n.timeTitle)),
         body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(MuhSpace.page),
+          child: MuhOnboardingList(
             children: [
               Text(
                 l10n.timeSubtitle,
@@ -144,7 +144,7 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
                               clearJanmaNakshatra: true,
                             ),
                           );
-                          context.push('/onboarding/accuracy');
+                          context.push('/onboarding/concern');
                         } else {
                           context.push('/onboarding/nakshatra');
                         }

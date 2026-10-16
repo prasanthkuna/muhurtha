@@ -7,13 +7,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/config/env.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/home/home_shell.dart';
-import '../features/onboarding/accuracy_screen.dart';
+import '../features/onboarding/concern_screen.dart';
 import '../features/onboarding/birth_basics_screen.dart';
 import '../features/onboarding/nakshatra_screen.dart';
 import '../features/onboarding/time_bucket_screen.dart';
 import '../features/profile/profile_tune_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/welcome/welcome_screen.dart';
+import 'muh_router_transitions.dart';
 
 final _rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -38,41 +39,45 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
+      muhGoRoute(
         path: '/splash',
+        transition: MuhRouteTransition.fade,
         builder: (context, state) => const SplashScreen(),
       ),
-      GoRoute(
+      muhGoRoute(
         path: '/welcome',
+        transition: MuhRouteTransition.up,
         builder: (context, state) => const WelcomeScreen(),
       ),
-      GoRoute(
+      muhGoRoute(
         path: '/auth',
         builder: (context, state) => const PhoneAuthScreen(),
       ),
-      GoRoute(
+      muhGoRoute(
         path: '/onboarding/birth-basics',
         builder: (context, state) => const BirthBasicsScreen(),
       ),
-      GoRoute(
+      muhGoRoute(
         path: '/onboarding/time',
         builder: (context, state) => const TimeBucketScreen(),
       ),
-      GoRoute(
+      muhGoRoute(
         path: '/onboarding/nakshatra',
         builder: (context, state) => const NakshatraScreen(),
       ),
-      GoRoute(
-        path: '/onboarding/accuracy',
-        builder: (context, state) => const AccuracyScreen(),
+      muhGoRoute(
+        path: '/onboarding/concern',
+        builder: (context, state) => const ConcernScreen(),
       ),
-      GoRoute(
+      muhGoRoute(
         path: '/home',
+        transition: MuhRouteTransition.fade,
         builder: (context, state) {
           final tab = state.uri.queryParameters['tab'];
           final initialIndex = switch (tab) {
-            'life_map' || 'journey' => 1,
-            'today' || 'remedies' => 2,
+            'decode' => 0,
+            'today' || 'remedies' || 'timeline' => 1,
+            'life_map' || 'journey' => 2,
             'timing' => 3,
             'ask' || 'purpose' => 4,
             _ => 0,
@@ -80,7 +85,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           return HomeShell(initialIndex: initialIndex);
         },
       ),
-      GoRoute(
+      muhGoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileTuneScreen(),
       ),

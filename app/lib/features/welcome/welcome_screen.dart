@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/env.dart';
 import '../../design_system/design_system.dart';
 import '../../shared/widgets/muh_primary_button.dart';
+import '../../shared/widgets/muh_enter.dart';
 import '../../shared/widgets/orbital_backdrop.dart';
 
 class WelcomeScreen extends StatefulWidget {
@@ -63,6 +64,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     final theme = Theme.of(context);
 
     return OrbitalBackdrop(
+      showGeometry: true,
+      intensity: 0.35,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: SafeArea(
@@ -83,7 +86,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         letterSpacing: -0.5,
                         height: 1.05,
                       ),
-                    ),
+                    ).muhEnter(0),
                     const SizedBox(height: MuhSpace.xl),
                     Text(
                       l10n.welcomeTagline,
@@ -92,12 +95,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         height: 1.45,
                         fontWeight: FontWeight.w400,
                       ),
-                    ),
+                    ).muhEnter(1),
                     const Spacer(),
                     MuhPrimaryButton(
                       label: l10n.welcomeCta,
                       onPressed: _onBegin,
-                    ),
+                    ).muhEnter(2),
                     const SizedBox(height: MuhSpace.lg),
                     Text(
                       l10n.welcomeFootnote,
@@ -105,7 +108,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         color: MuhColors.muted,
                         height: 1.35,
                       ),
-                    ),
+                    ).muhEnter(3),
                     const SizedBox(height: MuhSpace.xl),
                   ],
                 ),

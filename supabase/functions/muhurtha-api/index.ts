@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { handleRequest, warmBirthPack } from "./engine.ts";
 import { smokeTestLocaleLlm } from "./locale_smoke.ts";
 import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
+import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
 import { runWarmup } from "./warmup.ts";
 import type { AppLocale } from "./vedic_labels.ts";
 
@@ -129,6 +130,19 @@ Deno.serve(async (req) => {
         null,
         { skipOpenAi },
       );
+      return new Response(JSON.stringify(result), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    if (body.action === "smoke_test_low_cost_models") {
+      if (!isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const result = await smokeTestLowCostModels();
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
       });

@@ -51,15 +51,6 @@ class LuckyStrip extends StatelessWidget {
               if (onShare != null) WhatsAppShareButton(onTap: onShare!),
             ],
           ),
-          if (!compact && luck.moonSignLabel.isNotEmpty) ...[
-            const SizedBox(height: MuhSpace.xs),
-            Text(
-              luck.moonSignLabel,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: MuhColors.creamMuted,
-              ),
-            ),
-          ],
           const SizedBox(height: MuhSpace.md),
           if (luck.luckyNumbers.isNotEmpty)
             _Row(
