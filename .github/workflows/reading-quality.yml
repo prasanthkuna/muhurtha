@@ -32,7 +32,7 @@ jobs:
         run: flutter pub get
       - name: Check targeted Dart source
         working-directory: app
-        run: dart analyze lib/core/data/life_period_matching.dart lib/core/data/birth_pack_views.dart lib/core/data/muhurtha_engine_api.dart lib/features/home/tabs/life_atlas_tab.dart lib/features/home/tabs/decode_editorial_tab.dart lib/features/home/tabs/timing_editorial_tab.dart lib/features/home/home_editorial_scroll.dart lib/features/home/home_shell.dart lib/shared/widgets/muh_timeline_hero.dart lib/shared/widgets/editorial/muh_prompt_composer.dart lib/design_system/muhurta_colors.dart test/reading_quality_test.dart
+        run: dart analyze lib/core/data/life_period_matching.dart lib/core/data/birth_pack_views.dart lib/core/data/muhurtha_engine_api.dart lib/core/analytics/app_analytics.dart lib/features/home/tabs/life_atlas_tab.dart lib/features/home/tabs/decode_editorial_tab.dart lib/features/home/tabs/timing_editorial_tab.dart lib/features/home/home_editorial_scroll.dart lib/features/home/home_shell.dart lib/shared/widgets/muh_timeline_hero.dart lib/shared/widgets/editorial/muh_prompt_composer.dart lib/design_system/muhurta_colors.dart test/reading_quality_test.dart
       - name: Run Flutter test suite
         working-directory: app
         run: flutter test
