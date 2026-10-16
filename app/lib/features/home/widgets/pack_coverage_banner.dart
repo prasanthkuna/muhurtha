@@ -33,18 +33,13 @@ class PackCoverageBanner extends StatelessWidget {
             ),
           ),
           const SizedBox(height: MuhSpace.xs),
-          ...warnings.take(3).map(
-                (w) => Padding(
-                  padding: const EdgeInsets.only(bottom: MuhSpace.xs),
-                  child: Text(
-                    w,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: MuhColors.inkSecondary,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ),
+          Text(
+            'Some date-specific readings are still preparing. You can explore your available insights now.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: MuhColors.inkSecondary,
+              height: 1.4,
+            ),
+          ),
         ],
       ),
     );

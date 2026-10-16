@@ -1160,7 +1160,9 @@ Stream<BirthPackPayload?> _pollBirthPack(
   String locale,
   String? chartProfileId,
 ) async* {
-  const pollInterval = Duration(seconds: 3);
+  // Keep advancing staged generation even after Decode becomes usable.
+  // Partial packs should render immediately while remaining phases finish.
+  const pollInterval = Duration(seconds: 6);
   const maxAttempts = 150;
   for (var attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -1169,7 +1171,9 @@ Stream<BirthPackPayload?> _pollBirthPack(
         chartProfileId: chartProfileId,
       );
       yield pack;
-      if (pack.isComplete || pack.hasLlmPack) return;
+      // Returning on hasLlmPack stranded Telugu packs after the first phases.
+      // Continue background polling until the full birth pack is ready.
+      if (pack.isComplete) return;
     } on EngineException catch (e) {
       if (e.code != 'birth_pack_not_ready' && e.code != 'timeout') rethrow;
     }

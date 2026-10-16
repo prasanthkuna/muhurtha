@@ -3005,7 +3005,6 @@ async function _handleInternal(
     "journey_get",
     "weekly_get",
     "monthly_get",
-    "purpose_check",
   ]);
   if (DEPRECATED_ACTIONS.has(action)) {
     throw new ActionError(
@@ -4383,25 +4382,10 @@ async function _handleInternal(
         }),
     };
 
-    const { data: saved, error } = await supabase
-      .from("purpose_checks")
-      .insert({
-        profile_id: profile.id,
-        purpose_type: purposeType,
-        target_date: targetDate,
-        location_city: profile.current_city,
-        timezone: tz,
-        status,
-        summary: `${headline}\n${summary}`,
-        action_line,
-        best_windows,
-        caution_windows,
-        better_options,
-        deterministic_context: ctx,
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
+    // This is a calculated, transient interpretation. The old purpose_checks
+    // table was retired; do not issue writes to a missing table.
+    // The client can store an explicitly user-saved intention separately.
+    const purposeCheckId = crypto.randomUUID();
 
     let responseBetterOptions = better_options;
     if (!access.isPlus && responseBetterOptions.length > 0) {
@@ -4416,7 +4400,7 @@ async function _handleInternal(
     }
 
     return {
-      id: saved.id,
+      id: purposeCheckId,
       status,
       headline,
       summary,

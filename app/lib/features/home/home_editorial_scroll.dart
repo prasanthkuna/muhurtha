@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../design_system/design_system.dart';
-import '../../shared/widgets/editorial/muh_editorial_hero.dart';
 import '../../shared/widgets/muh_enter.dart';
 
 class HomeEditorialScroll extends StatelessWidget {
@@ -32,10 +31,10 @@ class HomeEditorialScroll extends StatelessWidget {
       ),
       children: [
         MuhEditorialHero(title: title, subtitle: subtitle).muhEnter(0),
-        const SizedBox(height: MuhSpace.xl),
+        const SizedBox(height: MuhSpace.md),
         ...children.asMap().entries.expand(
               (entry) => [
-                entry.value.muhEnter(entry.key + 1),
+                entry.value.muhEnter((entry.key + 1).clamp(0, 2)),
                 const SizedBox(height: MuhSpace.md),
               ],
             ),

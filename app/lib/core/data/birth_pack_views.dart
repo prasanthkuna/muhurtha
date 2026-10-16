@@ -176,7 +176,7 @@ class BirthPackViews {
       'career',
       'money',
       'business',
-      'relationships',
+      'relationship',
       'family',
       'health_routine',
     ];
@@ -302,16 +302,21 @@ class BirthPackViews {
         .map((c) => _normalizePeriod(c.periodLabel))
         .where((p) => p.isNotEmpty)
         .toSet();
-    final seen = <String>{};
+    final keyToIndex = <String, int>{};
     final out = <ChapterView>[];
     for (final row in rows) {
       final norm = _normalizePeriod(row.periodLabel);
       if (norm.isEmpty) continue;
       if (row.tense == 'past' && currentPeriods.contains(norm)) continue;
       final key = '$norm|${row.tense}';
-      if (seen.contains(key)) continue;
-      seen.add(key);
-      out.add(row);
+      final existingIndex = keyToIndex[key];
+      if (existingIndex != null) {
+        // Older packs append generated chapters after generic fallback prose.
+        out[existingIndex] = row;
+      } else {
+        keyToIndex[key] = out.length;
+        out.add(row);
+      }
     }
     return out;
   }

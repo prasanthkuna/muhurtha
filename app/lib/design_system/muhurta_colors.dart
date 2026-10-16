@@ -58,7 +58,7 @@ abstract final class MuhColors {
 
   static const Color gold = goldAccent;
   static const Color goldDeep = goldText;
-  static const Color goldSoft = goldWash;
+  static const Color goldSoft = goldAccent;
 
   static const Color emerald = successInk;
   static const Color emeraldBg = successWash;

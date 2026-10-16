@@ -12,7 +12,6 @@ import '../../../core/data/muhurtha_engine_api.dart';
 import '../../../core/engagement/engagement_scope.dart';
 import '../../../core/engagement/user_engagement_store.dart';
 import '../../../design_system/design_system.dart';
-import '../../../shared/widgets/editorial/editorial.dart';
 import '../../../shared/widgets/muh_purpose_chip.dart';
 import '../../../shared/widgets/muhurtha_loading_view.dart';
 import '../home_copy.dart';
@@ -157,6 +156,36 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
               }).toList(),
             ),
             const SizedBox(height: MuhSpace.md),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: Text(
+                ref.watch(homeTimingTargetDateProvider) ?? 'Choose a date',
+              ),
+              onPressed: () async {
+                final now = DateTime.now();
+                final first = DateTime(now.year, now.month, now.day);
+                final last = first.add(const Duration(days: 90));
+                final requested = DateTime.tryParse(
+                  ref.read(homeTimingTargetDateProvider) ?? '',
+                ) ?? first;
+                final initial = requested.isBefore(first) || requested.isAfter(last)
+                    ? first
+                    : requested;
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: initial,
+                  firstDate: first,
+                  lastDate: last,
+                  helpText: 'Choose a date for your plan',
+                );
+                if (picked != null && mounted) {
+                  ref.read(homeTimingTargetDateProvider.notifier).state =
+                      picked.toIso8601String().substring(0, 10);
+                  setState(() => _result = null);
+                }
+              },
+            ),
+            const SizedBox(height: MuhSpace.sm),
             MuhQuietButton(
               label: l10n.purposeCheck,
               icon: Icons.event_available_outlined,
@@ -317,7 +346,7 @@ class _OutlookSection extends ConsumerWidget {
         week.body.isEmpty &&
         month.headline.isEmpty &&
         month.body.isEmpty) {
-      return MuhInlineStatus(
+      return const MuhInlineStatus(
         message: 'Outlook cards not generated for this pack yet.',
         kind: MuhInlineStatusKind.empty,
       );

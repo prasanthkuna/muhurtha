@@ -24,7 +24,6 @@ import '../../design_system/design_system.dart';
 import '../../shared/widgets/chart_profile_switcher.dart';
 import '../../shared/widgets/celestial_components.dart';
 import '../../shared/widgets/lucky_strip.dart';
-import '../../shared/widgets/editorial/editorial.dart';
 import '../../shared/widgets/muh_purpose_chip.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
@@ -447,9 +446,10 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
         }
         final views = BirthPackViews(pack);
         final playbook = views.playbookFor(payload.date);
-        final mainAdvice = playbook?.displayAdvice.isNotEmpty == true
-            ? playbook!.displayAdvice
+        final mainAdvice = playbook?.oneLine.trim().isNotEmpty == true
+            ? playbook!.oneLine.trim()
             : payload.oneLine ?? '';
+        final detailedAdvice = playbook?.body.trim() ?? '';
         final goodSummary = playbook?.goodSummary ?? '';
         final avoidSummary = playbook?.avoidSummary ?? '';
         final betterFor = playbook?.betterFor.isNotEmpty == true
@@ -497,8 +497,8 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
           children: [
             PackCoverageBanner(pack: pack),
             if (!pack.hasTodayCardFor(payload.date) && pack.dailyCardCount > 0)
-              Padding(
-                padding: const EdgeInsets.only(bottom: MuhSpace.md),
+              const Padding(
+                padding: EdgeInsets.only(bottom: MuhSpace.md),
                 child: MuhInlineStatus(
                   message:
                       'No dedicated reading for this date yet. Windows below are calculated; narrative may be limited.',
@@ -509,6 +509,16 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
               payload: payload,
               headline: mainAdvice.isNotEmpty ? mainAdvice : (payload.oneLine ?? ''),
             ),
+            if (detailedAdvice.isNotEmpty && detailedAdvice != mainAdvice)
+              ExpansionTile(
+                title: Text(copy.todayTitle),
+                childrenPadding: const EdgeInsets.all(MuhSpace.md),
+                children: [
+                  Text(detailedAdvice,
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(height: 1.55)),
+                ],
+              ),
             const SizedBox(height: MuhSpace.md),
             TodayTimingPanel(
               payload: payload,
@@ -904,12 +914,11 @@ class _AskTabState extends State<_AskTab> {
   }
 
   Widget _askBody(ThemeData theme, {BirthPackPayload? pack}) {
-    final knowledgeHint = pack == null ? '' : BirthPackViews(pack).askKnowledgeHint;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
           MuhSpace.page,
-          MuhSpace.xxl,
+          MuhSpace.md,
           MuhSpace.page,
           MuhSpace.xl,
         ),
@@ -922,13 +931,13 @@ class _AskTabState extends State<_AskTab> {
           ),
           const SizedBox(height: MuhSpace.sm),
           Text(
-            knowledgeHint.isNotEmpty ? knowledgeHint : _tx('sub'),
+            _tx('sub'),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: MuhColors.inkSecondary,
               height: 1.45,
             ),
           ),
-          const SizedBox(height: MuhSpace.xl),
+          const SizedBox(height: MuhSpace.md),
           MuhPromptComposer(
             controller: _controller,
             hint: _tx('placeholder'),
@@ -1251,7 +1260,7 @@ class _PersonalizingBanner extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(MuhRadius.chip),
-            child: LinearProgressIndicator(
+            child: const LinearProgressIndicator(
               minHeight: 4,
               backgroundColor: MuhColors.line,
               color: MuhColors.brand,

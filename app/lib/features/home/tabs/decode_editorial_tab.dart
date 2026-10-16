@@ -13,10 +13,8 @@ import '../../../core/data/birth_pack_views.dart';
 import '../../../core/data/muhurtha_engine_api.dart';
 import '../../../core/engagement/engagement_scope.dart';
 import '../../../core/engagement/user_engagement_store.dart';
-import '../widgets/pack_coverage_banner.dart';
 import '../../../core/session/session_preferences.dart';
 import '../../../design_system/design_system.dart';
-import '../../../shared/widgets/editorial/editorial.dart';
 import '../../../shared/widgets/muhurtha_loading_view.dart';
 import '../home_copy.dart';
 import '../home_editorial_scroll.dart';
@@ -49,7 +47,6 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
     final packAsync = ref.watch(birthPackProvider);
     ref.watch(activeChartProfileIdProvider);
     final copy = HomeCopy(l10n);
-    final subjectName = ref.watch(chartDisplayNameProvider);
 
     return packAsync.when(
       data: (pack) {
@@ -81,7 +78,6 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
           );
         }
         final views = BirthPackViews(pack);
-        final name = subjectName.isNotEmpty ? subjectName : pack.displayName.trim();
         final decodeHit = views.displayHook;
         final identitySummary = views.identitySummary;
         final hasCopy = decodeHit.isNotEmpty ||
@@ -89,15 +85,9 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
             views.strengths.isNotEmpty ||
             views.watchouts.isNotEmpty;
 
-        final subtitle = identitySummary.isNotEmpty &&
-                decodeHit.isNotEmpty &&
-                identitySummary.trim() != decodeHit.trim()
-            ? identitySummary
-            : '';
-
         return HomeEditorialScroll(
-          title: name.isEmpty ? copy.decodeTitle : '$name, decoded',
-          subtitle: subtitle,
+          title: copy.decodeTitle,
+          subtitle: '',
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
             ref.invalidate(todayPayloadProvider);
@@ -135,20 +125,80 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
                 message: l10n.loadingDecode,
                 kind: MuhInlineStatusKind.loading,
               ),
-            PackCoverageBanner(pack: pack),
             if (hasCopy) ...[
-              MuhReadingSection(
-                title: decodeHit.isNotEmpty ? copy.thisSounds : copy.decodeTitle,
-                lead: decodeHit.isNotEmpty ? decodeHit : identitySummary,
-                trailing: MuhQuietButton(
-                  label: 'Why this reading',
-                  onPressed: () => MuhWhyDrawer.show(
-                    context,
-                    plain: views.decodePlainWhy,
-                    traditional: views.decodeTraditionalWhy,
-                  ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(MuhSpace.lg),
+                decoration: BoxDecoration(
+                  color: MuhColors.goldWash,
+                  borderRadius: BorderRadius.circular(MuhRadius.card),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      copy.thisSounds,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: MuhColors.goldDeep,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: MuhSpace.md),
+                    Text(
+                      decodeHit.isNotEmpty ? decodeHit : identitySummary,
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            height: 1.19,
+                            fontWeight: FontWeight.w500,
+                            color: MuhColors.ink,
+                          ),
+                    ),
+                    const SizedBox(height: MuhSpace.md),
+                    MuhQuietButton(
+                      label: 'Why this reading',
+                      onPressed: () => MuhWhyDrawer.show(
+                        context,
+                        plain: views.decodePlainWhy,
+                        traditional: views.decodeTraditionalWhy,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              if (identitySummary.isNotEmpty &&
+                  identitySummary.trim() != decodeHit.trim())
+                ExpansionTile(
+                  title: Text(copy.decodeSub),
+                  childrenPadding: const EdgeInsets.fromLTRB(
+                    MuhSpace.md, 0, MuhSpace.md, MuhSpace.md),
+                  children: [
+                    Text(identitySummary,
+                        style: Theme.of(context).textTheme.bodyLarge),
+                  ],
+                ),
+              if (views.strengths.isNotEmpty || views.watchouts.isNotEmpty)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (views.strengths.isNotEmpty)
+                      Expanded(
+                        child: _PatternPreview(
+                          label: copy.strengths,
+                          lines: views.strengths,
+                          color: MuhColors.successInk,
+                        ),
+                      ),
+                    if (views.strengths.isNotEmpty && views.watchouts.isNotEmpty)
+                      const SizedBox(width: MuhSpace.sm),
+                    if (views.watchouts.isNotEmpty)
+                      Expanded(
+                        child: _PatternPreview(
+                          label: copy.watchouts,
+                          lines: views.watchouts,
+                          color: MuhColors.warningInk,
+                        ),
+                      ),
+                  ],
+                ),
               MuhReflectionChoice(
                 onSelected: (value) {
                   unawaited(
@@ -164,16 +214,6 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
                       );
                 },
               ),
-              if (views.strengths.isNotEmpty)
-                MuhReadingSection(
-                  title: copy.strengths,
-                  body: views.strengths.map((s) => '• $s').join('\n'),
-                ),
-              if (views.watchouts.isNotEmpty)
-                MuhReadingSection(
-                  title: copy.watchouts,
-                  body: views.watchouts.map((s) => '• $s').join('\n'),
-                ),
               if (views.categoryReports.isNotEmpty) ...[
                 const SizedBox(height: MuhSpace.sm),
                 Text(
@@ -243,6 +283,59 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
             'Birth pack is not ready yet. Pull to retry after generation finishes.',
         icon: Icons.fingerprint_rounded,
         onRetry: () => ref.invalidate(birthPackProvider),
+      ),
+    );
+  }
+}
+
+/// Keep the first screen readable: reveal one meaningful pattern per column,
+/// then let the reader open the full set instead of a wall of bullet points.
+class _PatternPreview extends StatelessWidget {
+  const _PatternPreview({
+    required this.label,
+    required this.lines,
+    required this.color,
+  });
+  final String label;
+  final List<String> lines;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.all(MuhSpace.md),
+      decoration: BoxDecoration(
+        color: MuhColors.paper,
+        borderRadius: BorderRadius.circular(MuhRadius.card),
+        border: Border.all(color: MuhColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: color, fontWeight: FontWeight.w700)),
+          const SizedBox(height: MuhSpace.sm),
+          Text(lines.first,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600, height: 1.35)),
+          if (lines.length > 1)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: Text('+ ${lines.length - 1}',
+                  style: Theme.of(context).textTheme.labelSmall),
+              children: [
+                for (final line in lines.skip(1))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: MuhSpace.sm),
+                    child: Text(line,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ),
+              ],
+            ),
+        ],
       ),
     );
   }
