@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../design_system/design_system.dart';
-import '../../shared/widgets/editorial/muh_editorial_hero.dart';
 import '../../shared/widgets/muh_enter.dart';
 
 class HomeEditorialScroll extends StatelessWidget {
