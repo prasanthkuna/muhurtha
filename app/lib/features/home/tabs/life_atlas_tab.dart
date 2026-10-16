@@ -178,41 +178,94 @@ class _LifeAtlasTabState extends ConsumerState<LifeAtlasTab> {
                   preferredPlan: PaywallPlan.pro,
                 ),
               )
-            else
-              HomeProseCard(
-                eyebrow: chapter.periodLabel,
-                title: chapter.title,
-                body: chapter.detailBody,
-                footer: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+            else ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(MuhSpace.lg),
+                decoration: BoxDecoration(
+                  color: MuhColors.goldWash,
+                  borderRadius: BorderRadius.circular(MuhRadius.readingSheet),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (chapter.evidenceLine.isNotEmpty)
-                      MuhQuietButton(
-                        label: 'Why this chapter',
-                        onPressed: () => MuhWhyDrawer.show(
-                          context,
-                          plain: chapter.story,
-                          traditional: chapter.evidenceLine,
+                    Text(chapter.periodLabel,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: MuhColors.goldDeep,
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(height: MuhSpace.md),
+                    Text(chapter.title,
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            color: MuhColors.ink,
+                            height: 1.18,
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(height: MuhSpace.md),
+                    Text(
+                      chapter.story,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: MuhColors.inkSecondary,
+                            height: 1.5),
+                    ),
+                    const SizedBox(height: MuhSpace.md),
+                    MuhQuietButton(
+                      label: 'Read this chapter',
+                      icon: Icons.menu_book_outlined,
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: MuhColors.paper,
+                        builder: (sheetContext) => FractionallySizedBox(
+                          heightFactor: 0.78,
+                          child: SafeArea(
+                            child: ListView(
+                              padding: const EdgeInsets.all(MuhSpace.page),
+                              children: [
+                                Text(chapter.periodLabel,
+                                    style: Theme.of(context).textTheme.labelLarge
+                                        ?.copyWith(color: MuhColors.goldDeep)),
+                                const SizedBox(height: MuhSpace.md),
+                                Text(chapter.title,
+                                    style: Theme.of(context).textTheme.headlineMedium),
+                                const SizedBox(height: MuhSpace.lg),
+                                Text(chapter.detailBody,
+                                    style: Theme.of(context).textTheme.bodyLarge
+                                        ?.copyWith(height: 1.6)),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    MuhReflectionChoice(
-                  onSelected: (feedback) {
-                    unawaited(
-                      UserEngagementStore.instance.saveReflection(
-                        scope: engagementScope(ref),
-                        contentKey: chapterKey,
-                        feedback: feedback,
-                      ),
-                    );
-                    ref.read(appAnalyticsProvider).reflectionSubmitted(
-                          screen: 'life_map',
-                          feedback: feedback,
-                        );
-                  },
-                ),
+                    ),
                   ],
                 ),
               ),
+              if (chapter.evidenceLine.isNotEmpty)
+                MuhQuietButton(
+                  label: 'Why this chapter',
+                  onPressed: () => MuhWhyDrawer.show(
+                    context,
+                    plain: chapter.story,
+                    traditional: chapter.evidenceLine,
+                  ),
+                ),
+              MuhReflectionChoice(
+                onSelected: (feedback) {
+                  unawaited(
+                    UserEngagementStore.instance.saveReflection(
+                      scope: engagementScope(ref),
+                      contentKey: chapterKey,
+                      feedback: feedback,
+                    ),
+                  );
+                  ref.read(appAnalyticsProvider).reflectionSubmitted(
+                        screen: 'life_map',
+                        feedback: feedback,
+                      );
+                },
+              ),
+            ],
             if (tense == 'past')
               ...views.likelyLifeEvents
                   .where((event) => lifeEventMatchesChapter(
