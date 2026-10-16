@@ -1165,37 +1165,37 @@ abstract class AppLocalizations {
   /// No description provided for @paywallTitle.
   ///
   /// In en, this message translates to:
-  /// **'Unlock full timing'**
+  /// **'Unlock Muhūrta Pro'**
   String get paywallTitle;
 
   /// No description provided for @paywallSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Plus gives daily power use. Pro unlocks future phases, month plan, and full Life Map.'**
+  /// **'Full Life Map, unlimited Ask, advanced timing depth, remedies, and share cards.'**
   String get paywallSubtitle;
 
   /// No description provided for @paywallCta.
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Pro'**
+  /// **'Start Pro'**
   String get paywallCta;
 
   /// No description provided for @paywallCtaPlus.
   ///
   /// In en, this message translates to:
-  /// **'Start Plus — ₹99/month'**
+  /// **'Start Pro — ₹199/month'**
   String get paywallCtaPlus;
 
   /// No description provided for @paywallCtaPro.
   ///
   /// In en, this message translates to:
-  /// **'Unlock muhurtha Pro'**
+  /// **'Unlock Muhūrta Pro'**
   String get paywallCtaPro;
 
   /// No description provided for @paywallPlusLabel.
   ///
   /// In en, this message translates to:
-  /// **'Plus'**
+  /// **'Pro'**
   String get paywallPlusLabel;
 
   /// No description provided for @paywallProLabel.
@@ -1207,7 +1207,7 @@ abstract class AppLocalizations {
   /// No description provided for @paywallPlusPrice.
   ///
   /// In en, this message translates to:
-  /// **'₹99/month'**
+  /// **'₹199/month'**
   String get paywallPlusPrice;
 
   /// No description provided for @paywallProPrice.
@@ -1231,14 +1231,20 @@ abstract class AppLocalizations {
   /// No description provided for @paywallMonthlyPrice.
   ///
   /// In en, this message translates to:
-  /// **'Billed monthly'**
+  /// **'₹199/month'**
   String get paywallMonthlyPrice;
 
   /// No description provided for @paywallYearlyPrice.
   ///
   /// In en, this message translates to:
-  /// **'Best value yearly'**
+  /// **'₹999/year'**
   String get paywallYearlyPrice;
+
+  /// No description provided for @paywallYearlySavings.
+  ///
+  /// In en, this message translates to:
+  /// **'Save 58% vs monthly'**
+  String get paywallYearlySavings;
 
   /// No description provided for @profileManageSubscription.
   ///
@@ -1575,6 +1581,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Share failed'**
   String get v3ShareFailed;
+
+  /// No description provided for @profileLegalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Legal'**
+  String get profileLegalTitle;
+
+  /// No description provided for @profileLegalSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy policy and terms of service.'**
+  String get profileLegalSubtitle;
+
+  /// No description provided for @profileAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get profileAccountTitle;
+
+  /// No description provided for @profileAccountSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out or request deletion of your data.'**
+  String get profileAccountSubtitle;
+
+  /// No description provided for @profileSignOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out'**
+  String get profileSignOut;
+
+  /// No description provided for @profileSignOutConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out?'**
+  String get profileSignOutConfirmTitle;
+
+  /// No description provided for @profileSignOutConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You can sign back in anytime with your phone number.'**
+  String get profileSignOutConfirmBody;
+
+  /// No description provided for @profileDeleteAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account & data'**
+  String get profileDeleteAccount;
+
+  /// No description provided for @profileDeleteAccountBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Email us to delete your profile, birth details, packs, and Ask history. We respond within 7 days.'**
+  String get profileDeleteAccountBody;
+
+  /// No description provided for @profileDeleteAccountEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Email deletion request'**
+  String get profileDeleteAccountEmail;
+
+  /// No description provided for @profileDeleteAccountWeb.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion instructions'**
+  String get profileDeleteAccountWeb;
+
+  /// No description provided for @profileCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get profileCancel;
+
+  /// No description provided for @legalPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy policy'**
+  String get legalPrivacy;
+
+  /// No description provided for @legalTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of service'**
+  String get legalTerms;
+
+  /// No description provided for @testFriendTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Test a friend'**
+  String get testFriendTitle;
+
+  /// No description provided for @testFriendBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Send your strongest Decode line on WhatsApp. See if their past matches too.'**
+  String get testFriendBody;
+
+  /// No description provided for @testFriendCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Send to a friend'**
+  String get testFriendCta;
+
+  /// No description provided for @chartProfilesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved charts'**
+  String get chartProfilesTitle;
+
+  /// No description provided for @chartProfilesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch between your chart and friends you add here.'**
+  String get chartProfilesSubtitle;
+
+  /// No description provided for @chartProfileMe.
+  ///
+  /// In en, this message translates to:
+  /// **'Me'**
+  String get chartProfileMe;
+
+  /// No description provided for @chartProfileAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add chart'**
+  String get chartProfileAdd;
+
+  /// No description provided for @chartProfileGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Friend'**
+  String get chartProfileGuest;
+
+  /// No description provided for @chartProfileViewing.
+  ///
+  /// In en, this message translates to:
+  /// **'Viewing {name}\'s chart'**
+  String chartProfileViewing(String name);
+
+  /// No description provided for @chartProfileBackToMine.
+  ///
+  /// In en, this message translates to:
+  /// **'My chart'**
+  String get chartProfileBackToMine;
+
+  /// No description provided for @chartProfileAskBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask works only on your own chart. Switch back to continue.'**
+  String get chartProfileAskBlocked;
+
+  /// No description provided for @chartProfileNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get chartProfileNameLabel;
+
+  /// No description provided for @chartProfileTimeBucket.
+  ///
+  /// In en, this message translates to:
+  /// **'Birth time window'**
+  String get chartProfileTimeBucket;
+
+  /// No description provided for @chartProfileSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save chart'**
+  String get chartProfileSave;
+
+  /// No description provided for @chartProfileDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get chartProfileDelete;
+
+  /// No description provided for @chartProfileDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove saved chart?'**
+  String get chartProfileDeleteTitle;
+
+  /// No description provided for @chartProfileDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name} from your saved charts?'**
+  String chartProfileDeleteBody(String name);
+
+  /// No description provided for @chartProfileFormIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a name, birth date, and birth place.'**
+  String get chartProfileFormIncomplete;
 }
 
 class _AppLocalizationsDelegate

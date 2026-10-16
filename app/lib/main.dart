@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,6 +11,11 @@ import 'core/data/muhurtha_engine_api.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Maestro / accessibility drivers need an explicit semantics tree in release.
+  if (const bool.fromEnvironment('MAESTRO_SEMANTICS', defaultValue: false)) {
+    SemanticsBinding.instance.ensureSemantics();
+  }
 
   if (Env.hasSupabase) {
     await Supabase.initialize(

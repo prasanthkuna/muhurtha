@@ -230,4 +230,18 @@ class BirthDraft {
       'nakshatraUnknown': nakshatraUnknown,
     };
   }
+
+  /// Safe telemetry context — no names, places, or exact birth time.
+  Map<String, dynamic> toLogContext() {
+    return {
+      'languageCode': languageCode,
+      'timeBucket': timeBucket?.name,
+      'hasExactBirthTime': hasExactBirthTime,
+      'hasTimeBucket': hasTimeBucket,
+      'hasNakshatra': hasNakshatra,
+      'birthInputMode': resolution.birthInputMode.apiValue,
+      'engineMode': resolution.engineMode.apiValue,
+      'locationDetected': locationDetected,
+    };
+  }
 }

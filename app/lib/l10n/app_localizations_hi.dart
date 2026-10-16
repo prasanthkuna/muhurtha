@@ -563,29 +563,29 @@ class AppLocalizationsHi extends AppLocalizations {
   String get jobFieldOther => 'Other';
 
   @override
-  String get paywallTitle => 'Unlock full timing';
+  String get paywallTitle => 'Unlock Muhūrta Pro';
 
   @override
   String get paywallSubtitle =>
-      'Plus gives daily power use. Pro unlocks future phases, month plan, and full Life Map.';
+      'Full Life Map, unlimited Ask, advanced timing depth, remedies, and share cards.';
 
   @override
-  String get paywallCta => 'Upgrade to Pro';
+  String get paywallCta => 'Start Pro';
 
   @override
-  String get paywallCtaPlus => 'Start Plus — ₹99/month';
+  String get paywallCtaPlus => 'Start Pro — ₹199/month';
 
   @override
-  String get paywallCtaPro => 'Unlock muhurtha Pro';
+  String get paywallCtaPro => 'Unlock Muhūrta Pro';
 
   @override
-  String get paywallPlusLabel => 'Plus';
+  String get paywallPlusLabel => 'Pro';
 
   @override
   String get paywallProLabel => 'Pro';
 
   @override
-  String get paywallPlusPrice => '₹99/month';
+  String get paywallPlusPrice => '₹199/month';
 
   @override
   String get paywallProPrice => '₹199/month';
@@ -597,10 +597,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paywallYearlyLabel => 'Yearly';
 
   @override
-  String get paywallMonthlyPrice => 'Billed monthly';
+  String get paywallMonthlyPrice => '₹199/month';
 
   @override
-  String get paywallYearlyPrice => 'Best value yearly';
+  String get paywallYearlyPrice => '₹999/year';
+
+  @override
+  String get paywallYearlySavings => 'Save 58% vs monthly';
 
   @override
   String get profileManageSubscription => 'Manage subscription';
@@ -777,4 +780,111 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get v3ShareFailed => 'Share नहीं हुआ';
+
+  @override
+  String get profileLegalTitle => 'कानूनी';
+
+  @override
+  String get profileLegalSubtitle => 'गोपनीयता नीति और सेवा की शर्तें।';
+
+  @override
+  String get profileAccountTitle => 'खाता';
+
+  @override
+  String get profileAccountSubtitle =>
+      'साइन आउट करें या डेटा हटाने का अनुरोध करें।';
+
+  @override
+  String get profileSignOut => 'साइन आउट';
+
+  @override
+  String get profileSignOutConfirmTitle => 'साइन आउट करें?';
+
+  @override
+  String get profileSignOutConfirmBody =>
+      'आप कभी भी अपने फ़ोन नंबर से वापस आ सकते हैं।';
+
+  @override
+  String get profileDeleteAccount => 'खाता और डेटा हटाएं';
+
+  @override
+  String get profileDeleteAccountBody =>
+      'प्रोफ़ाइल, जन्म विवरण, पैक और Ask इतिहास हटाने के लिए ईमेल करें। हम 7 दिनों में जवाब देंगे।';
+
+  @override
+  String get profileDeleteAccountEmail => 'ईमेल से हटाने का अनुरोध';
+
+  @override
+  String get profileDeleteAccountWeb => 'हटाने के निर्देश';
+
+  @override
+  String get profileCancel => 'रद्द करें';
+
+  @override
+  String get legalPrivacy => 'गोपनीयता नीति';
+
+  @override
+  String get legalTerms => 'सेवा की शर्तें';
+
+  @override
+  String get testFriendTitle => 'दोस्त को टेस्ट करें';
+
+  @override
+  String get testFriendBody =>
+      'अपनी Decode लाइन WhatsApp पर भेजें। देखें क्या उनका अतीत भी मेल खाता है।';
+
+  @override
+  String get testFriendCta => 'दोस्त को भेजें';
+
+  @override
+  String get chartProfilesTitle => 'Saved charts';
+
+  @override
+  String get chartProfilesSubtitle =>
+      'Switch between your chart and friends you add here.';
+
+  @override
+  String get chartProfileMe => 'Me';
+
+  @override
+  String get chartProfileAdd => 'Add chart';
+
+  @override
+  String get chartProfileGuest => 'Friend';
+
+  @override
+  String chartProfileViewing(String name) {
+    return 'Viewing $name\'s chart';
+  }
+
+  @override
+  String get chartProfileBackToMine => 'My chart';
+
+  @override
+  String get chartProfileAskBlocked =>
+      'Ask works only on your own chart. Switch back to continue.';
+
+  @override
+  String get chartProfileNameLabel => 'Name';
+
+  @override
+  String get chartProfileTimeBucket => 'Birth time window';
+
+  @override
+  String get chartProfileSave => 'Save chart';
+
+  @override
+  String get chartProfileDelete => 'Remove';
+
+  @override
+  String get chartProfileDeleteTitle => 'Remove saved chart?';
+
+  @override
+  String chartProfileDeleteBody(String name) {
+    return 'Remove $name from your saved charts?';
+  }
+
+  @override
+  String get chartProfileFormIncomplete =>
+      'Add a name, birth date, and birth place.';
 }

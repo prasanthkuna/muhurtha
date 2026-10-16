@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/env.dart';
 import '../locale/locale_provider.dart';
+import 'active_chart_profile.dart';
 import 'birth_pack_readiness.dart';
+import 'chart_profile_models.dart';
 
 /// Typed access to `muhurtha-api` Edge Function (POST JSON body `{ action, ... }`).
 final muhurthaEngineApiProvider = Provider<MuhurthaEngineApi?>((ref) {
@@ -732,6 +736,8 @@ class MuhurthaEngineApi {
   MuhurthaEngineApi(this._client);
 
   final SupabaseClient _client;
+  static const _invokeTimeout = Duration(seconds: 90);
+  static const _birthPackTimeout = Duration(seconds: 180);
 
   Never _throwEngineError(Map<String, dynamic> map) {
     final code = map['error_code']?.toString() ?? 'engine_error';
@@ -742,14 +748,22 @@ class MuhurthaEngineApi {
   Future<Map<String, dynamic>> _invoke(
     String action, {
     Map<String, Object?> extra = const {},
+    String? chartProfileId,
+    Duration? timeout,
   }) async {
-    final body = <String, Object?>{'action': action, ...extra};
+    final body = <String, Object?>{
+      'action': action,
+      if (chartProfileId != null) 'chart_profile_id': chartProfileId,
+      ...extra,
+    };
     late final FunctionResponse res;
     try {
-      res = await _client.functions.invoke(
-        'muhurtha-api',
-        body: body,
-      );
+      res = await _client.functions
+          .invoke(
+            'muhurtha-api',
+            body: body,
+          )
+          .timeout(timeout ?? _invokeTimeout);
     } on FunctionException catch (e) {
       final details = e.details;
       if (details is Map) {
@@ -758,6 +772,11 @@ class MuhurthaEngineApi {
       throw EngineException(
         code: 'http_${e.status}',
         message: e.reasonPhrase ?? 'Function call failed',
+      );
+    } on TimeoutException {
+      throw const EngineException(
+        code: 'timeout',
+        message: 'Request timed out. Please try again.',
       );
     }
 
@@ -797,9 +816,15 @@ class MuhurthaEngineApi {
     return PlaceResolveResult.fromJson(m);
   }
 
-  Future<TodayPayload> todayGet({String? date, String? locale}) async {
+  Future<TodayPayload> todayGet({
+    String? date,
+    String? locale,
+    String? chartProfileId,
+  }) async {
     final m = await _invoke(
       'today_get',
+      chartProfileId: chartProfileId,
+      timeout: _birthPackTimeout,
       extra: {
         if (date != null) 'date': date,
         if (locale != null) 'locale': locale,
@@ -808,9 +833,15 @@ class MuhurthaEngineApi {
     return TodayPayload.fromJson(m);
   }
 
-  Future<BirthPackPayload> birthPackGet({String? date, String? locale}) async {
+  Future<BirthPackPayload> birthPackGet({
+    String? date,
+    String? locale,
+    String? chartProfileId,
+  }) async {
     final m = await _invoke(
       'birth_pack_get',
+      chartProfileId: chartProfileId,
+      timeout: _birthPackTimeout,
       extra: {
         if (date != null) 'date': date,
         if (locale != null) 'locale': locale,
@@ -819,21 +850,93 @@ class MuhurthaEngineApi {
     return BirthPackPayload.fromJson(m);
   }
 
-  Future<void> subscriptionSync({
-    required String planCode,
-    String? productId,
-    String? currentPeriodEnd,
-    String? providerSubscriptionId,
+  Future<List<ChartProfileSummary>> chartProfileList() async {
+    final m = await _invoke('chart_profile_list');
+    final rows = m['profiles'];
+    if (rows is! List) return const [];
+    return rows
+        .map(
+          (e) => ChartProfileSummary.fromJson(
+            Map<String, dynamic>.from(e as Map),
+          ),
+        )
+        .toList();
+  }
+
+  Future<ChartProfileSummary> chartProfileSave({
+    String? chartProfileId,
+    required String label,
+    required String dateOfBirth,
+    required String birthPlace,
+    required String birthInputMode,
+    String? exactBirthTime,
+    String? timeBucket,
+    String? janmaNakshatra,
+    int? nakshatraPada,
+    double? birthLat,
+    double? birthLng,
+    String? birthTimezone,
+  }) async {
+    final m = await _invoke(
+      'chart_profile_save',
+      extra: {
+        if (chartProfileId != null) 'chart_profile_id': chartProfileId,
+        'label': label,
+        'date_of_birth': dateOfBirth,
+        'birth_place': birthPlace,
+        'birth_input_mode': birthInputMode,
+        if (exactBirthTime != null) 'exact_birth_time': exactBirthTime,
+        if (timeBucket != null) 'time_bucket': timeBucket,
+        if (janmaNakshatra != null) 'janma_nakshatra': janmaNakshatra,
+        if (nakshatraPada != null) 'nakshatra_pada': nakshatraPada,
+        if (birthLat != null) 'birth_lat': birthLat,
+        if (birthLng != null) 'birth_lng': birthLng,
+        if (birthTimezone != null) 'birth_timezone': birthTimezone,
+      },
+    );
+    return ChartProfileSummary(
+      id: m['id']?.toString() ?? '',
+      birthInputId: m['birth_input_id']?.toString(),
+      label: m['label']?.toString() ?? label,
+      dateOfBirth: dateOfBirth,
+      birthPlace: birthPlace,
+      nakshatra: janmaNakshatra,
+    );
+  }
+
+  Future<void> chartProfileDelete(String chartProfileId) async {
+    await _invoke(
+      'chart_profile_delete',
+      extra: {'chart_profile_id': chartProfileId},
+    );
+  }
+
+  Future<void> subscriptionRefresh() async {
+    await _invoke('subscription_sync');
+  }
+
+  Future<ShareCardResult> shareCardGenerate({
+    required String sourceType,
+    required Map<String, Object?> payload,
+    String? sourceId,
+  }) async {
+    final m = await _invoke(
+      'share_card_generate',
+      extra: {
+        'source_type': sourceType,
+        'payload': payload,
+        if (sourceId != null) 'source_id': sourceId,
+      },
+    );
+    return ShareCardResult.fromJson(m);
+  }
+
+  Future<void> referralAttribution({
+    required String referrerProfileId,
   }) async {
     await _invoke(
-      'subscription_sync',
-      extra: {
-        'plan_code': planCode,
-        if (productId != null) 'product_id': productId,
-        if (currentPeriodEnd != null) 'current_period_end': currentPeriodEnd,
-        if (providerSubscriptionId != null)
-          'provider_subscription_id': providerSubscriptionId,
-      },
+      'referral_attribution',
+      extra: {'referrer_profile_id': referrerProfileId},
     );
   }
 
@@ -853,9 +956,13 @@ class MuhurthaEngineApi {
     return AskAnswerResult.fromJson(m);
   }
 
-  Future<List<RemedyItem>> remedyToday({String? locale}) async {
+  Future<List<RemedyItem>> remedyToday({
+    String? locale,
+    String? chartProfileId,
+  }) async {
     final m = await _invoke(
       'remedy_today',
+      chartProfileId: chartProfileId,
       extra: {if (locale != null) 'locale': locale},
     );
     final r = m['remedies'];
@@ -870,6 +977,7 @@ class MuhurthaEngineApi {
     required String message,
     String? stackTrace,
     Map<String, dynamic>? context,
+    String service = 'app',
   }) async {
     try {
       await _invoke(
@@ -879,7 +987,7 @@ class MuhurthaEngineApi {
           'message': message,
           if (stackTrace != null) 'stack_trace': stackTrace,
           if (context != null) 'context': context,
-          'service': 'app',
+          'service': service,
         },
       );
     } catch (e) {
@@ -929,43 +1037,54 @@ final todayPayloadProvider =
     FutureProvider.autoDispose<TodayPayload?>((ref) async {
   final api = ref.watch(muhurthaEngineApiProvider);
   if (api == null) return null;
-  final locale = ref.watch(localeProvider).languageCode;
-  return api.todayGet(locale: locale);
+  final locale = ref.watch(localeProvider.select((l) => l.languageCode));
+  final chartProfileId = ref.watch(activeChartProfileIdProvider);
+  return api.todayGet(locale: locale, chartProfileId: chartProfileId);
 });
 
 Stream<BirthPackPayload?> _pollBirthPack(
   MuhurthaEngineApi api,
   String locale,
+  String? chartProfileId,
 ) async* {
   const pollInterval = Duration(seconds: 3);
-  const maxAttempts = 80;
+  const maxAttempts = 150;
   for (var attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      final pack = await api.birthPackGet(locale: locale);
+      final pack = await api.birthPackGet(
+        locale: locale,
+        chartProfileId: chartProfileId,
+      );
       yield pack;
       if (pack.isComplete) return;
     } on EngineException catch (e) {
-      if (e.code != 'birth_pack_not_ready') rethrow;
+      if (e.code != 'birth_pack_not_ready' && e.code != 'timeout') rethrow;
     }
     if (attempt < maxAttempts - 1) {
       await Future<void>.delayed(pollInterval);
     }
   }
+  throw const EngineException(
+    code: 'birth_pack_not_ready',
+    message: 'Birth pack is still generating. Pull to retry.',
+  );
 }
 
 final birthPackProvider =
     StreamProvider.autoDispose<BirthPackPayload?>((ref) {
   final api = ref.watch(muhurthaEngineApiProvider);
   if (api == null) return Stream.value(null);
-  final locale = ref.watch(localeProvider).languageCode;
-  return _pollBirthPack(api, locale);
+  final locale = ref.watch(localeProvider.select((l) => l.languageCode));
+  final chartProfileId = ref.watch(activeChartProfileIdProvider);
+  return _pollBirthPack(api, locale, chartProfileId);
 });
 
 final remedyListProvider =
     FutureProvider.autoDispose<List<RemedyItem>?>((ref) async {
   final api = ref.watch(muhurthaEngineApiProvider);
   if (api == null) return null;
-  final locale = ref.watch(localeProvider).languageCode;
-  return api.remedyToday(locale: locale);
+  final locale = ref.watch(localeProvider.select((l) => l.languageCode));
+  final chartProfileId = ref.watch(activeChartProfileIdProvider);
+  return api.remedyToday(locale: locale, chartProfileId: chartProfileId);
 });
 

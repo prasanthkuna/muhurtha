@@ -188,5 +188,22 @@
   "v3PastCheck": "Past check",
   "v3Coming": "आने वाले दौर",
   "v3Ask": "पूछें",
-  "v3ShareFailed": "Share नहीं हुआ"
+  "v3ShareFailed": "Share नहीं हुआ",
+  "profileLegalTitle": "कानूनी",
+  "profileLegalSubtitle": "गोपनीयता नीति और सेवा की शर्तें।",
+  "profileAccountTitle": "खाता",
+  "profileAccountSubtitle": "साइन आउट करें या डेटा हटाने का अनुरोध करें।",
+  "profileSignOut": "साइन आउट",
+  "profileSignOutConfirmTitle": "साइन आउट करें?",
+  "profileSignOutConfirmBody": "आप कभी भी अपने फ़ोन नंबर से वापस आ सकते हैं।",
+  "profileDeleteAccount": "खाता और डेटा हटाएं",
+  "profileDeleteAccountBody": "प्रोफ़ाइल, जन्म विवरण, पैक और Ask इतिहास हटाने के लिए ईमेल करें। हम 7 दिनों में जवाब देंगे।",
+  "profileDeleteAccountEmail": "ईमेल से हटाने का अनुरोध",
+  "profileDeleteAccountWeb": "हटाने के निर्देश",
+  "profileCancel": "रद्द करें",
+  "legalPrivacy": "गोपनीयता नीति",
+  "legalTerms": "सेवा की शर्तें",
+  "testFriendTitle": "दोस्त को टेस्ट करें",
+  "testFriendBody": "अपनी Decode लाइन WhatsApp पर भेजें। देखें क्या उनका अतीत भी मेल खाता है।",
+  "testFriendCta": "दोस्त को भेजें"
 }

@@ -9,12 +9,13 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../app/muh_theme.dart';
 import '../../design_system/design_system.dart';
+import '../analytics/app_analytics.dart';
+import '../config/env.dart';
+import '../config/marketing_urls.dart';
 import '../data/muhurtha_engine_api.dart';
 import '../locale/locale_provider.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
 import '../../shared/widgets/share_story_card.dart';
-
-const kMuhurtaDownloadLink = 'https://muhurta.app';
 
 final shareCardServiceProvider = Provider<ShareCardService>((ref) {
   return ShareCardService(ref);
@@ -26,6 +27,7 @@ class ShareCardService {
   final Ref _ref;
   final ScreenshotController _controller = ScreenshotController();
   bool _sharing = false;
+  OverlayEntry? _shareOverlay;
 
   Future<void> shareInsight({
     required BuildContext context,
@@ -34,11 +36,10 @@ class ShareCardService {
     String? sourceId,
     String? sectionLabel,
   }) async {
-    final locale = _resolveShareLocale();
     await shareExact(
       context: context,
       title: _first(payload, const ['title', 'headline'],
-          _sectionLabel(locale, sourceType)),
+          _sectionLabel(_resolveShareLocale(), sourceType)),
       body: _first(
         payload,
         const [
@@ -50,12 +51,13 @@ class ShareCardService {
           'summary',
           'simpleLine',
         ],
-        _sectionLabel(locale, sourceType),
+        _sectionLabel(_resolveShareLocale(), sourceType),
       ),
       contextLine: _first(payload, const ['context', 'period_label', 'period'], ''),
       sourceType: sourceType,
       sourceId: sourceId,
       sectionLabel: sectionLabel,
+      serverPayload: payload,
     );
   }
 
@@ -67,6 +69,7 @@ class ShareCardService {
     String sourceType = 'generic_card',
     String? sourceId,
     String? sectionLabel,
+    Map<String, Object?>? serverPayload,
   }) async {
     if (_sharing) return;
     _sharing = true;
@@ -74,19 +77,54 @@ class ShareCardService {
       final locale = _resolveShareLocale();
       if (!context.mounted) return;
 
-      await _showShareOverlay(context);
+      await _ref.read(appAnalyticsProvider).shareTapped(
+            sourceType: sourceType,
+            sourceId: sourceId,
+          );
 
-      final id = (sourceId?.trim().isNotEmpty == true
+      final shareTitle = title.trim();
+      final shareBody = body.trim();
+      final shareEyebrow = contextLine.trim();
+
+      ShareCardResult? registered;
+      if (Env.hasSupabase) {
+        try {
+          final api = _ref.read(muhurthaEngineApiProvider);
+          if (api != null) {
+            registered = await api.shareCardGenerate(
+              sourceType: sourceType,
+              sourceId: sourceId,
+              payload: serverPayload ??
+                  <String, Object?>{
+                    'title': shareTitle,
+                    'body': shareBody,
+                    if (shareEyebrow.isNotEmpty) 'context': shareEyebrow,
+                    'shareHook': shareBody,
+                  },
+            );
+          }
+        } catch (e) {
+          await _ref.read(appAnalyticsProvider).shareFailed(
+                sourceType: sourceType,
+                reason: e.toString(),
+              );
+          rethrow;
+        }
+      }
+
+      if (!context.mounted) return;
+
+      _insertShareOverlay(context);
+
+      final id = registered?.id ??
+          (sourceId?.trim().isNotEmpty == true
               ? sourceId!.trim()
               : DateTime.now().millisecondsSinceEpoch.toString())
-          .replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-');
+              .replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-');
 
       final brand = _brand(locale);
       await _ensureShareFonts(locale);
       final theme = MuhTheme.darkForLocale(Locale(locale));
-      final shareEyebrow = contextLine.trim();
-      final shareTitle = title.trim();
-      final shareBody = body.trim();
       final card = Directionality(
         textDirection: TextDirection.ltr,
         child: Theme(
@@ -94,11 +132,13 @@ class ShareCardService {
           child: Material(
             type: MaterialType.transparency,
             child: ShareStoryCard(
-              title: shareTitle,
-              body: shareBody,
-              eyebrow: shareEyebrow.isNotEmpty ? shareEyebrow : null,
+              title: registered?.shareTitle ?? shareTitle,
+              body: registered?.shareBody ?? shareBody,
+              eyebrow: (registered?.shareContext ?? shareEyebrow).isNotEmpty
+                  ? (registered?.shareContext ?? shareEyebrow)
+                  : null,
               brandLabel: brand,
-              downloadLink: kMuhurtaDownloadLink,
+              downloadLink: MarketingUrls.playStoreLabel,
               footerTagline: _footer(locale),
               sectionLabel:
                   sectionLabel ?? _sectionLabel(locale, sourceType),
@@ -107,8 +147,6 @@ class ShareCardService {
         ),
       );
 
-      // Offscreen capture only — do not pass `context` or InheritedTheme can
-      // flash Latin fonts before Telugu/Hindi glyphs are ready.
       final bytes = await _controller.captureFromLongWidget(
         card,
         pixelRatio: 3,
@@ -121,9 +159,7 @@ class ShareCardService {
           File('${tempDir.path}${Platform.pathSeparator}muhurta-$id.png');
       await file.writeAsBytes(bytes, flush: true);
 
-      if (context.mounted) {
-        await _hideShareOverlay(context);
-      }
+      _removeShareOverlay();
 
       if (!context.mounted) return;
 
@@ -132,19 +168,59 @@ class ShareCardService {
           ? null
           : box.localToGlobal(Offset.zero) & box.size;
 
+      final shareText = _composeShareText(
+        registered: registered,
+        locale: locale,
+        title: shareTitle,
+        body: shareBody,
+      );
+
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'image/png')],
+        text: shareText,
         sharePositionOrigin: origin,
       );
+
+      if (registered != null) {
+        await _ref.read(appAnalyticsProvider).shareCompleted(
+              sourceType: sourceType,
+              shareId: registered.id,
+            );
+      }
+    } catch (e) {
+      await _ref.read(appAnalyticsProvider).shareFailed(
+            sourceType: sourceType,
+            reason: e.toString(),
+          );
+      rethrow;
     } finally {
       _sharing = false;
-      if (context.mounted) {
-        await _hideShareOverlay(context);
-      }
+      _removeShareOverlay();
     }
   }
 
-  /// Prefer pack content locale so share image matches Telugu/Hindi copy.
+  String _composeShareText({
+    required ShareCardResult? registered,
+    required String locale,
+    required String title,
+    required String body,
+  }) {
+    if (registered != null && registered.shareText.trim().isNotEmpty) {
+      return '${registered.shareText.trim()}\n\n${MarketingUrls.playStoreLabel}\n${MarketingUrls.playStoreListing}';
+    }
+    final brand = _brand(locale);
+    final link = MarketingUrls.playStoreListing;
+    return '$brand\n\n$title\n$body\n\n${_checkYours(locale)}\n$link';
+  }
+
+  String _checkYours(String locale) {
+    return switch (locale.toLowerCase()) {
+      'te' => 'నీదీ చూడండి',
+      'hi' => 'अपना भी देखें',
+      _ => 'Check yours',
+    };
+  }
+
   String _resolveShareLocale() {
     final packLocale = _ref.read(birthPackProvider).valueOrNull?.locale;
     if (packLocale != null && packLocale.trim().isNotEmpty) {
@@ -169,29 +245,29 @@ class ShareCardService {
     }
   }
 
-  Future<void> _showShareOverlay(BuildContext context) {
-    return showGeneralDialog<void>(
-      context: context,
-      useRootNavigator: true,
-      barrierDismissible: false,
-      barrierColor: MuhColors.bg.withValues(alpha: 0.72),
-      pageBuilder: (ctx, _, __) => const PopScope(
+  void _insertShareOverlay(BuildContext context) {
+    _removeShareOverlay();
+    final overlay = Overlay.of(context, rootOverlay: true);
+    _shareOverlay = OverlayEntry(
+      builder: (_) => PopScope(
         canPop: false,
-        child: Center(
-          child: MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.share,
-            compact: true,
+        child: Material(
+          color: MuhColors.bg.withValues(alpha: 0.72),
+          child: const Center(
+            child: MuhurthaLoadingView(
+              mode: MuhurthaLoadingMode.share,
+              compact: true,
+            ),
           ),
         ),
       ),
     );
+    overlay.insert(_shareOverlay!);
   }
 
-  Future<void> _hideShareOverlay(BuildContext context) async {
-    final nav = Navigator.of(context, rootNavigator: true);
-    if (nav.canPop()) {
-      nav.pop();
-    }
+  void _removeShareOverlay() {
+    _shareOverlay?.remove();
+    _shareOverlay = null;
   }
 
   String _first(

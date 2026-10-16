@@ -1,4 +1,4 @@
-package com.example.muhurta
+package app.muhurta
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

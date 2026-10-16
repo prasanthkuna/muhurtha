@@ -188,5 +188,22 @@
   "v3PastCheck": "గతం చెక్",
   "v3Coming": "ముందు వచ్చే దశలు",
   "v3Ask": "అడుగు",
-  "v3ShareFailed": "షేర్ కాలేదు"
+  "v3ShareFailed": "షేర్ కాలేదు",
+  "profileLegalTitle": "చట్టపరమైన",
+  "profileLegalSubtitle": "గోప్యతా విధానం మరియు సేవా నిబంధనలు.",
+  "profileAccountTitle": "ఖాతా",
+  "profileAccountSubtitle": "సైన్ అవుట్ లేదా డేటా తొలగింపు అభ్యర్థన.",
+  "profileSignOut": "సైన్ అవుట్",
+  "profileSignOutConfirmTitle": "సైన్ అవుట్ చేయాలా?",
+  "profileSignOutConfirmBody": "మీ ఫోన్ నంబర్‌తో ఎప్పుడైనా తిరిగి లాగిన్ అవ్వచ్చు.",
+  "profileDeleteAccount": "ఖాతా & డేటా తొలగించు",
+  "profileDeleteAccountBody": "ప్రొఫైల్, జనన వివరాలు, ప్యాక్‌లు, Ask చరిత్ర తొలగించడానికి ఇమెయిల్ చేయండి. 7 రోజులలో స్పందిస్తాము.",
+  "profileDeleteAccountEmail": "ఇమెయిల్ తొలగింపు అభ్యర్థన",
+  "profileDeleteAccountWeb": "తొలగింపు సూచనలు",
+  "profileCancel": "రద్దు",
+  "legalPrivacy": "గోప్యతా విధానం",
+  "legalTerms": "సేవా నిబంధనలు",
+  "testFriendTitle": "స్నేహితుడిని టెస్ట్ చేయండి",
+  "testFriendBody": "మీ డీకోడ్ లైన్‌ను WhatsAppలో పంపండి. వారి గతంతో సరిపోతుందో చూడండి.",
+  "testFriendCta": "స్నేహితుడికి పంపండి"
 }

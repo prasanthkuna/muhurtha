@@ -402,7 +402,7 @@ class BirthPackViews {
   static String _normalizePeriod(String value) =>
       value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
-  /// Full journey phase copy from the pack — no trimming or rewriting.
+  /// User-facing journey copy — highlight + sentences only (no planner metadata).
   static String _journeyBody(Map<String, dynamic> j) {
     final parts = <String>[];
     void add(String? raw) {
@@ -417,14 +417,6 @@ class BirthPackViews {
       for (final raw in sentences) {
         add(raw.toString());
       }
-    }
-    add(j['evidenceLine']?.toString());
-    add(j['phasePulse']?.toString());
-    add(j['transitionNote']?.toString());
-
-    final focus = j['focusAreas'];
-    if (focus is List && focus.isNotEmpty) {
-      add(focus.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).join(' · '));
     }
 
     return parts.join('\n\n');

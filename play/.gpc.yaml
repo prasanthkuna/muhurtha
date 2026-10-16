@@ -1,0 +1,4 @@
+# GPC — Google Play Console CLI
+# Docs: https://github.com/yasserstudio/gpc
+package_name: app.muhurta
+default_track: internal

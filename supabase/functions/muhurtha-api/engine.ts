@@ -61,6 +61,7 @@ import {
   type PersonalizationKernel,
 } from "./personalization_kernel.ts";
 import { buildShareCard } from "./share_copy.ts";
+import { verifyRevenueCatSubscription } from "./revenuecat_verify.ts";
 import {
   type AppLocale,
   normalizeLocale,
@@ -2452,6 +2453,45 @@ async function consumeAskQuota(
   return { planCode: "free", remaining: Math.max(0, FREE_ASKS_PER_DAY - current - 1) };
 }
 
+const LOG_PII_KEYS = new Set([
+  "displayname",
+  "display_name",
+  "birthplace",
+  "birth_place",
+  "currentcity",
+  "current_city",
+  "dateofbirth",
+  "date_of_birth",
+  "draft",
+  "body",
+  "phone",
+  "email",
+  "name",
+  "lat",
+  "lng",
+  "timezone",
+]);
+
+function sanitizeLogContext(
+  value: unknown,
+  depth = 0,
+): unknown {
+  if (depth > 4) return "[truncated]";
+  if (value == null || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeLogContext(item, depth + 1));
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (LOG_PII_KEYS.has(key.toLowerCase())) {
+      out[key] = "[redacted]";
+    } else {
+      out[key] = sanitizeLogContext(val, depth + 1);
+    }
+  }
+  return out;
+}
+
 export async function logAppEvent(
   supabase: SupabaseClient,
   profileId: string | null,
@@ -2468,7 +2508,7 @@ export async function logAppEvent(
       level,
       message,
       stack_trace: stack,
-      context: context ?? {},
+      context: sanitizeLogContext(context ?? {}) as Record<string, unknown>,
     });
   } catch (e) {
     console.error("Failed to log to DB:", e);
@@ -2517,11 +2557,97 @@ async function getLatestBirthInput(
       "id, profile_id, date_of_birth, birth_place, birth_input_mode, exact_birth_time, time_bucket, janma_nakshatra, nakshatra_pada, birth_timezone, birth_lat, birth_lng",
     )
     .eq("profile_id", profileId)
+    .neq("source", "chart_profile")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw error;
   return data as BioRow | null;
+}
+
+type ChartProfileRow = {
+  id: string;
+  label: string;
+  birth_input_id: string;
+};
+
+function chartProfileIdFromBody(body: Record<string, unknown>): string | null {
+  const raw = body.chart_profile_id;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+async function getChartProfile(
+  supabase: SupabaseClient,
+  chartProfileId: string,
+  ownerProfileId: string,
+): Promise<ChartProfileRow> {
+  const { data, error } = await supabase
+    .from("chart_profiles")
+    .select("id, label, birth_input_id")
+    .eq("id", chartProfileId)
+    .eq("owner_profile_id", ownerProfileId)
+    .single();
+  if (error || !data) {
+    throw new ActionError(
+      "chart_profile_not_found",
+      "Chart profile not found",
+      404,
+    );
+  }
+  return data as ChartProfileRow;
+}
+
+async function resolveSubjectDisplayName(
+  supabase: SupabaseClient,
+  ownerProfileId: string,
+  ownerDisplayName: string | null | undefined,
+  body: Record<string, unknown>,
+): Promise<string> {
+  const chartProfileId = chartProfileIdFromBody(body);
+  if (!chartProfileId) return String(ownerDisplayName ?? "").trim();
+  const chartProfile = await getChartProfile(
+    supabase,
+    chartProfileId,
+    ownerProfileId,
+  );
+  return chartProfile.label;
+}
+
+async function resolveBirthInputForRequest(
+  supabase: SupabaseClient,
+  profileId: string,
+  body: Record<string, unknown>,
+): Promise<BioRow | null> {
+  const chartProfileId = chartProfileIdFromBody(body);
+  if (chartProfileId) {
+    const chartProfile = await getChartProfile(
+      supabase,
+      chartProfileId,
+      profileId,
+    );
+    return await getBirthInput(
+      supabase,
+      chartProfile.birth_input_id,
+      profileId,
+    );
+  }
+  return await getLatestBirthInput(supabase, profileId);
+}
+
+async function getChartProfileLimit(
+  supabase: SupabaseClient,
+  profileId: string,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("chart_profile_limit")
+    .eq("id", profileId)
+    .single();
+  if (error || !data) return 10;
+  const limit = Number(data.chart_profile_limit);
+  return Number.isFinite(limit) && limit > 0 ? limit : 10;
 }
 
 function parseBirthDate(isoDate: string): Date {
@@ -2711,7 +2837,6 @@ export async function handleRequest(
     const stack = e instanceof Error ? e.stack : "";
     await logAppEvent(loggingSupabase, prof?.id ?? null, "api", "error", msg, stack, {
       action,
-      body,
     });
     throw e;
   }
@@ -2732,7 +2857,6 @@ async function _handleInternal(
     "weekly_get",
     "monthly_get",
     "purpose_check",
-    "share_card_generate",
   ]);
   if (DEPRECATED_ACTIONS.has(action)) {
     throw new ActionError(
@@ -2844,37 +2968,183 @@ async function _handleInternal(
   const profile = requireProfile(prof, action);
 
   if (action === "subscription_sync") {
-    const planCode = String(body.plan_code ?? "").trim().toLowerCase();
-    if (!["free", "plus", "pro"].includes(planCode)) {
-      throw new ActionError("invalid_plan_code", "plan_code must be free, plus, or pro", 400);
-    }
-    const providerSubId = String(
-      body.provider_subscription_id ?? "revenuecat_active",
-    ).trim() || "revenuecat_active";
-    const periodEndRaw = body.current_period_end;
-    const periodEnd = periodEndRaw == null
-      ? null
-      : new Date(String(periodEndRaw)).toISOString();
-    const status = planCode === "free" ? "expired" : "active";
-    const { error } = await adminSupabase.from("subscriptions").upsert(
-      {
-        profile_id: profile.id,
-        plan_code: planCode,
-        status,
-        provider: "revenuecat",
-        provider_subscription_id: providerSubId,
-        current_period_end: periodEnd,
-        entitlement: {
-          source: "client_sync",
-          product_id: body.product_id ?? null,
+    // Server-authoritative: verify with RevenueCat API or webhook only — never trust client plan_code.
+    const verified = await verifyRevenueCatSubscription(profile.id);
+    if (verified) {
+      const status = verified.planCode === "free" ? "expired" : "active";
+      const { error } = await adminSupabase.from("subscriptions").upsert(
+        {
+          profile_id: profile.id,
+          plan_code: verified.planCode,
+          status,
+          provider: "revenuecat",
+          provider_subscription_id: verified.productId ?? "revenuecat_active",
+          current_period_end: verified.expirationAt,
+          entitlement: {
+            source: "revenuecat_verify",
+            product_id: verified.productId,
+          },
+          updated_at: new Date().toISOString(),
         },
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "profile_id,provider,provider_subscription_id" },
-    );
-    if (error) throw error;
+        { onConflict: "profile_id,provider,provider_subscription_id" },
+      );
+      if (error) throw error;
+    }
     const access = await getSubscriptionAccess(supabase, profile.id);
     return { access: buildAccessPayload(access) };
+  }
+
+  if (action === "chart_profile_list") {
+    const profile = requireProfile(prof, action);
+    const { data, error } = await supabase
+      .from("chart_profiles")
+      .select(
+        "id, label, birth_input_id, created_at, birth_inputs(date_of_birth, birth_place, janma_nakshatra, birth_input_mode)",
+      )
+      .eq("owner_profile_id", profile.id)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return { profiles: data ?? [] };
+  }
+
+  if (action === "chart_profile_save") {
+    const profile = requireProfile(prof, action);
+    const label = String(body.label ?? "").trim();
+    if (!label) {
+      throw new ActionError("missing_label", "label is required", 400);
+    }
+    const dateOfBirth = String(body.date_of_birth ?? "").slice(0, 10);
+    if (!dateOfBirth) {
+      throw new ActionError(
+        "missing_date_of_birth",
+        "date_of_birth is required",
+        400,
+      );
+    }
+
+    const limit = await getChartProfileLimit(supabase, profile.id);
+    const chartProfileId = chartProfileIdFromBody(body);
+    if (!chartProfileId) {
+      const { count, error: countError } = await supabase
+        .from("chart_profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_profile_id", profile.id);
+      if (countError) throw countError;
+      if ((count ?? 0) >= limit) {
+        throw new ActionError(
+          "chart_profile_limit",
+          `You can save up to ${limit} charts`,
+          403,
+        );
+      }
+    }
+
+    let birthPlace = String(body.birth_place ?? "").trim();
+    let birthLat = body.birth_lat != null ? Number(body.birth_lat) : null;
+    let birthLng = body.birth_lng != null ? Number(body.birth_lng) : null;
+    let birthTimezone = typeof body.birth_timezone === "string"
+      ? body.birth_timezone
+      : null;
+    if (birthPlace && (birthLat == null || birthLng == null)) {
+      const resolved = await resolveBirthPlace(birthPlace);
+      if (resolved) {
+        birthPlace = resolved.resolvedLabel ?? birthPlace;
+        birthLat = resolved.lat;
+        birthLng = resolved.lng;
+        birthTimezone = resolved.timezone;
+      }
+    }
+
+    const birthPayload = {
+      profile_id: profile.id,
+      date_of_birth: dateOfBirth,
+      birth_place: birthPlace || null,
+      birth_input_mode: String(body.birth_input_mode ?? "time_bucket"),
+      exact_birth_time: (body.exact_birth_time as string) ?? null,
+      time_bucket: (body.time_bucket as string) ?? null,
+      janma_nakshatra: (body.janma_nakshatra as string) ?? null,
+      nakshatra_pada: body.nakshatra_pada != null
+        ? Number(body.nakshatra_pada)
+        : null,
+      birth_lat: birthLat,
+      birth_lng: birthLng,
+      birth_timezone: birthTimezone,
+      source: "chart_profile",
+      updated_at: new Date().toISOString(),
+    };
+
+    let birthInputId: string;
+    if (chartProfileId) {
+      const existing = await getChartProfile(
+        supabase,
+        chartProfileId,
+        profile.id,
+      );
+      birthInputId = existing.birth_input_id;
+      await supabase
+        .from("birth_inputs")
+        .update(birthPayload)
+        .eq("id", birthInputId);
+      await supabase
+        .from("chart_profiles")
+        .update({
+          label,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", chartProfileId);
+      return { id: chartProfileId, birth_input_id: birthInputId, label };
+    }
+
+    const { data: birthRow, error: birthError } = await supabase
+      .from("birth_inputs")
+      .insert(birthPayload)
+      .select("id")
+      .single();
+    if (birthError || !birthRow) throw birthError;
+
+    const { data: chartRow, error: chartError } = await supabase
+      .from("chart_profiles")
+      .insert({
+        owner_profile_id: profile.id,
+        label,
+        birth_input_id: birthRow.id,
+      })
+      .select("id")
+      .single();
+    if (chartError || !chartRow) throw chartError;
+
+    return {
+      id: chartRow.id,
+      birth_input_id: birthRow.id,
+      label,
+    };
+  }
+
+  if (action === "chart_profile_delete") {
+    const profile = requireProfile(prof, action);
+    const chartProfileId = chartProfileIdFromBody(body);
+    if (!chartProfileId) {
+      throw new ActionError(
+        "missing_chart_profile_id",
+        "chart_profile_id is required",
+        400,
+      );
+    }
+    const existing = await getChartProfile(
+      supabase,
+      chartProfileId,
+      profile.id,
+    );
+    const { error: chartDeleteError } = await supabase
+      .from("chart_profiles")
+      .delete()
+      .eq("id", chartProfileId);
+    if (chartDeleteError) throw chartDeleteError;
+    await supabase
+      .from("birth_inputs")
+      .delete()
+      .eq("id", existing.birth_input_id);
+    return { deleted: true, id: chartProfileId };
   }
 
   if (action === "birth_pack_get") {
@@ -2882,11 +3152,17 @@ async function _handleInternal(
     const locale = requestLocale(body, profile);
     const tz = profile.current_timezone ?? "Asia/Kolkata";
     const dateStr = (body.date as string) ?? todayInTimezone(tz);
-    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
     const bi = await ensureBirthPlacePrecision(supabase, rawBi);
     if (!bi) {
       throw new ActionError("birth_input_missing", "No birth input", 409);
     }
+    const subjectName = await resolveSubjectDisplayName(
+      supabase,
+      profile.id,
+      profile.display_name,
+      body,
+    );
     const pack = await ensureBirthPack(adminSupabase, profile, bi, locale, dateStr);
     if (!pack) {
       throw new ActionError(
@@ -2940,7 +3216,7 @@ async function _handleInternal(
     return {
       date: dateStr,
       locale,
-      displayName: profile.display_name,
+      displayName: subjectName,
       locationLabel: profile.current_city ?? "India",
       birthInputId: bi.id,
       packVersion: BIRTH_PACK_VERSION,
@@ -3221,22 +3497,32 @@ async function _handleInternal(
     const slices = divideDaylight(sun, refInstant.getUTCDay());
     const { good, caution } = goodAndCautionWindows(slices, tz);
 
-    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
     const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    const subjectName = await resolveSubjectDisplayName(
+      supabase,
+      profile.id,
+      profile.display_name,
+      body,
+    );
     const moonSign = moonRashiAt(refInstant);
     const moonNak = moonNakshatraAt(refInstant);
     const rashiInfo = rashiDisplay(moonSign.key, locale);
-    const natalMoon = birthMoonDetails(bi, tz, locale);
+    const natalMoon = bi ? birthMoonDetails(bi, tz, locale) : null;
     const birthSun = birthSunDetails(bi, tz, locale);
 
-    const { data: chart } = await supabase
-      .from("chart_runs")
-      .select("engine_mode")
-      .eq("profile_id", profile.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const engineMode = (chart?.engine_mode as string) ?? "general_panchanga";
+    let engineMode = "general_panchanga";
+    if (bi) {
+      const { data: chart } = await supabase
+        .from("chart_runs")
+        .select("engine_mode")
+        .eq("birth_input_id", bi.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      engineMode = (chart?.engine_mode as string) ??
+        resolveEngineMode(bi);
+    }
 
     let mdLordFact = "";
     let adLordFact = "";
@@ -3324,7 +3610,7 @@ async function _handleInternal(
     const result = {
       cacheVersion: NARRATIVE_CACHE_VERSION,
       locale,
-      displayName: profile.display_name,
+      displayName: subjectName,
       date: dateStr,
       locationLabel: profile.current_city ?? "India reference",
       engineMode,
@@ -3573,6 +3859,13 @@ async function _handleInternal(
   }
 
   if (action === "ask") {
+    if (chartProfileIdFromBody(body)) {
+      throw new ActionError(
+        "ask_requires_own_chart",
+        "Switch to your chart to use Ask",
+        403,
+      );
+    }
     const locale = requestLocale(body, profile);
     const question = String(body.question ?? "").trim();
     if (question.length < 3) {
@@ -3983,6 +4276,40 @@ async function _handleInternal(
     };
   }
 
+  if (action === "referral_attribution") {
+    const profile = requireProfile(prof, action);
+    const referrerId = String(body.referrer_profile_id ?? "").trim();
+    if (!referrerId || referrerId === profile.id) {
+      return { ok: true, skipped: true };
+    }
+    const { data: row } = await supabase
+      .from("profiles")
+      .select("referred_by_profile_id")
+      .eq("id", profile.id)
+      .maybeSingle();
+    if (row?.referred_by_profile_id) {
+      return { ok: true, already_set: true };
+    }
+    const { error } = await adminSupabase
+      .from("profiles")
+      .update({
+        referred_by_profile_id: referrerId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profile.id);
+    if (error) throw error;
+    await logAppEvent(
+      adminSupabase,
+      profile.id,
+      "referral",
+      "info",
+      "referral_attributed",
+      undefined,
+      { referrer_profile_id: referrerId },
+    );
+    return { ok: true };
+  }
+
   if (action === "share_card_generate") {
     const profile = requireProfile(prof, action);
     const locale = requestLocale(body, profile);
@@ -4008,7 +4335,12 @@ async function _handleInternal(
     const sourceId = body.source_id == null ? null : String(body.source_id);
     const shareId = crypto.randomUUID();
     const payload = payloadRaw as Record<string, unknown>;
-    const built = buildShareCard(shareId, locale, sourceType, payload);
+    const shareSiteBase = Deno.env.get("SHARE_SITE_URL")?.trim() ||
+      "https://muhurta-legal.vercel.app";
+    const built = buildShareCard(shareId, locale, sourceType, payload, {
+      shareSiteBase,
+      referrerProfileId: profile.id,
+    });
     const { error } = await supabase.from("share_cards").insert({
       id: shareId,
       profile_id: profile.id,
@@ -4225,7 +4557,7 @@ async function _handleInternal(
     const locale = requestLocale(body, profile);
     const tz = profile.current_timezone ?? "Asia/Kolkata";
     const dateStr = todayInTimezone(tz);
-    const rawBi = await getLatestBirthInput(supabase, profile.id);
+    const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
     const bi = await ensureBirthPlacePrecision(supabase, rawBi);
     const { data: catalog } = await supabase
       .from("remedy_catalog")
@@ -4388,4 +4720,60 @@ export async function getValidationFeedback(
   _profileId: string,
 ): Promise<string[]> {
   return [];
+}
+
+/** Service-role only: kick off or resume birth-pack LLM generation for any birth input. */
+export async function warmBirthPack(
+  adminSupabase: SupabaseClient,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const profileId = String(body.profile_id ?? "").trim();
+  const birthInputId = String(body.birth_input_id ?? "").trim();
+  const locale = (body.locale as AppLocale) ?? "te";
+  if (!profileId || !birthInputId) {
+    throw new ActionError(
+      "missing_params",
+      "profile_id and birth_input_id required",
+      400,
+    );
+  }
+
+  const { data: profile, error: profileError } = await adminSupabase
+    .from("profiles")
+    .select(
+      "id, display_name, current_city, current_timezone, current_lat, current_lng, language_code, explanation_mode",
+    )
+    .eq("id", profileId)
+    .single();
+  if (profileError || !profile) {
+    throw new ActionError("profile_not_found", "Profile not found", 404);
+  }
+
+  const rawBi = await getBirthInput(adminSupabase, birthInputId, profileId);
+  const bi = await ensureBirthPlacePrecision(adminSupabase, rawBi);
+  if (!bi) {
+    throw new ActionError("birth_input_missing", "No birth input", 404);
+  }
+
+  const tz = (profile as ProfRow).current_timezone ?? "Asia/Kolkata";
+  const dateStr = (body.date as string) ?? todayInTimezone(tz);
+  const pack = await ensureBirthPack(
+    adminSupabase,
+    profile as ProfRow,
+    bi,
+    locale,
+    dateStr,
+  );
+
+  return {
+    ok: true,
+    profileId,
+    birthInputId: bi.id,
+    locale,
+    status: pack?.status ?? "generating",
+    screensReady: pack
+      ? getPackScreensReady(pack.content as BirthIntelligencePackContent)
+      : [],
+    provider: pack?.provider ?? null,
+  };
 }

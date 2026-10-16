@@ -249,7 +249,7 @@ export async function generateJsonWithFallbackEnvelope(
     Deno.env.get("DISABLE_OPENAI")?.trim().toLowerCase() === "true";
 
   const isBirthPack = Boolean(opts?.birthPackPhase || opts?.largePayload);
-  const birthPackPrimary = (Deno.env.get("BIRTH_PACK_PRIMARY") ?? "openai")
+  const birthPackPrimary = (Deno.env.get("BIRTH_PACK_PRIMARY") ?? "gemini")
     .trim()
     .toLowerCase();
 
@@ -284,29 +284,33 @@ export async function generateJsonWithFallbackEnvelope(
       });
 
   if (isBirthPack) {
-    if (birthPackPrimary === "openrouter") {
-      const openRouter = await tryOpenRouterBirthPack();
-      if (openRouter) return openRouter;
+    const providerOrder = birthPackPrimary === "gemini"
+      ? (["gemini", "openai", "openrouter"] as const)
+      : birthPackPrimary === "openrouter"
+      ? (["openrouter", "openai", "gemini"] as const)
+      : (["openai", "gemini", "openrouter"] as const);
+
+    for (const provider of providerOrder) {
+      const envelope = provider === "gemini"
+        ? await tryGemini()
+        : provider === "openrouter"
+        ? await tryOpenRouterBirthPack()
+        : await tryOpenAi();
+      if (envelope) return envelope;
     }
-    const openAi = await tryOpenAi();
-    if (openAi) return openAi;
-    const gemini = await tryGemini();
-    if (gemini) return gemini;
-    if (birthPackPrimary !== "openrouter") {
-      const openRouter = await tryOpenRouterBirthPack();
-      if (openRouter) return openRouter;
-    }
+
     if (opts?.supabase) {
       await logAppEvent(
         opts.supabase,
         opts.profileId ?? null,
-        "openai",
+        "gemini",
         "error",
-        "Birth pack failed: OpenAI + Gemini (+ OpenRouter if configured)",
+        "Birth pack failed: Gemini + OpenAI + OpenRouter",
         undefined,
         {
           birthPackPhase: opts?.birthPackPhase ?? null,
           promptLength: groundedSystem.length + userText.length,
+          birthPackPrimary,
         },
       );
     }

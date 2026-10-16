@@ -27,7 +27,7 @@ cd c:\Users\PrashanthKuna\muhurtha
 supabase secrets list --project-ref kdngizqrybkrckvphyin
 ```
 
-**Birth pack (screen-by-screen multiturn):** primary is **Nemotron** via OpenRouter (`nvidia/nemotron-3-super-120b-a12b:free`), then Owl alternate, then Gemini, then OpenAI. Override with `BIRTH_PACK_OPENROUTER_MODEL` secret. Deploy + warm-up:
+**Birth pack (screen-by-screen multiturn):** primary is **Gemini** (`gemini-3.5-flash` via `BIRTH_PACK_GEMINI_MODEL`), then OpenAI, then OpenRouter fallback. Override with `BIRTH_PACK_PRIMARY` secret (`gemini` | `openai` | `openrouter`). Deploy + warm-up:
 
 ```powershell
 .\scripts\deploy-muhurtha-api.ps1 -SkipRevenueCat
@@ -420,6 +420,31 @@ adb emu sms send 900 "Your Muhurtha code is 123456"
 ---
 
 ## RevenueCat + subscriptions
+
+See [RevenueCat MCP setup](https://www.revenuecat.com/docs/tools/mcp/setup) for dashboard automation from Cursor.
+
+### Local secrets (never commit)
+
+| File | Purpose |
+|------|---------|
+| `secrets.local.json` | API v2 secret (`sk_…`), Android/iOS SDK keys, webhook secret |
+| `secrets.local.example.json` | Template |
+| `app/dart_defines.json` | Flutter compile-time Supabase + RevenueCat **public** SDK keys |
+
+```powershell
+.\scripts\sync-local-secrets.ps1   # merges secrets.local.json → dart_defines + .cursor/mcp.json
+```
+
+Reload Cursor after sync so RevenueCat MCP activates.
+
+**Key types (do not mix):**
+
+| Key | Prefix | Used for |
+|-----|--------|----------|
+| API v2 secret | `sk_` | RevenueCat MCP / REST API — `secrets.local.json` only |
+| Android public SDK | `goog_` | `Purchases.configure` on Android — `dart_defines.json` |
+| iOS public SDK | `appl_` | iOS builds — `dart_defines.json` |
+| Test store | `test_` | Sandbox — optional `REVENUECAT_API_KEY` |
 
 **Client keys** (compile-time, in `app/dart_defines.json` — gitignored):
 

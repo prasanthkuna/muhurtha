@@ -1,48 +1,66 @@
 # Muhūrta — pending work (launch readiness)
 
-Last updated after pre–Play Console sprint. **Play developer verification** is the main external blocker.
+Last updated: **2026-07-11** after Play Console sprint + paywall alignment.
 
 ---
 
-## Done (repo)
+## Done (repo + Play)
 
-- [x] Store assets (screenshots en + te, icon, feature graphic)
-- [x] Legal site: privacy, terms, delete-account → https://muhurta-legal.vercel.app
-- [x] In-app legal links (sign-in, profile, paywall)
-- [x] Sign out + account deletion (profile → email + web instructions)
-- [x] Signed release AAB build path + upload keystore
-- [x] `play/metadata/en-IN/` and `te-IN/`
-- [x] `play/DATA_SAFETY.md`, `PLAY_REVIEW_NOTES.md`, `KEYSTORE_BACKUP.md`
-- [x] Scripts: `deploy-legal-vercel.ps1`, `create-upload-keystore.ps1`, `print-android-sms-hash.ps1`, `sync-local-secrets.ps1`
-- [x] App version `1.0.0+1`
+### Play Console
+- [x] App **Muhūrta** (`app.muhurta`) created
+- [x] Data safety, content rating, target audience 18+, ads/gov/health/financial declarations
+- [x] Store listing en-IN (icon, feature graphic, 5 screenshots, copy) — **saved**
+- [x] Category: Lifestyle · Contact: prasanthkuna@gmail.com
+- [x] Internal testing: **v1.0.0 AAB published**
+- [x] Testers list: **Internal testers** (`prasanthkuna@gmail.com`)
+- [x] **8 policy changes submitted for review** (Changes in review)
+- [x] Reviewer sign-in: +919008393030 (OTP SMS)
+
+**Internal test opt-in:** https://play.google.com/apps/internaltest/4701457374159644978
+
+### Repo / backend
+- [x] v3 five-tab UX, birth intelligence pack, share/referral, notifications
+- [x] RevenueCat SDK + paywall + restore + webhook + `subscription_sync`
+- [x] Legal site → https://muhurta-legal.vercel.app
+- [x] Paywall copy aligned to **Pro-only ₹199/mo · ₹999/yr**
+- [x] Signed AAB build path + store assets + scripts
+- [x] `REVENUECAT_WEBHOOK_SECRET` + `REVENUECAT_API_V2_SECRET` on Supabase prod
 
 ---
 
-## Blocked on you (external)
+## Blocked on you (external — payments)
 
-### Play Console (~1 day verification)
+### 1. Google Payments merchant account (BLOCKER)
+Play Console → **Monetize → Subscriptions** shows:
+> *You need to set up a Google Payments merchant account to access this page*
 
-- [ ] Developer account verification completes
-- [ ] Create app **Muhūrta** (`app.muhurta`)
-- [ ] Follow `play/PLAY_SUBMIT.md` + paste from `play/DATA_SAFETY.md`
-- [ ] Upload `app-release.aab` to internal testing
-- [ ] Add license testers
+- [ ] Complete merchant profile: https://play.google.com/console/developers/5935195377353705600/paymentssettings
+- [ ] India tax info + bank account for payouts
+- [ ] Then create subscription **`muhurta_pro`** (monthly ₹199, yearly ₹999) — or run `.\scripts\sync-play-subscriptions.ps1` after service account JSON is configured
 
-### RevenueCat + Play billing
+### 2. RevenueCat ↔ Play
+- [x] Add production `goog_…` key to `secrets.local.json` → `.\scripts\sync-local-secrets.ps1`
+- [ ] Link RevenueCat ↔ Play service credentials in RC dashboard
+- [ ] Confirm entitlement **`muhurtha Pro`**, offering `default`, packages `monthly` / `yearly`
+- [x] Rebuild AAB: `.\scripts\build-release-aab.ps1` → **internal v2 (1.0.0+2) published**
 
-- [ ] Add production `goog_…` key to `secrets.local.json` → run `.\scripts\sync-local-secrets.ps1`
-- [ ] Create Play subscriptions `muhurta_pro` (monthly ₹199, yearly ₹999)
-- [ ] Link RevenueCat ↔ Play service credentials
-- [x] Confirm `REVENUECAT_WEBHOOK_SECRET` on Supabase prod
-- [x] Set `REVENUECAT_API_V2_SECRET` on Supabase (server-side subscription verify)
-- [ ] Push repo & enable **GitHub Actions** → add secret `SUPABASE_ANON_KEY` (from `dart_defines.json`) → daily `supabase-keepalive` workflow
-- [ ] Rebuild AAB after RC key: `.\scripts\build-release-aab.ps1`
-- [ ] Test purchase with license tester
+### 3. Purchase E2E test
+- [x] License tester list: **Internal testers** email list enabled (Settings → License testing)
+- [ ] Opt in via internal test link on device
+- [ ] Install from Play Store → paywall → test purchase → verify Supabase `subscriptions` row
+- [ ] Test restore purchases
 
-### Secrets & backup
-
+### 4. Secrets & backup
 - [ ] **Back up** `upload-keystore.jks` + password (`play/KEYSTORE_BACKUP.md`)
-- [ ] Play service account JSON in `secrets.local.json` (for GPC after first upload)
+- [ ] Play service account JSON in `secrets.local.json` (for GPC automation)
+- [ ] GitHub Actions: add secret `SUPABASE_ANON_KEY` for daily keepalive workflow
+
+---
+
+## Waiting on Google
+
+- [ ] **Policy review** of 8 submitted changes (~up to 7 days)
+- [ ] Promote internal → closed/open → **production** after review + billing E2E
 
 ---
 
@@ -50,42 +68,39 @@ Last updated after pre–Play Console sprint. **Play developer verification** is
 
 | Item | Notes |
 |------|--------|
-| Custom domain `muhurta.app` | Redirect to legal site; update `LEGAL_SITE_URL` |
-| Telugu/Hindi l10n gaps | ~57 strings; OK for en-IN launch |
+| te-IN Play listing | Screenshots + copy in `play/metadata/te-IN/` |
+| Custom domain `muhurta.app` | Redirect legal URLs |
+| Telugu/Hindi l10n gaps | ~58 strings; OK for en-IN launch |
 | Crash reporting (Sentry) | Recommended before wide rollout |
-| CI/CD (GitHub Actions) | Manual builds fine for v1 |
+| CI/CD for Flutter builds | Manual builds fine for v1 |
 | iOS (`app/ios/`) | Separate phase |
-| Share deep links `muhurta.app/c/…` | Virality v2 |
-| `ANDROID_SMS_APP_HASH` Supabase fallback | Only if OTP autofill breaks; app sends hash at runtime |
-| Play Store URL in share cards | After listing is live |
+| Plus tier / one-time packs | Not in v1 — Pro-only shipped |
 
 ---
 
 ## Quick commands
 
 ```powershell
-# Legal site
-.\scripts\deploy-legal-vercel.ps1 -Prod
-
 # RevenueCat keys → dart_defines.json
 .\scripts\sync-local-secrets.ps1
 
 # Release build
 .\scripts\build-release-aab.ps1
 
-# Optional SMS hash (upload keystore)
-.\scripts\print-android-sms-hash.ps1
+# Legal site
+.\scripts\deploy-legal-vercel.ps1 -Prod
+
+# Play subscriptions (after merchant + service account)
+.\scripts\sync-play-subscriptions.ps1
 ```
 
 ---
 
-## Ready for internal test?
+## Play Console IDs
 
-| Area | Status |
+| Item | Value |
 |------|--------|
-| Assets & legal | **Yes** |
-| Signed AAB | **Yes** (rebuild after RC key) |
-| OTP (release) | **Yes** (per your testing) |
-| Sign out / deletion | **Yes** |
-| Subscriptions E2E | **No** (needs Play + RC) |
-| Play Console | **Waiting verification** |
+| App ID | `4974203778919607875` |
+| Developer ID | `5935195377353705600` |
+| Package | `app.muhurta` |
+| Internal track | `4701457374159644978` |

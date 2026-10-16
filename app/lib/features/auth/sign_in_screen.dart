@@ -27,6 +27,7 @@ import '../../core/data/profile_repository.dart';
 import '../../core/debug/auth_telemetry.dart';
 
 import '../../design_system/design_system.dart';
+import '../../shared/widgets/legal_links.dart';
 
 import '../../shared/widgets/muh_primary_button.dart';
 
@@ -1030,31 +1031,32 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
                   ),
 
-                  Offstage(
-
-                    child: PinInputTextField(
-
+                  if (Env.manualOtp)
+                    PinInputTextField(
                       pinLength: _otpLength,
-
                       controller: _otpController,
-
                       autofillHints: const [AutofillHints.oneTimeCode],
-
                       decoration: UnderlineDecoration(
-
                         textStyle: theme.textTheme.headlineSmall,
-
                         colorBuilder: FixedColorBuilder(
-
                           MuhColors.creamMuted.withValues(alpha: 0.3),
-
                         ),
-
                       ),
-
+                    )
+                  else
+                    Offstage(
+                      child: PinInputTextField(
+                        pinLength: _otpLength,
+                        controller: _otpController,
+                        autofillHints: const [AutofillHints.oneTimeCode],
+                        decoration: UnderlineDecoration(
+                          textStyle: theme.textTheme.headlineSmall,
+                          colorBuilder: FixedColorBuilder(
+                            MuhColors.creamMuted.withValues(alpha: 0.3),
+                          ),
+                        ),
+                      ),
                     ),
-
-                  ),
 
                   if (_phase == _AuthPhase.awaitingOtp && !_busy) ...[
 
@@ -1167,6 +1169,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   ),
 
                 ],
+
+                const SizedBox(height: MuhSpace.xl),
+
+                const LegalSignInNotice(),
 
               ],
 

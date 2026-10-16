@@ -7,12 +7,16 @@ import 'package:muhurta/l10n/app_localizations.dart';
 
 import '../../core/config/env.dart';
 import '../../core/data/birth_pack_readiness.dart';
+import '../../core/data/chart_profile_repository.dart';
+import '../../core/data/active_chart_profile.dart';
 import '../../core/data/birth_pack_views.dart';
 import '../../core/data/muhurtha_engine_api.dart';
 import '../../core/format/clock_format.dart';
 import '../../core/format/day_window_label.dart';
 import '../../core/locale/locale_provider.dart';
 import '../../core/notifications/muhurtha_notification_service.dart';
+import '../../core/analytics/app_analytics.dart';
+import '../../core/growth/referral_service.dart';
 import '../../core/share/share_card_service.dart';
 import '../../core/data/profile_repository.dart';
 import '../../core/subscription/onboarding_intent_map.dart';
@@ -20,6 +24,7 @@ import '../../core/subscription/subscription_access.dart';
 import '../../core/subscription/subscription_service.dart';
 import '../../shared/widgets/paywall_sheet.dart';
 import '../../design_system/design_system.dart';
+import '../../shared/widgets/chart_profile_switcher.dart';
 import '../../shared/widgets/celestial_components.dart';
 import '../../shared/widgets/lucky_strip.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
@@ -65,6 +70,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       await ref
           .read(subscriptionServiceProvider)
           .configureForProfile(profileId);
+      await ref.read(referralServiceProvider).syncPendingAttribution();
     } catch (_) {}
   }
 
@@ -117,6 +123,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final chartScope = ref.watch(activeChartProfileIdProvider) ?? 'own';
+    final displayName = ref.watch(chartDisplayNameProvider);
+    final localeCode = ref.watch(localeProvider.select((l) => l.languageCode));
     ref.listen(birthPackProvider, (_, next) {
       final pack = next.valueOrNull;
       if (pack != null && pack.isComplete) {
@@ -141,29 +150,54 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         backgroundColor: Colors.transparent,
         body: Column(
           children: [
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.only(right: MuhSpace.sm),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: IconButton(
-                    tooltip: l10n.profileTuneTitle,
-                    icon: const Icon(Icons.tune_rounded, color: MuhColors.gold),
-                    onPressed: () => context.push('/profile'),
-                  ),
-                ),
-              ),
-            ),
+            const ChartProfileBanner(),
             Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 280),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                child: KeyedSubtree(
-                  key: ValueKey(_index),
-                  child: pages[_index],
-                ),
+              child: Column(
+                children: [
+                  SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        MuhSpace.page,
+                        0,
+                        MuhSpace.sm,
+                        MuhSpace.xs,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              displayName.isNotEmpty ? displayName : l10n.appTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: l10n.profileTuneTitle,
+                            icon: const Icon(Icons.tune_rounded,
+                                color: MuhColors.gold),
+                            onPressed: () => context.push('/profile'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 280),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: KeyedSubtree(
+                        key: ValueKey('$chartScope-$_index-$localeCode'),
+                        child: pages[_index],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -225,6 +259,25 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       ),
     );
   }
+}
+
+Future<void> _shareTestFriend(
+  WidgetRef ref,
+  BuildContext context, {
+  required String title,
+  required String body,
+  required String sourceId,
+}) async {
+  await ref.read(appAnalyticsProvider).testFriendTapped(sourceType: 'decode');
+  if (!context.mounted) return;
+  await _shareExactCard(
+    ref,
+    context,
+    title: title,
+    body: body,
+    sourceType: 'decode',
+    sourceId: sourceId,
+  );
 }
 
 Future<void> _shareExactCard(
@@ -297,7 +350,7 @@ class _DecodeTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef _) {
-    if (!Env.hasSupabase) {
+    if (!Env.supportsPackTabs) {
       return _EmptyStateScreen(
         headline: l10n.todayEmptyHeadline,
         message: l10n.errorNeedSupabase,
@@ -306,7 +359,9 @@ class _DecodeTab extends ConsumerWidget {
     }
     final packAsync = ref.watch(birthPackProvider);
     final todayAsync = ref.watch(todayPayloadProvider);
+    ref.watch(activeChartProfileIdProvider);
     final copy = _V3Copy(l10n);
+    final subjectName = ref.watch(chartDisplayNameProvider);
     return packAsync.when(
       data: (pack) {
         if (pack == null) {
@@ -323,12 +378,16 @@ class _DecodeTab extends ConsumerWidget {
         }
         final payload = todayAsync.valueOrNull;
         final views = BirthPackViews(pack);
-        final name = pack.displayName.trim();
-        final moon = payload?.birthMoonSign ?? payload?.moonSign;
+        final name = subjectName.isNotEmpty
+            ? subjectName
+            : pack.displayName.trim();
+        final moon = payload?.birthMoonSign;
         final decodeHit = views.displayHook;
         final identitySummary = views.identitySummary;
         final workMoney = views.workMoney;
         final relationship = views.relationship;
+        final shareLine =
+            decodeHit.isNotEmpty ? decodeHit : identitySummary;
         return _V3Scroll(
           title: name.isEmpty ? copy.decodeTitle : '$name, decoded',
           subtitle:
@@ -338,6 +397,19 @@ class _DecodeTab extends ConsumerWidget {
             ref.invalidate(todayPayloadProvider);
           },
           children: [
+            if (shareLine.isNotEmpty)
+              _TestFriendInviteCard(
+                title: l10n.testFriendTitle,
+                body: l10n.testFriendBody,
+                cta: l10n.testFriendCta,
+                onTap: () => _shareTestFriend(
+                  ref,
+                  context,
+                  title: copy.thisSounds,
+                  body: shareLine,
+                  sourceId: 'decode-test-friend-${pack.date}',
+                ),
+              ),
             if (moon != null)
               CelestialHeaderCard(
                 heroLabel: copy.moonLabel,
@@ -479,7 +551,7 @@ class _TodayFocusTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef _) {
-    if (!Env.hasSupabase) {
+    if (!Env.supportsPackTabs) {
       return _EmptyStateScreen(
         headline: l10n.todayEmptyHeadline,
         message: l10n.errorNeedSupabase,
@@ -489,6 +561,8 @@ class _TodayFocusTab extends ConsumerWidget {
     final today = ref.watch(todayPayloadProvider);
     final packAsync = ref.watch(birthPackProvider);
     final remedies = ref.watch(remedyListProvider);
+    ref.watch(activeChartProfileIdProvider);
+    final subjectName = ref.watch(chartDisplayNameProvider);
     final copy = _V3Copy(l10n);
     return packAsync.when(
       data: (pack) {
@@ -535,8 +609,11 @@ class _TodayFocusTab extends ConsumerWidget {
             views.natalLuck ??
             NatalLuckInfo.fromMoonSign(payload.birthMoonSign);
         final remedy = remedies.valueOrNull?.firstOrNull;
+        final todayTitle = subjectName.isNotEmpty
+            ? '${subjectName.trim()}, ${copy.todayTitle.toLowerCase()}'
+            : copy.todayTitle;
         return _V3Scroll(
-          title: copy.todayTitle,
+          title: todayTitle,
           subtitle: copy.todaySub,
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
@@ -694,6 +771,8 @@ class _TimingTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef _) {
     final packAsync = ref.watch(birthPackProvider);
+    ref.watch(activeChartProfileIdProvider);
+    final subjectName = ref.watch(chartDisplayNameProvider);
     final copy = _V3Copy(l10n);
     return packAsync.when(
       data: (pack) {
@@ -722,7 +801,9 @@ class _TimingTab extends ConsumerWidget {
           month.caution,
         ].where((line) => line.isNotEmpty).join('\n\n');
         return _V3Scroll(
-          title: copy.timingTitle,
+          title: subjectName.isNotEmpty
+              ? '${subjectName.trim()}, ${copy.timingTitle.toLowerCase()}'
+              : copy.timingTitle,
           subtitle: copy.timingSub,
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
@@ -799,6 +880,8 @@ class _LifeMapTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef _) {
     final async = ref.watch(birthPackProvider);
+    ref.watch(activeChartProfileIdProvider);
+    final subjectName = ref.watch(chartDisplayNameProvider);
     final copy = _V3Copy(l10n);
     return async.when(
       data: (pack) {
@@ -820,7 +903,9 @@ class _LifeMapTab extends ConsumerWidget {
         final future = views.chaptersByTense('future');
         final current = views.chaptersByTense('current').firstOrNull;
         return _V3Scroll(
-          title: copy.lifeTitle,
+          title: subjectName.isNotEmpty
+              ? '${subjectName.trim()}, ${copy.lifeTitle.toLowerCase()}'
+              : copy.lifeTitle,
           subtitle: copy.lifeSub,
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
@@ -1328,11 +1413,21 @@ class _AskTabState extends State<_AskTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    if (!Env.hasSupabase) {
+    if (!Env.supportsPackTabs) {
       return _EmptyStateScreen(
         headline: _tx('title'),
         message: widget.l10n.errorNeedSupabase,
         icon: Icons.chat_bubble_outline_rounded,
+      );
+    }
+
+    if (widget.ref.watch(activeChartProfileIdProvider) != null) {
+      return _EmptyStateScreen(
+        headline: _tx('title'),
+        message: widget.l10n.chartProfileAskBlocked,
+        icon: Icons.chat_bubble_outline_rounded,
+        actionLabel: widget.l10n.chartProfileBackToMine,
+        onAction: () => selectOwnChart(widget.ref),
       );
     }
 
@@ -1561,6 +1656,59 @@ class _InsightSection extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TestFriendInviteCard extends StatelessWidget {
+  const _TestFriendInviteCard({
+    required this.title,
+    required this.body,
+    required this.cta,
+    required this.onTap,
+  });
+
+  final String title;
+  final String body;
+  final String cta;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(MuhSpace.lg),
+      margin: const EdgeInsets.only(bottom: MuhSpace.md),
+      decoration: BoxDecoration(
+        color: MuhColors.surface,
+        borderRadius: BorderRadius.circular(MuhRadius.card),
+        border: Border.all(color: MuhColors.gold.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: MuhColors.cream,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: MuhSpace.xs),
+          Text(
+            body,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: MuhColors.creamMuted,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: MuhSpace.md),
+          MuhPrimaryButton(
+            label: cta,
+            onPressed: onTap,
           ),
         ],
       ),
@@ -1841,11 +1989,15 @@ class _EmptyStateScreen extends StatelessWidget {
     required this.headline,
     required this.message,
     required this.icon,
+    this.actionLabel,
+    this.onAction,
   });
 
   final String headline;
   final String message;
   final IconData icon;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -1891,6 +2043,13 @@ class _EmptyStateScreen extends StatelessWidget {
                         height: 1.5,
                       ),
                     ),
+                    if (actionLabel != null && onAction != null) ...[
+                      const SizedBox(height: MuhSpace.lg),
+                      OutlinedButton(
+                        onPressed: onAction,
+                        child: Text(actionLabel!),
+                      ),
+                    ],
                   ],
                 ),
               ),

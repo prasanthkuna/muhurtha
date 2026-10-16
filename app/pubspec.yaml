@@ -1,7 +1,7 @@
 name: muhurta
 description: Muhūrta — purpose-first Jyotish timing companion
 publish_to: "none"
-version: 0.1.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -28,14 +28,23 @@ dependencies:
   otp_autofill: ^4.1.0
   purchases_flutter: ^8.6.0
   purchases_ui_flutter: ^8.11.0
+  url_launcher: ^6.3.1
+  shared_preferences: ^2.5.3
+  app_links: ^6.4.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.7
+  golden_screenshot: ^11.0.1
+  integration_test:
+    sdk: flutter
 
 flutter:
   uses-material-design: true
   generate: true
   assets:
-    - assets/icons/whatsapp.svg
+    - assets/icons/
+    - assets/brand/

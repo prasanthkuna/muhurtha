@@ -134,8 +134,8 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
                           );
                           return;
                         }
-                        // Exact date+time fixes the chart: nakshatra is derived on the server
-                        // (Lahiri Moon). Optional override via Nakshatra screen for bucket modes.
+                        // Exact date+time fixes the chart on the server (Lahiri Moon).
+                        // Bucket users can strengthen accuracy via Nakshatra screen.
                         if (draft.timeBucket == TimeBucketOption.exact &&
                             draft.exactBirthTime != null) {
                           notifier.update(
@@ -144,15 +144,10 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
                               clearJanmaNakshatra: true,
                             ),
                           );
+                          context.push('/onboarding/accuracy');
                         } else {
-                          notifier.update(
-                            (d) => d.copyWith(
-                              nakshatraUnknown: true,
-                              clearJanmaNakshatra: true,
-                            ),
-                          );
+                          context.push('/onboarding/nakshatra');
                         }
-                        context.push('/onboarding/accuracy');
                       },
               ),
             ],

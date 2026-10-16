@@ -26,13 +26,13 @@ class MuhurthaNotificationService {
     final api = _ref.read(muhurthaEngineApiProvider);
     if (api == null) return;
     await _ensureInitialized();
+    if (!await _ensureNotificationPermission()) return;
     final access = _ref.read(subscriptionAccessProvider);
     await _plugin.cancelAll();
     final locale = _ref.read(localeProvider).languageCode;
     final rows = await api.notificationScheduleGet(locale: locale);
     for (final row in rows) {
-      if (!access.isPlus &&
-          row.type != 'today_ready') {
+      if (!access.isPlus && row.type != 'today_ready') {
         continue;
       }
       if (!access.isPro &&
@@ -71,15 +71,18 @@ class MuhurthaNotificationService {
     tzdata.initializeTimeZones();
     await _plugin.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('@drawable/notification_icon'),
       ),
     );
-    if (Platform.isAndroid) {
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-    }
     _initialized = true;
+  }
+
+  Future<bool> _ensureNotificationPermission() async {
+    if (!Platform.isAndroid) return true;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return true;
+    final granted = await android.requestNotificationsPermission();
+    return granted ?? false;
   }
 }

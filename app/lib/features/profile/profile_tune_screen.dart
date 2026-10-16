@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/config/legal_urls.dart';
 import '../../core/data/engine_cache_invalidate.dart';
 import '../../core/data/muhurtha_engine_api.dart';
 import '../../core/data/profile_repository.dart';
@@ -13,6 +15,8 @@ import '../../core/locale/locale_provider.dart';
 import '../../core/subscription/subscription_access.dart';
 import '../../core/subscription/subscription_service.dart';
 import '../../shared/widgets/paywall_sheet.dart';
+import '../../shared/widgets/chart_profile_switcher.dart';
+import '../../shared/widgets/legal_links.dart';
 import '../../design_system/design_system.dart';
 import '../../features/onboarding/birth_draft.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
@@ -41,6 +45,45 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
     _name.dispose();
     _city.dispose();
     super.dispose();
+  }
+
+  Future<void> _signOut() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: MuhColors.surface,
+        title: Text(l10n.profileSignOutConfirmTitle),
+        content: Text(
+          l10n.profileSignOutConfirmBody,
+          style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                color: MuhColors.creamMuted,
+              ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.profileCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.profileSignOut),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await ref.read(subscriptionServiceProvider).logOut();
+    await Supabase.instance.client.auth.signOut();
+    if (!mounted) return;
+    context.go('/welcome');
+  }
+
+  Future<void> _requestAccountDeletion() async {
+    final phone = Supabase.instance.client.auth.currentUser?.phone;
+    final uri = LegalUrls.accountDeletionMailto(phoneHint: phone);
+    await openExternalUrl(uri.toString());
   }
 
   Future<void> _load() async {
@@ -140,8 +183,7 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
           await api.chartInitialize(ids.birthInputId);
         } catch (_) {}
       }
-      ref.read(localeProvider.notifier).setLanguageCode(_draft.languageCode);
-      invalidateAllEngineCaches(ref);
+      await applyAppLanguage(ref, _draft.languageCode);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.profileSaved)),
@@ -214,6 +256,8 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
           child: ListView(
             padding: const EdgeInsets.all(MuhSpace.page),
             children: [
+              const ChartProfileSwitcher(),
+              const SizedBox(height: MuhSpace.lg),
               _ProfileSection(
                 title: l10n.profileTuneTitle,
                 subtitle: l10n.profileTuneHint,
@@ -264,6 +308,7 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
                     ),
                     const SizedBox(height: MuhSpace.md),
                     DropdownButtonFormField<String>(
+                      key: ValueKey(_draft.languageCode),
                       initialValue: _draft.languageCode,
                       dropdownColor: MuhColors.surface,
                       decoration:
@@ -280,6 +325,7 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
                         if (v == null) return;
                         setState(
                             () => _draft = _draft.copyWith(languageCode: v));
+                        applyAppLanguage(ref, v);
                       },
                     ),
                   ],
@@ -421,6 +467,47 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
                         child: Text(l10n.profileManageSubscription),
                       ),
                     ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: MuhSpace.lg),
+              _ProfileSection(
+                title: l10n.profileLegalTitle,
+                subtitle: l10n.profileLegalSubtitle,
+                child: const LegalLinksRow(center: false),
+              ),
+              const SizedBox(height: MuhSpace.lg),
+              _ProfileSection(
+                title: l10n.profileAccountTitle,
+                subtitle: l10n.profileAccountSubtitle,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    OutlinedButton(
+                      onPressed: _signOut,
+                      child: Text(l10n.profileSignOut),
+                    ),
+                    const SizedBox(height: MuhSpace.sm),
+                    Text(
+                      l10n.profileDeleteAccountBody,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: MuhColors.creamMuted,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: MuhSpace.sm),
+                    OutlinedButton(
+                      onPressed: _requestAccountDeletion,
+                      child: Text(l10n.profileDeleteAccountEmail),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () =>
+                            openExternalUrl(LegalUrls.deleteAccount),
+                        child: Text(l10n.profileDeleteAccountWeb),
+                      ),
+                    ),
                   ],
                 ),
               ),

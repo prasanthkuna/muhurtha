@@ -40,6 +40,12 @@ if ($LASTEXITCODE -ne 0) {
   Write-Warning "revenuecat-webhook deploy failed (continuing)"
 }
 
+Write-Host "`nDeploying Edge Function share-preview..."
+& $Supabase functions deploy share-preview --use-api --project-ref $ProjectRef
+if ($LASTEXITCODE -ne 0) {
+  Write-Warning "share-preview deploy failed (continuing)"
+}
+
 Write-Host "`nPost-deploy warm-up (cold start + OpenRouter probe)..."
 & (Join-Path $PSScriptRoot "warmup-supabase.ps1") -ProjectRef $ProjectRef
 if ($LASTEXITCODE -ne 0) {

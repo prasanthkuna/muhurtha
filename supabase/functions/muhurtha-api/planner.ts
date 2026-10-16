@@ -276,7 +276,9 @@ export function buildPhasePlan(
       ...blendCautionBias(ad.mood, md.mood),
     ]).slice(0, 3),
     dailyTexture,
-    phasePulse: tense === "past" ? "Past chapter" : pulseLabel(ratio, loc),
+    phasePulse: tense === "past"
+      ? (loc === "te" ? "గత అధ్యాయం" : loc === "hi" ? "पिछला अध्याय" : "Past chapter")
+      : pulseLabel(ratio, loc),
     kernelSignals,
     lifeStage: opts.kernel?.lifeStage,
     domainLenses: domainLabels,

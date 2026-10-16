@@ -54,12 +54,22 @@ export type BirthPackAdvanceResult = {
 
 function localeLine(loc: AppLocale): string {
   if (loc === "te") {
-    return "Write ONLY in natural Telugu script. Sound like a sharp Telugu friend: simple, scene-based, lightly witty. Never paste English planner labels.";
+    return "Write ONLY in natural Telugu script. Sound like a sharp Telugu friend: simple, scene-based, lightly witty. Every user-facing string — titles, highlights, sentences, life_map fields — must be Telugu. Zero English words anywhere in the JSON.";
   }
   if (loc === "hi") {
-    return "Write ONLY in simple conversational Hindi (Devanagari).";
+    return "Write ONLY in simple conversational Hindi (Devanagari). Every user-facing string must be Hindi. Zero English words anywhere in the JSON.";
   }
   return "Write ONLY in plain Indian English. Sound like a smart Indian friend: direct, practical, lightly witty.";
+}
+
+function journeySentenceRule(loc: AppLocale): string {
+  if (loc === "te") {
+    return "sentences = exactly 2 items, each <= 28 words, ONLY Telugu script (no English words)";
+  }
+  if (loc === "hi") {
+    return "sentences = exactly 2 items, each <= 28 words, ONLY Hindi Devanagari (no English words)";
+  }
+  return "sentences = exactly 2 items, each <= 28 words, direct Indian English";
 }
 
 const SHARED_RULES = `
@@ -359,6 +369,7 @@ async function notifyPhase(
 function phaseSchema(
   phase: BirthPackPhaseId,
   facts: PhaseFacts,
+  loc: AppLocale,
 ): string {
   const dailyFacts = Array.isArray(facts.daily_timing_facts)
     ? facts.daily_timing_facts
@@ -383,7 +394,7 @@ Rules: me_profile.summary <= 45 words. Do not generate past-life period cards he
   "life_map": {"past_chapters":[{"period":string,"theme":string,"career":string,"money":string,"family_relationship":string,"avoid":string,"share_line":string}],"current_chapter":{"period":string,"theme":string,"use_it_for":string,"avoid":string,"share_line":string},"future_chapters":[{"period":string,"theme":string,"career":string,"money":string,"family_relationship":string,"avoid":string,"share_line":string,"locked":boolean}]},
   "journey_phases": [{"sortOrder":number,"periodLabel":string,"mahadashaLord":string,"antardashaLord":string,"title":string,"highlight":string,"sentences":[string],"focusAreas":[string],"tone":[string],"pressureThemes":[string],"phasePulse":string,"transitionNote":string,"evidenceLine":string,"shareHook":string,"kernelSignals":[string],"domainLenses":[string],"proLocked":boolean,"subPhases":[]}]
 }
-Rules: past_chapters = every facts.journey_phase_facts where tense=past (${counts.past} items, same order). current_chapter = the one facts.journey_phase_facts where tense=current (exactly 1). future_chapters = every tense=future (${counts.future} items). NEVER put current chapter in past_chapters. period/periodLabel must match facts exactly. journey_phases = all ${counts.total} phases sorted by sortOrder. Each phase: title 2-5 words; highlight 8-18 words (punchy, no metaphor openers); sentences = exactly 2 items, each <= 28 words, direct Indian-English; evidenceLine optional <= 20 words. First future chapter proLocked=false; later future proLocked=true.`;
+Rules: past_chapters = every facts.journey_phase_facts where tense=past (${counts.past} items, same order). current_chapter = the one facts.journey_phase_facts where tense=current (exactly 1). future_chapters = every tense=future (${counts.future} items). NEVER put current chapter in past_chapters. period/periodLabel must match facts exactly. journey_phases = all ${counts.total} phases sorted by sortOrder. Each phase: title 2-5 words; highlight 8-18 words (punchy, no metaphor openers); ${journeySentenceRule(loc)}; evidenceLine optional <= 20 words, same language as sentences. All life_map chapter strings (theme, career, money, family_relationship, avoid, share_line, use_it_for) must use the same language as journey_phases. First future chapter proLocked=false; later future proLocked=true.`;
     case "playbook":
       return `{
   "today_cards": [{"key":string,"title":string,"body":string,"one_line":string,"share_hook":string,"better_for":[string],"be_careful":[string],"good_window_notes":[{"category":string,"why_it_works":string,"best_for":[string],"avoid_for":[string],"share_line":string}],"caution_window_notes":[{"category":string,"why_it_works":string,"best_for":[string],"avoid_for":[string],"share_line":string}],"notification_title":string,"notification_body":string}],
@@ -412,7 +423,7 @@ async function runSinglePhase(
   return runPhase(
     loc,
     phase,
-    phaseSchema(phase, facts),
+    phaseSchema(phase, facts, loc),
     slimFactsForPhase(phase, facts),
     opts,
   );

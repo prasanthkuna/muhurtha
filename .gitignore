@@ -13,6 +13,9 @@ Thumbs.db
 Desktop.ini
 *.stackdump
 
+# --- Local AI caches ---
+.gemini/
+
 # --- IDE / editors / AI tooling ---
 .vscode/
 !.vscode/extensions.json
@@ -39,6 +42,8 @@ Desktop.ini
 !.env.*.example
 **/.env.local
 **/secrets.json
+secrets.local.json
+local.keys.json
 **/credentials.json
 **/*-credentials.json
 **/*.pem
@@ -46,6 +51,8 @@ Desktop.ini
 **/*.pfx
 **/service-account*.json
 app/dart_defines.json
+app/test/fixtures/store_demo_*.json
+app/test/failures/
 
 # --- Archives & large binaries ---
 *.zip

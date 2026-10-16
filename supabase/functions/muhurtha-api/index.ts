@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { handleRequest } from "./engine.ts";
+import { handleRequest, warmBirthPack } from "./engine.ts";
 import { smokeTestLocaleLlm } from "./locale_smoke.ts";
 import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { runWarmup } from "./warmup.ts";
@@ -28,25 +28,26 @@ function createLoggingClient(authHeader: string): SupabaseClient {
   );
 }
 
-function jwtRole(token: string): string | null {
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  try {
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return typeof payload.role === "string" ? payload.role : null;
-  } catch {
-    return null;
-  }
-}
-
 function isServiceRoleRequest(req: Request, serviceKey: string): boolean {
   if (!serviceKey) return false;
   const apiKey = req.headers.get("apikey") ?? "";
   if (apiKey === serviceKey) return true;
   const auth = req.headers.get("Authorization") ?? "";
   const bearer = auth.replace(/^Bearer\s+/i, "").trim();
-  const token = apiKey || bearer;
-  return jwtRole(token) === "service_role";
+  if (bearer === serviceKey) return true;
+  // Platform may rotate stored secrets; accept any service_role JWT for this project.
+  try {
+    const segment = bearer.split(".")[1];
+    if (!segment) return false;
+    const payload = JSON.parse(atob(segment.replace(/-/g, "+").replace(/_/g, "/")));
+    const projectRef = (Deno.env.get("SUPABASE_URL") ?? "").match(
+      /https:\/\/([^.]+)\.supabase\.co/,
+    )?.[1];
+    return payload?.role === "service_role" &&
+      (!projectRef || payload?.ref === projectRef);
+  } catch {
+    return false;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -88,6 +89,23 @@ Deno.serve(async (req) => {
       });
       return new Response(JSON.stringify(result), {
         status: result.ok ? 200 : 503,
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    if (body.action === "birth_pack_warm") {
+      if (!isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const adminSupabase = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        serviceKey,
+      );
+      const result = await warmBirthPack(adminSupabase, body);
+      return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
       });
     }

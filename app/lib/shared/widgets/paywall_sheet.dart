@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import '../../core/config/env.dart';
+import '../../shared/widgets/legal_links.dart';
 import '../../core/subscription/subscription_service.dart';
 import '../../design_system/design_system.dart';
 import 'muh_primary_button.dart';
@@ -207,6 +208,7 @@ class _PaywallSheetState extends ConsumerState<PaywallSheet> {
                   child: _PlanChip(
                     label: l10n.paywallYearlyLabel,
                     price: l10n.paywallYearlyPrice,
+                    detail: l10n.paywallYearlySavings,
                     selected: _yearly,
                     onTap: _busy ? null : () => setState(() => _yearly = true),
                   ),
@@ -251,6 +253,8 @@ class _PaywallSheetState extends ConsumerState<PaywallSheet> {
               ),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: MuhSpace.sm),
+            const LegalLinksRow(),
           ],
         ),
       ),
@@ -262,12 +266,14 @@ class _PlanChip extends StatelessWidget {
   const _PlanChip({
     required this.label,
     required this.price,
+    this.detail,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
   final String price;
+  final String? detail;
   final bool selected;
   final VoidCallback? onTap;
 
@@ -300,10 +306,19 @@ class _PlanChip extends StatelessWidget {
               const SizedBox(height: MuhSpace.xs),
               Text(
                 price,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: MuhColors.creamMuted,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
               ),
+              if (detail != null && detail!.isNotEmpty) ...[
+                const SizedBox(height: MuhSpace.xs),
+                Text(
+                  detail!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: MuhColors.creamMuted,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

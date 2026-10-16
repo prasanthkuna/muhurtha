@@ -9,8 +9,21 @@ export type ShareCardRecord = {
   brandVariant: string;
 };
 
-function deepLink(shareId: string): string {
-  return `https://muhurta.app/c/${shareId}`;
+export type ShareCardBuildOptions = {
+  shareSiteBase?: string;
+  referrerProfileId?: string;
+};
+
+function buildDeepLink(
+  shareId: string,
+  options?: ShareCardBuildOptions,
+): string {
+  const base = (options?.shareSiteBase ?? "https://muhurta-legal.vercel.app")
+    .replace(/\/$/, "");
+  const ref = options?.referrerProfileId?.trim();
+  const path = `${base}/c/${shareId}`;
+  if (ref) return `${path}?ref=${encodeURIComponent(ref)}`;
+  return path;
 }
 
 function mark(loc: AppLocale): string {
@@ -88,8 +101,9 @@ export function buildShareCard(
   loc: AppLocale,
   sourceType: string,
   payload: Record<string, unknown>,
+  options?: ShareCardBuildOptions,
 ): ShareCardRecord {
-  const link = deepLink(shareId);
+  const link = buildDeepLink(shareId, options);
   const brand = mark(loc);
   const lines = listLines(payload["sentences"]);
 

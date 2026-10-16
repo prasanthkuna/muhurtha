@@ -1,0 +1,26 @@
+# Play Billing subscriptions — sync via GPC when service account is configured.
+# Product IDs must match RevenueCat store identifiers: muhurta_pro:monthly, muhurta_pro:yearly
+#
+# gpc monetization sync --manifest play/monetization/subscriptions.yaml
+
+subscriptions:
+  - product_id: muhurta_pro
+    listings:
+      en-IN:
+        title: Muhūrta Pro
+        description: Full Life Map, unlimited Ask, and advanced timing depth.
+    base_plans:
+      - base_plan_id: monthly
+        billing_period: P1M
+        auto_renewing: true
+        regional_prices:
+          IN:
+            currency: INR
+            price: "199.00"
+      - base_plan_id: yearly
+        billing_period: P1Y
+        auto_renewing: true
+        regional_prices:
+          IN:
+            currency: INR
+            price: "999.00"

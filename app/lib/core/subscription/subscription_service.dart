@@ -212,22 +212,27 @@ class SubscriptionService {
     }
   }
 
-  Future<void> _syncCustomerInfoToServer(CustomerInfo info) async {
+  /// Clears RevenueCat session on sign-out (no-op if never configured).
+  Future<void> logOut() async {
+    if (!_configured) return;
+    try {
+      await Purchases.logOut();
+    } catch (_) {
+      // Anonymous RC user — safe to ignore.
+    }
+    _ref.read(subscriptionStateProvider.notifier).setConfigured(false);
+    _configured = false;
+  }
+
+  Future<void> _syncCustomerInfoToServer(CustomerInfo _) async {
     final api = _ref.read(muhurthaEngineApiProvider);
     if (api == null) return;
 
-    final planCode = isProEntitled(info)
-        ? SubscriptionConstants.serverPlanPro
-        : 'free';
-
-    await api.subscriptionSync(
-      planCode: planCode,
-      productId: info.activeSubscriptions.isNotEmpty
-          ? info.activeSubscriptions.first
-          : null,
-      currentPeriodEnd: info.latestExpirationDate,
-      providerSubscriptionId: 'revenuecat_active',
-    );
+    try {
+      await api.subscriptionRefresh();
+    } catch (_) {
+      // Webhook may lag; RevenueCat state still gates UI via subscriptionAccessProvider.
+    }
 
     _ref.invalidate(birthPackProvider);
     _ref.invalidate(todayPayloadProvider);

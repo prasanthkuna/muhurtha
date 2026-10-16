@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/locale/locale_provider.dart';
 import 'muh_theme.dart';
 import 'router.dart';
+import '../core/growth/growth_bootstrap_host.dart';
 
 class MuhApp extends ConsumerWidget {
   const MuhApp({super.key});
@@ -15,7 +16,8 @@ class MuhApp extends ConsumerWidget {
     final locale = ref.watch(localeProvider);
     final router = ref.watch(goRouterProvider);
 
-    return MaterialApp.router(
+    return GrowthBootstrapHost(
+      child: MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'Muhūrta',
       theme: MuhTheme.darkForLocale(locale),
@@ -32,6 +34,7 @@ class MuhApp extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       routerConfig: router,
+      ),
     );
   }
 }

@@ -43,10 +43,11 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
     SUPABASE_URL: envCheck("SUPABASE_URL"),
     SUPABASE_SERVICE_ROLE_KEY: envCheck("SUPABASE_SERVICE_ROLE_KEY"),
   };
-  const secretsOk = secrets.OPENAI_API_KEY || secrets.OPENROUTER_API_KEY;
+  const secretsOk = secrets.GEMINI_API_KEY || secrets.OPENAI_API_KEY ||
+    secrets.OPENROUTER_API_KEY;
 
   const config = {
-    birthPackPrimary: Deno.env.get("BIRTH_PACK_PRIMARY")?.trim() || "openai",
+    birthPackPrimary: Deno.env.get("BIRTH_PACK_PRIMARY")?.trim() || "gemini",
     birthPackOpenAiModel: Deno.env.get("BIRTH_PACK_MODEL")?.trim() ||
       Deno.env.get("OPENAI_MODEL")?.trim() || "gpt-5.4-mini",
     birthPackOpenRouterModel: Deno.env.get("BIRTH_PACK_OPENROUTER_MODEL")?.trim() ||
@@ -65,16 +66,26 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
   };
 
   let llm: Record<string, unknown> | null = null;
-  if (probeLlm && secrets.OPENAI_API_KEY) {
+  if (probeLlm && (secrets.GEMINI_API_KEY || secrets.OPENAI_API_KEY)) {
     const llmStarted = Date.now();
-    const envelope = await openAiGenerateJsonEnvelope(
-      'Return valid JSON only: {"greeting":string,"model_check":string}. Write one short Sakha hello.',
-      JSON.stringify({ task: "warmup_probe", phase: "core_identity" }),
-      {
+    const probeSystem =
+      'Return valid JSON only: {"greeting":string,"model_check":string}. Write one short Sakha hello.';
+    const probeUser = JSON.stringify({ task: "warmup_probe", phase: "core_identity" });
+
+    let envelope = secrets.GEMINI_API_KEY
+      ? await geminiGenerateJsonEnvelope(probeSystem, probeUser, {
+        modelEnvName: "BIRTH_PACK_GEMINI_MODEL",
+        birthPackPhase: "core_identity",
+      })
+      : null;
+
+    if (!envelope && secrets.OPENAI_API_KEY) {
+      envelope = await openAiGenerateJsonEnvelope(probeSystem, probeUser, {
         modelEnvName: "BIRTH_PACK_MODEL",
         birthPackPhase: "core_identity",
-      },
-    );
+      });
+    }
+
     llm = {
       ok: Boolean(envelope),
       elapsedMs: Date.now() - llmStarted,
@@ -82,28 +93,9 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
       model: envelope?.model ?? null,
       sample: envelope?.text?.slice(0, 180) ?? null,
     };
-    if (!envelope && secrets.GEMINI_API_KEY) {
-      const fbStarted = Date.now();
-      const fb = await geminiGenerateJsonEnvelope(
-        'Return valid JSON only: {"greeting":string,"model_check":string}. Write one short Sakha hello.',
-        JSON.stringify({ task: "warmup_probe_gemini_fallback" }),
-        { modelEnvName: "BIRTH_PACK_GEMINI_MODEL", birthPackPhase: "core_identity" },
-      );
-      llm = {
-        ...llm,
-        fallbackOk: Boolean(fb),
-        fallbackElapsedMs: Date.now() - fbStarted,
-        fallbackProvider: fb?.provider ?? null,
-        fallbackModel: fb?.model ?? null,
-        fallbackSample: fb?.text?.slice(0, 180) ?? null,
-      };
-    }
   }
 
-  const llmOk = !probeLlm || (llm != null && (
-    (llm as { ok?: boolean }).ok === true ||
-    (llm as { fallbackOk?: boolean }).fallbackOk === true
-  ));
+  const llmOk = !probeLlm || (llm != null && (llm as { ok?: boolean }).ok === true);
   const ok = secretsOk && llmOk;
 
   return {
@@ -115,9 +107,9 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
     config,
     llm,
     recommendation: ok
-      ? "Deploy warm-up passed. Nemotron (OpenRouter) primary for birth pack; Gemini fallback."
+      ? "Deploy warm-up passed. Gemini primary for birth pack (gemini-3.5-flash); OpenAI/OpenRouter fallback."
       : !secretsOk
       ? "Missing OPENROUTER_API_KEY on the project."
-      : "Module graph loaded but Nemotron probe failed. Check app_logs and OpenRouter model availability.",
+      : "Module graph loaded but LLM probe failed. Check app_logs and Gemini model availability.",
   };
 }

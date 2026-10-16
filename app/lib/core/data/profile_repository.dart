@@ -12,6 +12,21 @@ class ProfileRepository {
 
   final SupabaseClient _client;
 
+  /// Owner's birth row only — excludes saved friend/partner [chart_profile] inputs.
+  Future<Map<String, dynamic>?> _latestOwnBirthRow({
+    String columns = 'id',
+  }) async {
+    final profileId = await ensureSignedInProfile();
+    return _client
+        .from('birth_inputs')
+        .select(columns)
+        .eq('profile_id', profileId)
+        .neq('source', 'chart_profile')
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+  }
+
   Future<String> ensureSignedInProfile() async {
     final user = _client.auth.currentUser;
     if (user == null) {
@@ -99,11 +114,7 @@ class ProfileRepository {
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
 
-    final existingBirth = await _client
-        .from('birth_inputs')
-        .select('id')
-        .eq('profile_id', profileId)
-        .maybeSingle();
+    final existingBirth = await _latestOwnBirthRow();
 
     late final String birthInputId;
 
@@ -123,6 +134,14 @@ class ProfileRepository {
     }
 
     return OnboardingSaveIds(profileId: profileId, birthInputId: birthInputId);
+  }
+
+  Future<void> updateLanguageCode(String languageCode) async {
+    final profileId = await ensureSignedInProfile();
+    await _client.from('profiles').update({
+      'language_code': languageCode,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', profileId);
   }
 
   static String? _formatTime(TimeOfDay? t) {
@@ -206,6 +225,7 @@ class ProfileRepository {
         .from('birth_inputs')
         .select()
         .eq('profile_id', profileId)
+        .neq('source', 'chart_profile')
         .order('created_at', ascending: false)
         .limit(1)
         .maybeSingle();
@@ -293,6 +313,9 @@ class ProfileRepository {
         .from('birth_inputs')
         .select('id')
         .eq('profile_id', profileId)
+        .neq('source', 'chart_profile')
+        .order('created_at', ascending: false)
+        .limit(1)
         .maybeSingle();
 
     if (birth == null) return 'onboarding';

@@ -4,5 +4,9 @@
   "REVENUECAT_API_KEY": "test_your_revenuecat_public_sdk_key",
   "REVENUECAT_ANDROID_KEY": "",
   "REVENUECAT_IOS_KEY": "",
-  "VERBOSE_LOGS": "false"
+  "VERBOSE_LOGS": "false",
+  "LEGAL_SITE_URL": "https://muhurta-legal.vercel.app",
+  "SHARE_SITE_URL": "https://muhurta-legal.vercel.app",
+  "PLAY_STORE_URL": "https://play.google.com/store/apps/details?id=app.muhurta",
+  "SUPPORT_EMAIL": "prasanthkuna@gmail.com"
 }

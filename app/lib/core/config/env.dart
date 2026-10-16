@@ -32,6 +32,16 @@ abstract final class Env {
   static bool get hasSupabase =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
+  /// Golden store-screenshot tests (`test/store_screenshots_test.dart`).
+  static const storeScreenshotMode = bool.fromEnvironment(
+    'STORE_SCREENSHOT_MODE',
+    defaultValue: false,
+  );
+
+  /// Home tabs can render with fixture data (no live Supabase).
+  static bool get supportsPackTabs =>
+      hasSupabase || storeScreenshotMode;
+
   static bool get hasRevenueCat =>
       revenueCatApiKey.isNotEmpty ||
       revenueCatAndroidKey.isNotEmpty ||
@@ -40,6 +50,12 @@ abstract final class Env {
   /// Extra console/logcat output (`appLog`, and Supabase client `debug`). Optional in release.
   static const verboseLogs = bool.fromEnvironment(
     'VERBOSE_LOGS',
+    defaultValue: false,
+  );
+
+  /// Show visible OTP field (emulator / store capture) instead of SMS-only autofill.
+  static const manualOtp = bool.fromEnvironment(
+    'MANUAL_OTP',
     defaultValue: false,
   );
 }

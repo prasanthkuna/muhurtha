@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
 
+import '../../core/analytics/app_analytics.dart';
 import '../../core/data/engine_cache_invalidate.dart';
 import '../../core/data/muhurtha_engine_api.dart';
 import '../../core/data/profile_repository.dart';
@@ -40,11 +41,17 @@ Future<void> finishOnboardingToHome({
           level: 'error',
           message: 'chartInitialize failed during onboarding: $e',
           stackTrace: st.toString(),
-          context: {'draft': draft.toJson(), 'birthInputId': ids.birthInputId},
+          context: {
+            'birthInputId': ids.birthInputId,
+            'draft': draft.toLogContext(),
+          },
         );
       }
     }
     ref.read(localeProvider.notifier).setLanguageCode(draft.languageCode);
+    await ref.read(appAnalyticsProvider).onboardingComplete(
+          engineMode: draft.resolution.engineMode.apiValue,
+        );
     invalidateAllEngineCaches(ref);
     if (context.mounted) context.go('/home?tab=decode');
   } catch (e, st) {
@@ -53,7 +60,7 @@ Future<void> finishOnboardingToHome({
       level: 'error',
       message: 'finishOnboarding failed: $e',
       stackTrace: st.toString(),
-      context: {'draft': draft.toJson()},
+      context: {'draft': draft.toLogContext()},
     );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

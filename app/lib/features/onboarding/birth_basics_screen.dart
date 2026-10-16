@@ -31,7 +31,14 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
     _name = TextEditingController(text: d.displayName ?? '');
     _city = TextEditingController(text: d.currentCity ?? '');
     _place = TextEditingController(text: d.birthPlace ?? '');
-    WidgetsBinding.instance.addPostFrameCallback((_) => _autoDetectLocation());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final svc = ref.read(locationLocaleServiceProvider);
+      final lang = svc.inferLanguageCode();
+      ref.read(localeProvider.notifier).setLanguageCode(lang);
+      ref.read(birthDraftProvider.notifier).update(
+            (draft) => draft.copyWith(languageCode: lang),
+          );
+    });
   }
 
   Future<void> _autoDetectLocation() async {

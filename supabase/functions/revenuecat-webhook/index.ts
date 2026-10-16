@@ -74,14 +74,18 @@ Deno.serve(async (req) => {
     });
   }
 
-  if (webhookSecret) {
-    const auth = req.headers.get("Authorization") ?? "";
-    if (auth !== `Bearer ${webhookSecret}`) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+  if (!webhookSecret) {
+    return new Response(JSON.stringify({ error: "Webhook secret not configured" }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const auth = req.headers.get("Authorization") ?? "";
+  if (auth !== `Bearer ${webhookSecret}`) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   let payload: RcPayload;
