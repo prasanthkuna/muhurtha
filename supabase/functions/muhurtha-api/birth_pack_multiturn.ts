@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateJsonWithFallbackEnvelope } from "./gemini_json.ts";
 import { tryParseRepairedJson } from "./json_repair.ts";
+import { mergePackSections } from "./birth_pack_merge.ts";
 import type { AppLocale } from "./vedic_labels.ts";
 import {
   type BirthIntelligencePackContent,
@@ -75,7 +76,9 @@ function journeySentenceRule(loc: AppLocale): string {
 const SHARED_RULES = `
 - Use facts only. Never invent exact guaranteed events.
 - Never output raw internal words: planner, kernel, provenance, domain_lenses, fact_signature.
-- Each section must feel distinct. Do not reuse the same sentence across sections.
+- Each section must feel distinct in subject, reasoning and narrative. Do not reuse generic advice, key phrases or sentence structures across identity, life chapters, daily, weekly and monthly content.
+- Ground every personal claim in supplied chart facts or explicitly mark it as a traditional interpretation. Do not invent employment history, past events, medical outcomes, relationships, dates or guaranteed success.
+- Prefer a chart-specific contrast or genuine change in period over generic productivity advice such as clearing pending work, staying practical or fixing systems.
 - Sound like a sharp Indian friend on WhatsApp: punchy, direct, scene-based. No essay prose.
 - BANNED openers: "This phase feels like", "The scene here is", "Picture a", "As of today, this feels".
 - Return valid JSON only for the requested keys. No markdown.`;
@@ -298,21 +301,7 @@ function journeyCounts(facts: PhaseFacts) {
 function mergePack(
   parts: Record<string, unknown>[],
 ): BirthIntelligencePackContent {
-  const out: BirthIntelligencePackContent = {};
-  for (const part of parts) {
-    for (const [key, value] of Object.entries(part)) {
-      if (value === undefined || value === null) continue;
-      if (Array.isArray(value) && Array.isArray((out as Record<string, unknown>)[key])) {
-        (out as Record<string, unknown>)[key] = [
-          ...((out as Record<string, unknown>)[key] as unknown[]),
-          ...value,
-        ];
-      } else {
-        (out as Record<string, unknown>)[key] = value;
-      }
-    }
-  }
-  return out;
+  return mergePackSections(parts) as BirthIntelligencePackContent;
 }
 
 function phasesRecordedForComplete(phase: BirthPackPhaseId): string[] {
