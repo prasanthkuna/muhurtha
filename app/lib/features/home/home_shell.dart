@@ -15,11 +15,10 @@ import '../../core/format/clock_format.dart';
 import '../../core/format/day_window_label.dart';
 import '../../core/locale/locale_provider.dart';
 import '../../core/notifications/muhurtha_notification_service.dart';
-import '../../core/analytics/app_analytics.dart';
 import '../../core/growth/referral_service.dart';
 import '../../core/share/share_card_service.dart';
 import '../../core/data/profile_repository.dart';
-import '../../core/subscription/onboarding_intent_map.dart';
+import '../../core/analytics/app_analytics.dart';
 import '../../core/subscription/subscription_access.dart';
 import '../../core/subscription/subscription_service.dart';
 import '../../shared/widgets/paywall_sheet.dart';
@@ -27,13 +26,16 @@ import '../../design_system/design_system.dart';
 import '../../shared/widgets/chart_profile_switcher.dart';
 import '../../shared/widgets/celestial_components.dart';
 import '../../shared/widgets/lucky_strip.dart';
+import '../../core/engagement/user_engagement_store.dart';
+import '../../shared/widgets/editorial/editorial.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
-import '../../shared/widgets/whatsapp_share_button.dart';
-import '../../shared/widgets/muh_primary_button.dart';
-import '../../shared/widgets/muh_enter.dart';
+import 'home_editorial_scroll.dart';
+import 'home_prose_card.dart';
 import '../../shared/widgets/muh_timeline_hero.dart';
 import '../../shared/widgets/muh_timing_split.dart';
-import '../../shared/widgets/orbital_backdrop.dart';
+import 'tabs/decode_editorial_tab.dart';
+import 'tabs/life_atlas_tab.dart';
+import 'home_share.dart';
 
 const _purposeEntries = <({String value, String labelKey})>[
   (value: 'career_interview', labelKey: 'purposeCareerInterview'),
@@ -63,6 +65,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _configureBilling());
+  }
+
+  static const _tabNames = ['today', 'life_map', 'decode', 'timing', 'ask'];
+
+  void _selectTab(int i) {
+    final next = i.clamp(0, _tabNames.length - 1);
+    setState(() => _index = next);
+    final tab = _tabNames[next];
+    final current = GoRouterState.of(context).uri.queryParameters['tab'];
+    if (current != tab) {
+      context.go('/home?tab=$tab');
+    }
   }
 
   Future<void> _configureBilling() async {
@@ -137,9 +151,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       }
     });
     final pages = <Widget>[
-      _DecodeTab(l10n: l10n, ref: ref),
-      _TodayFocusTab(l10n: l10n, ref: ref),
-      _LifeMapTab(l10n: l10n, ref: ref),
+      _TodayFocusTab(l10n: l10n, purposeLabel: _purposeLabel),
+      LifeAtlasTab(l10n: l10n),
+      DecodeEditorialTab(l10n: l10n),
       _TimingTab(l10n: l10n, ref: ref),
       _AskTab(
         l10n: l10n,
@@ -148,9 +162,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       ),
     ];
 
-    return OrbitalBackdrop(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
+    return Scaffold(
+        backgroundColor: MuhColors.canvas,
         body: Column(
           children: [
             const ChartProfileBanner(),
@@ -179,11 +192,15 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                   ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                           ),
-                          IconButton(
-                            tooltip: l10n.profileTuneTitle,
-                            icon: const Icon(Icons.tune_rounded,
-                                color: MuhColors.creamMuted),
-                            onPressed: () => context.push('/profile'),
+                          Semantics(
+                            label: 'Profile settings',
+                            button: true,
+                            child: IconButton(
+                              tooltip: l10n.profileTuneTitle,
+                              icon: const Icon(Icons.tune_rounded,
+                                  color: MuhColors.inkSecondary),
+                              onPressed: () => context.push('/profile'),
+                            ),
                           ),
                         ],
                       ),
@@ -223,82 +240,40 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             ),
           ],
         ),
-        bottomNavigationBar: NavigationBarTheme(
-          data: NavigationBarThemeData(
-            labelTextStyle: WidgetStateProperty.resolveWith((s) {
-              if (s.contains(WidgetState.selected)) {
-                return const TextStyle(
-                  color: MuhColors.brand,
-                  fontWeight: FontWeight.w600,
-                  fontSize: MuhType.bodyS,
-                );
-              }
-              return const TextStyle(
-                color: MuhColors.muted,
-                fontWeight: FontWeight.w500,
-                fontSize: MuhType.bodyS,
-              );
-            }),
-            iconTheme: WidgetStateProperty.resolveWith((s) {
-              if (s.contains(WidgetState.selected)) {
-                return const IconThemeData(color: MuhColors.brand);
-              }
-              return const IconThemeData(color: MuhColors.muted);
-            }),
-          ),
-          child: NavigationBar(
+        bottomNavigationBar: NavigationBar(
             height: 72,
-            backgroundColor: MuhColors.surface.withValues(alpha: 0.94),
-            elevation: 0,
-            indicatorColor: MuhColors.brand.withValues(alpha: 0.14),
             selectedIndex: _index,
-            onDestinationSelected: (i) => setState(() => _index = i),
+            onDestinationSelected: _selectTab,
             destinations: [
               NavigationDestination(
-                icon: const Icon(Icons.fingerprint_rounded),
-                label: _navLabel('decode'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.wb_sunny_outlined),
+                icon: const Icon(MuhTabIcons.today),
+                selectedIcon: const Icon(MuhTabIcons.todaySelected),
                 label: _navLabel('today'),
               ),
               NavigationDestination(
-                icon: const Icon(Icons.auto_graph_rounded),
+                icon: const Icon(MuhTabIcons.lifeMap),
+                selectedIcon: const Icon(MuhTabIcons.lifeMapSelected),
                 label: _navLabel('life_map'),
               ),
               NavigationDestination(
-                icon: const Icon(Icons.schedule_rounded),
+                icon: const Icon(MuhTabIcons.decode),
+                selectedIcon: const Icon(MuhTabIcons.decodeSelected),
+                label: _navLabel('decode'),
+              ),
+              NavigationDestination(
+                icon: const Icon(MuhTabIcons.timing),
+                selectedIcon: const Icon(MuhTabIcons.timingSelected),
                 label: _navLabel('timing'),
               ),
               NavigationDestination(
-                icon: const Icon(Icons.chat_bubble_outline_rounded),
+                icon: const Icon(MuhTabIcons.ask),
+                selectedIcon: const Icon(MuhTabIcons.askSelected),
                 label: _navLabel('ask'),
               ),
             ],
           ),
-        ),
-      ),
-    );
+      );
   }
-}
-
-Future<void> _shareTestFriend(
-  WidgetRef ref,
-  BuildContext context, {
-  required String title,
-  required String body,
-  required String sourceId,
-}) async {
-  await ref.read(appAnalyticsProvider).testFriendTapped(sourceType: 'decode');
-  if (!context.mounted) return;
-  await _shareExactCard(
-    ref,
-    context,
-    title: title,
-    body: body,
-    sourceType: 'decode',
-    sourceId: sourceId,
-  );
 }
 
 Future<void> _shareExactCard(
@@ -309,24 +284,16 @@ Future<void> _shareExactCard(
   String contextLine = '',
   String sourceType = 'generic_card',
   String? sourceId,
-}) async {
-  try {
-    await ref.read(shareCardServiceProvider).shareExact(
-          context: context,
-          title: title,
-          body: body,
-          contextLine: contextLine,
-          sourceType: sourceType,
-          sourceId: sourceId,
-        );
-  } catch (e) {
-    if (!context.mounted) return;
-    final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${_V3Copy(l10n).failed}: $e')),
+}) =>
+    shareExactCard(
+      ref,
+      context,
+      title: title,
+      body: body,
+      contextLine: contextLine,
+      sourceType: sourceType,
+      sourceId: sourceId,
     );
-  }
-}
 
 class _V3Copy {
   const _V3Copy(this.l10n);
@@ -363,164 +330,23 @@ class _V3Copy {
   String get failed => l10n.v3ShareFailed;
 }
 
-class _DecodeTab extends ConsumerWidget {
-  const _DecodeTab({required this.l10n, required this.ref});
+class _TodayFocusTab extends ConsumerStatefulWidget {
+  const _TodayFocusTab({
+    required this.l10n,
+    required this.purposeLabel,
+  });
 
   final AppLocalizations l10n;
-  final WidgetRef ref;
+  final String Function(AppLocalizations l, String key) purposeLabel;
 
   @override
-  Widget build(BuildContext context, WidgetRef _) {
-    if (!Env.supportsPackTabs) {
-      return _EmptyStateScreen(
-        headline: l10n.todayEmptyHeadline,
-        message: l10n.errorNeedSupabase,
-        icon: Icons.fingerprint_rounded,
-      );
-    }
-    final packAsync = ref.watch(birthPackProvider);
-    ref.watch(activeChartProfileIdProvider);
-    final copy = _V3Copy(l10n);
-    final subjectName = ref.watch(chartDisplayNameProvider);
-    return packAsync.when(
-      data: (pack) {
-        if (pack == null) {
-          return MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.screen,
-            message: l10n.loadingDecode,
-          );
-        }
-        if (!pack.isScreenReady(BirthPackScreen.decode)) {
-          return MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.screen,
-            message: l10n.loadingDecode,
-          );
-        }
-        final views = BirthPackViews(pack);
-        final name = subjectName.isNotEmpty
-            ? subjectName
-            : pack.displayName.trim();
-        final decodeHit = views.displayHook;
-        final identitySummary = views.identitySummary;
-        final workMoney = views.workMoney;
-        final relationship = views.relationship;
-        final shareLine =
-            decodeHit.isNotEmpty ? decodeHit : identitySummary;
-        return _V3Scroll(
-          title: name.isEmpty ? copy.decodeTitle : '$name, decoded',
-          subtitle:
-              identitySummary.isNotEmpty ? identitySummary : copy.decodeSub,
-          onRefresh: () async {
-            ref.invalidate(birthPackProvider);
-            ref.invalidate(todayPayloadProvider);
-          },
-          children: [
-            if (shareLine.isNotEmpty)
-              _TestFriendInviteCard(
-                title: l10n.testFriendTitle,
-                body: l10n.testFriendBody,
-                cta: l10n.testFriendCta,
-                onTap: () => _shareTestFriend(
-                  ref,
-                  context,
-                  title: copy.thisSounds,
-                  body: shareLine,
-                  sourceId: 'decode-test-friend-${pack.date}',
-                ),
-              ),
-            if (decodeHit.isNotEmpty)
-              _ShareableSignalCard(
-                title: copy.thisSounds,
-                body: decodeHit,
-                trailingAction: WhatsAppShareButton(
-                  onTap: () => _shareExactCard(
-                    ref,
-                    context,
-                    title: copy.thisSounds,
-                    body: decodeHit,
-                    sourceType: 'decode',
-                    sourceId: 'decode-hit-${pack.date}',
-                  ),
-                ),
-              ),
-            _InsightSection(
-              title: copy.strengths,
-              items: views.strengths,
-              accent: MuhColors.emerald,
-              trailingAction: WhatsAppShareButton(
-                onTap: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: copy.strengths,
-                  body: views.strengths.join('\n'),
-                  sourceId: 'decode-strengths-${pack.date}',
-                ),
-              ),
-            ),
-            _InsightSection(
-              title: copy.watchouts,
-              items: views.watchouts,
-              accent: MuhColors.gold,
-              trailingAction: WhatsAppShareButton(
-                onTap: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: copy.watchouts,
-                  body: views.watchouts.join('\n'),
-                  sourceId: 'decode-watchouts-${pack.date}',
-                ),
-              ),
-            ),
-            if (workMoney.isNotEmpty)
-              _ShareableSignalCard(
-                title: copy.workMoney,
-                body: workMoney,
-                trailingAction: WhatsAppShareButton(
-                  onTap: () => _shareExactCard(
-                    ref,
-                    context,
-                    title: copy.workMoney,
-                    body: workMoney,
-                    sourceId: 'decode-work-money-${pack.date}',
-                  ),
-                ),
-              ),
-            if (relationship.isNotEmpty)
-              _ShareableSignalCard(
-                title: copy.relationship,
-                body: relationship,
-                trailingAction: WhatsAppShareButton(
-                  onTap: () => _shareExactCard(
-                    ref,
-                    context,
-                    title: copy.relationship,
-                    body: relationship,
-                    sourceId: 'decode-relationship-${pack.date}',
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-      loading: () => MuhurthaLoadingView(
-        mode: MuhurthaLoadingMode.screen,
-        message: l10n.loadingDecode,
-      ),
-      error: (_, __) => _EmptyStateScreen(
-        headline: l10n.todayEmptyHeadline,
-        message:
-            'Birth pack is not ready yet. Pull to retry after generation finishes.',
-        icon: Icons.fingerprint_rounded,
-      ),
-    );
-  }
+  ConsumerState<_TodayFocusTab> createState() => _TodayFocusTabState();
 }
 
-class _TodayFocusTab extends ConsumerWidget {
-  const _TodayFocusTab({required this.l10n, required this.ref});
-
-  final AppLocalizations l10n;
-  final WidgetRef ref;
+class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
+  var _loggedOpen = false;
+  var _planningExpanded = false;
+  String? _selectedPurpose;
 
   List<TimeWindowData> _windows(
     List<TimingWindow> windows,
@@ -540,7 +366,8 @@ class _TodayFocusTab extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef _) {
+  Widget build(BuildContext context) {
+    final l10n = widget.l10n;
     if (!Env.supportsPackTabs) {
       return _EmptyStateScreen(
         headline: l10n.todayEmptyHeadline,
@@ -557,8 +384,7 @@ class _TodayFocusTab extends ConsumerWidget {
     return packAsync.when(
       data: (pack) {
         final payload = today.valueOrNull;
-        final packReady =
-            pack != null && pack.isScreenReady(BirthPackScreen.today);
+        final packReady = pack != null && pack.hasLlmPack;
 
         if (payload == null) {
           if (today.isLoading || pack == null) {
@@ -579,9 +405,9 @@ class _TodayFocusTab extends ConsumerWidget {
           final todayTitle = subjectName.isNotEmpty
               ? '${subjectName.trim()}, ${copy.todayTitle.toLowerCase()}'
               : copy.todayTitle;
-          return _V3Scroll(
+          return HomeEditorialScroll(
             title: todayTitle,
-            subtitle: copy.todaySub,
+            subtitle: '',
             onRefresh: () async {
               ref.invalidate(birthPackProvider);
               ref.invalidate(todayPayloadProvider);
@@ -625,20 +451,82 @@ class _TodayFocusTab extends ConsumerWidget {
         final todayTitle = subjectName.isNotEmpty
             ? '${subjectName.trim()}, ${copy.todayTitle.toLowerCase()}'
             : copy.todayTitle;
-        return _V3Scroll(
+        if (!_loggedOpen) {
+          _loggedOpen = true;
+          unawaited(
+            ref.read(appAnalyticsProvider).todayOpened(
+                  hasNewContent: mainAdvice.isNotEmpty,
+                ),
+          );
+        }
+        return HomeEditorialScroll(
           title: todayTitle,
-          subtitle: copy.todaySub,
+          subtitle: '',
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
             ref.invalidate(todayPayloadProvider);
             ref.invalidate(remedyListProvider);
             await ref.read(todayPayloadProvider.future);
           },
+          footer: MuhQuietButton(
+            label: 'Share reading',
+            icon: Icons.ios_share_rounded,
+            onPressed: () => _shareExactCard(
+              ref,
+              context,
+              title: copy.todayTitle,
+              body: mainAdvice.isNotEmpty ? mainAdvice : (payload.oneLine ?? ''),
+              sourceType: 'today_one_line',
+              sourceId: 'today-main-${payload.date}',
+            ),
+          ),
           children: [
             MuhTimelineHero(
               payload: payload,
               headline: mainAdvice.isNotEmpty ? mainAdvice : (payload.oneLine ?? ''),
             ),
+            const SizedBox(height: MuhSpace.md),
+            MuhQuietButton(
+              label: _planningExpanded
+                  ? l10n.purposeChoose
+                  : '${l10n.purposeChoose}…',
+              icon: _planningExpanded
+                  ? Icons.expand_less_rounded
+                  : Icons.expand_more_rounded,
+              onPressed: () =>
+                  setState(() => _planningExpanded = !_planningExpanded),
+            ),
+            if (_planningExpanded) ...[
+              const SizedBox(height: MuhSpace.sm),
+              Wrap(
+                spacing: MuhSpace.sm,
+                runSpacing: MuhSpace.sm,
+                children: _purposeEntries.map((entry) {
+                  final purposeLabel =
+                      widget.purposeLabel(l10n, entry.labelKey);
+                  final selected = _selectedPurpose == entry.value;
+                  return _PurposeChoiceChip(
+                    label: purposeLabel,
+                    isSelected: selected,
+                    onTap: () {
+                      setState(() => _selectedPurpose = entry.value);
+                      unawaited(
+                        ref.read(appAnalyticsProvider).purposeSelected(
+                              purpose: entry.value,
+                            ),
+                      );
+                    },
+                  );
+                }).toList(),
+              ),
+              if (_selectedPurpose != null) ...[
+                const SizedBox(height: MuhSpace.sm),
+                TextButton(
+                  onPressed: () => context.go('/home?tab=timing'),
+                  child: Text(l10n.purposeCheck),
+                ),
+              ],
+            ],
             const SizedBox(height: MuhSpace.md),
             MuhTimingSplit(
               goodWindows: payload.goodWindows,
@@ -647,109 +535,31 @@ class _TodayFocusTab extends ConsumerWidget {
               cautionTitle: copy.cautionWindow,
             ),
             const SizedBox(height: MuhSpace.lg),
-            _ShareableSignalCard(
-              title: copy.mainAdvice,
-              body: mainAdvice,
-              trailingAction: WhatsAppShareButton(
-                onTap: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: copy.mainAdvice,
-                  body: mainAdvice,
-                  sourceType: 'today_one_line',
-                  sourceId: 'today-main-${payload.date}',
-                ),
-              ),
-            ),
             if (luck.luckyNumbers.isNotEmpty ||
                 luck.luckyDays.isNotEmpty ||
                 luck.luckyColours.isNotEmpty)
-              LuckyStrip(
-                luck: luck,
-                onShare: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: l10n.luckyTitle,
-                  body: [
-                    if (luck.luckyNumbers.isNotEmpty)
-                      '${l10n.luckyNumbers}: ${luck.luckyNumbers.join(', ')}',
-                    if (luck.luckyDays.isNotEmpty)
-                      '${l10n.luckyDays}: ${luck.luckyDays.join(', ')}',
-                    if (luck.luckyColours.isNotEmpty)
-                      '${l10n.luckyColours}: ${luck.luckyColours.map((c) => c.label).join(', ')}',
-                  ].join('\n'),
-                  sourceType: 'natal_luck',
-                  sourceId: 'natal-luck-${payload.date}',
-                ),
-              ),
+              LuckyStrip(luck: luck),
             TimeWindowRail(
               title: copy.goodWindow,
               subtitle: goodSummary.isNotEmpty ? goodSummary : null,
               windows: _windows(payload.goodWindows, l10n),
               tone: WindowTone.good,
-              trailingAction: WhatsAppShareButton(
-                onTap: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: copy.goodWindow,
-                  body: _windows(payload.goodWindows, l10n)
-                      .map((w) =>
-                          [w.timeText, w.note].whereType<String>().join(' · '))
-                      .join('\n'),
-                  contextLine: goodSummary,
-                  sourceType: 'today_one_line',
-                  sourceId: 'today-good-${payload.date}',
-                ),
-              ),
             ),
             TimeWindowRail(
               title: copy.cautionWindow,
               subtitle: avoidSummary.isNotEmpty ? avoidSummary : null,
               windows: _windows(payload.cautionWindows, l10n),
               tone: WindowTone.caution,
-              trailingAction: WhatsAppShareButton(
-                onTap: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: copy.cautionWindow,
-                  body: _windows(payload.cautionWindows, l10n)
-                      .map((w) => [w.timeText, w.tag, w.note]
-                          .whereType<String>()
-                          .join(' · '))
-                      .join('\n'),
-                  contextLine: avoidSummary,
-                  sourceType: 'today_one_line',
-                  sourceId: 'today-caution-${payload.date}',
-                ),
-              ),
             ),
             _InsightSection(
               title: copy.betterFor,
               items: betterFor,
-              accent: MuhColors.emerald,
-              trailingAction: WhatsAppShareButton(
-                onTap: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: copy.betterFor,
-                  body: betterFor.join('\n'),
-                  sourceId: 'today-better-${payload.date}',
-                ),
-              ),
+              accent: MuhColors.successInk,
             ),
             _InsightSection(
               title: copy.carefulWith,
               items: beCareful,
-              accent: MuhColors.gold,
-              trailingAction: WhatsAppShareButton(
-                onTap: () => _shareExactCard(
-                  ref,
-                  context,
-                  title: copy.carefulWith,
-                  body: beCareful.join('\n'),
-                  sourceId: 'today-careful-${payload.date}',
-                ),
-              ),
+              accent: MuhColors.warningInk,
             ),
             if (remedy != null)
               RitualCard(
@@ -758,17 +568,6 @@ class _TodayFocusTab extends ConsumerWidget {
                 whyNow: remedy.whyNow,
                 whatToDo: remedy.simpleLine,
                 keepItSimple: remedy.keepItSimple,
-                trailingAction: WhatsAppShareButton(
-                  onTap: () => _shareExactCard(
-                    ref,
-                    context,
-                    title: remedy.title,
-                    body: remedy.simpleLine,
-                    contextLine: remedy.whyNow,
-                    sourceType: 'remedy',
-                    sourceId: 'today-remedy-${remedy.id}',
-                  ),
-                ),
               ),
           ],
         );
@@ -806,7 +605,7 @@ class _TimingTab extends ConsumerWidget {
             message: l10n.loadingTimingPlan,
           );
         }
-        if (!pack.isScreenReady(BirthPackScreen.timing)) {
+        if (!pack.hasLlmPack) {
           return MuhurthaLoadingView(
             mode: MuhurthaLoadingMode.screen,
             message: l10n.loadingTimingPlan,
@@ -824,33 +623,82 @@ class _TimingTab extends ConsumerWidget {
           month.body,
           month.caution,
         ].where((line) => line.isNotEmpty).join('\n\n');
-        return _V3Scroll(
-          title: subjectName.isNotEmpty
-              ? '${subjectName.trim()}, ${copy.timingTitle.toLowerCase()}'
-              : copy.timingTitle,
-          subtitle: copy.timingSub,
+        final timingTitle = subjectName.isNotEmpty
+            ? '${subjectName.trim()}, ${copy.timingTitle.toLowerCase()}'
+            : copy.timingTitle;
+        final shareBody = [
+          if (week.headline.isNotEmpty) week.headline,
+          if (weekBody.isNotEmpty) weekBody,
+          if (isPro && month.headline.isNotEmpty) month.headline,
+          if (isPro && monthBody.isNotEmpty) monthBody,
+        ].join('\n\n');
+        final extraWeekly = views.weeklyCards;
+        final extraMonthly = views.monthlyCards;
+        final hasHorizonCopy = week.headline.isNotEmpty ||
+            weekBody.isNotEmpty ||
+            month.headline.isNotEmpty ||
+            monthBody.isNotEmpty ||
+            extraWeekly.isNotEmpty ||
+            extraMonthly.isNotEmpty;
+        return HomeEditorialScroll(
+          title: timingTitle,
+          subtitle: '',
           onRefresh: () async {
             ref.invalidate(birthPackProvider);
           },
+          footer: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              MuhQuietButton(
+                label: 'Save this plan',
+                icon: Icons.bookmark_outline_rounded,
+                onPressed: () {
+                  unawaited(
+                    UserEngagementStore.instance.saveIntention(
+                      id: 'timing-plan-${pack.date}',
+                      purpose: 'timing_plan',
+                      dateIso: pack.date,
+                    ),
+                  );
+                  unawaited(
+                    ref.read(appAnalyticsProvider).intentionSaved(
+                          purpose: 'timing_plan',
+                        ),
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.profileSaved)),
+                  );
+                },
+              ),
+              if (shareBody.trim().isNotEmpty)
+                MuhQuietButton(
+                  label: 'Share timing',
+                  icon: Icons.ios_share_rounded,
+                  onPressed: () => _shareExactCard(
+                    ref,
+                    context,
+                    title: timingTitle,
+                    body: shareBody,
+                    sourceType: 'purpose_result',
+                    sourceId: 'timing-plan-${pack.date}',
+                  ),
+                ),
+            ],
+          ),
           children: [
+            if (!hasHorizonCopy && pack.isGenerating)
+              MuhInlineStatus(
+                message: l10n.loadingTimingPlan,
+                kind: MuhInlineStatusKind.loading,
+              ),
             if (week.headline.isNotEmpty || weekBody.isNotEmpty)
-              _V3ProseCard(
+              HomeProseCard(
                 eyebrow: copy.week,
                 title: week.headline,
                 body: weekBody,
-                trailingAction: WhatsAppShareButton(
-                  onTap: () => _shareExactCard(
-                    ref,
-                    context,
-                    title: week.headline,
-                    body: weekBody,
-                    sourceType: 'purpose_result',
-                    sourceId: 'timing-week-${pack.date}',
-                  ),
-                ),
               ),
             if (month.headline.isNotEmpty || monthBody.isNotEmpty)
-              _V3ProseCard(
+              HomeProseCard(
                 eyebrow: copy.month,
                 title: month.headline,
                 body: monthBody,
@@ -865,19 +713,38 @@ class _TimingTab extends ConsumerWidget {
                           preferredPlan: PaywallPlan.pro,
                         )
                     : null,
-                trailingAction: isPro
-                    ? WhatsAppShareButton(
-                        onTap: () => _shareExactCard(
-                          ref,
-                          context,
-                          title: month.headline,
-                          body: monthBody,
-                          sourceType: 'purpose_result',
-                          sourceId: 'timing-month-${pack.date}',
-                        ),
-                      )
-                    : null,
               ),
+            if (week.headline.isEmpty && weekBody.isEmpty)
+              for (final card in extraWeekly)
+                HomeProseCard(
+                  eyebrow: copy.week,
+                  title: card.headline,
+                  body: [
+                    card.body,
+                    card.caution,
+                  ].where((line) => line.isNotEmpty).join('\n\n'),
+                ),
+            if (month.headline.isEmpty && monthBody.isEmpty)
+              for (final card in extraMonthly)
+                HomeProseCard(
+                  eyebrow: copy.month,
+                  title: card.headline,
+                  body: [
+                    card.body,
+                    card.caution,
+                  ].where((line) => line.isNotEmpty).join('\n\n'),
+                  locked: !isPro,
+                  onLockedTap: !isPro
+                      ? () => PaywallSheet.show(
+                            context,
+                            headline: views.paywallCopy['headline']?.toString(),
+                            subline: views.paywallCopy['subline']?.toString(),
+                            bullets: views.paywallBullets,
+                            cta: views.paywallCopy['cta']?.toString(),
+                            preferredPlan: PaywallPlan.pro,
+                          )
+                      : null,
+                ),
           ],
         );
       },
@@ -891,360 +758,6 @@ class _TimingTab extends ConsumerWidget {
             'Birth pack is not ready yet. Pull to retry after generation finishes.',
         icon: Icons.schedule_rounded,
       ),
-    );
-  }
-}
-
-class _LifeMapTab extends ConsumerWidget {
-  const _LifeMapTab({required this.l10n, required this.ref});
-
-  final AppLocalizations l10n;
-  final WidgetRef ref;
-
-  @override
-  Widget build(BuildContext context, WidgetRef _) {
-    final async = ref.watch(birthPackProvider);
-    ref.watch(activeChartProfileIdProvider);
-    final subjectName = ref.watch(chartDisplayNameProvider);
-    final copy = _V3Copy(l10n);
-    return async.when(
-      data: (pack) {
-        if (pack == null) {
-          return MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.screen,
-            message: l10n.loadingLifeMap,
-          );
-        }
-        if (!pack.isScreenReady(BirthPackScreen.lifeMap)) {
-          return MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.screen,
-            message: l10n.loadingLifeMap,
-          );
-        }
-        final views = BirthPackViews(pack);
-        final isPro = ref.watch(subscriptionAccessProvider).isPro;
-        final past = views.chaptersByTense('past');
-        final future = views.chaptersByTense('future');
-        final current = views.chaptersByTense('current').firstOrNull;
-        return _V3Scroll(
-          title: subjectName.isNotEmpty
-              ? '${subjectName.trim()}, ${copy.lifeTitle.toLowerCase()}'
-              : copy.lifeTitle,
-          subtitle: copy.lifeSub,
-          onRefresh: () async {
-            ref.invalidate(birthPackProvider);
-          },
-          children: [
-            ...past.map(
-              (p) => _V3ProseCard(
-                eyebrow: p.periodLabel,
-                title: p.title,
-                body: p.displayBody,
-                trailingAction: WhatsAppShareButton(
-                  onTap: () => _shareExactCard(
-                    ref,
-                    context,
-                    title: p.title,
-                    body: p.displayBody,
-                    contextLine: p.periodLabel,
-                    sourceType: 'journey_phase',
-                    sourceId: 'life-past-${p.periodLabel}',
-                  ),
-                ),
-              ),
-            ),
-            if (current != null &&
-                (current.title.isNotEmpty || current.displayBody.isNotEmpty))
-              _V3ProseCard(
-                eyebrow: '${copy.currentPhase} · ${current.periodLabel}',
-                title: current.title,
-                body: current.displayBody,
-                trailingAction: WhatsAppShareButton(
-                  onTap: () => _shareExactCard(
-                    ref,
-                    context,
-                    title: current.title,
-                    body: current.displayBody,
-                    contextLine: '${copy.currentPhase} · ${current.periodLabel}',
-                    sourceType: 'journey_phase',
-                    sourceId: 'life-current-${pack.date}',
-                  ),
-                ),
-              ),
-            ...future.map(
-                  (p) {
-                    final locked = p.locked && !isPro;
-                    return _V3ProseCard(
-                    eyebrow: p.periodLabel,
-                    title: p.title,
-                    body: p.displayBody,
-                    locked: locked,
-                    onLockedTap: locked
-                        ? () => PaywallSheet.show(
-                              context,
-                              headline: views.paywallCopy['headline']?.toString(),
-                              subline: views.paywallCopy['subline']?.toString(),
-                              bullets: views.paywallBullets,
-                              cta: views.paywallCopy['cta']?.toString(),
-                              preferredPlan: PaywallPlan.pro,
-                            )
-                        : null,
-                    trailingAction: locked
-                        ? null
-                        : WhatsAppShareButton(
-                      onTap: () => _shareExactCard(
-                        ref,
-                        context,
-                        title: p.title,
-                        body: p.displayBody,
-                        contextLine: p.periodLabel,
-                        sourceType: 'journey_phase',
-                        sourceId: 'life-future-${p.periodLabel}',
-                      ),
-                    ),
-                  );
-                  },
-                ),
-          ],
-        );
-      },
-      loading: () => MuhurthaLoadingView(
-        mode: MuhurthaLoadingMode.screen,
-        message: l10n.loadingLifeMap,
-      ),
-      error: (_, __) => _EmptyStateScreen(
-        headline: l10n.journeyEmptyHeadline,
-        message: l10n.errorGeneric,
-        icon: Icons.auto_graph_rounded,
-      ),
-    );
-  }
-}
-
-class _V3ProseCard extends StatelessWidget {
-  const _V3ProseCard({
-    required this.eyebrow,
-    required this.title,
-    required this.body,
-    this.trailingAction,
-    this.locked = false,
-    this.onLockedTap,
-  });
-
-  final String eyebrow;
-  final String title;
-  final String body;
-  final Widget? trailingAction;
-  final bool locked;
-  final VoidCallback? onLockedTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (!locked && title.trim().isEmpty && body.trim().isEmpty) {
-      return const SizedBox.shrink();
-    }
-    if (locked) {
-      final l10n = AppLocalizations.of(context)!;
-      return Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(MuhRadius.card),
-          onTap: onLockedTap,
-          child: Container(
-            padding: const EdgeInsets.all(MuhSpace.lg),
-            decoration: BoxDecoration(
-              color: MuhColors.surface,
-              borderRadius: BorderRadius.circular(MuhRadius.card),
-              border: Border.all(color: MuhColors.gold.withValues(alpha: 0.28)),
-              boxShadow: MuhShadows.cardSoft,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (eyebrow.trim().isNotEmpty)
-                  Text(
-                    eyebrow,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: MuhColors.goldSoft,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                if (eyebrow.trim().isNotEmpty) const SizedBox(height: MuhSpace.xs),
-                if (title.trim().isNotEmpty)
-                  Text(
-                    title.trim(),
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: MuhColors.cream.withValues(alpha: 0.72),
-                      fontWeight: FontWeight.w800,
-                      height: 1.18,
-                    ),
-                  ),
-                const SizedBox(height: MuhSpace.md),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: MuhSpace.lg,
-                    vertical: MuhSpace.lg,
-                  ),
-                  decoration: BoxDecoration(
-                    color: MuhColors.surfaceSoft,
-                    borderRadius: BorderRadius.circular(MuhRadius.chip),
-                    border: Border.all(color: MuhColors.goldSoft.withValues(alpha: 0.35)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.lock_rounded, color: MuhColors.goldSoft, size: 20),
-                      const SizedBox(width: MuhSpace.sm),
-                      Flexible(
-                        child: Text(
-                          l10n.paywallLockedTeaser,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: MuhColors.cream,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    final card = Container(
-      padding: const EdgeInsets.all(MuhSpace.lg),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            MuhColors.gold.withValues(alpha: 0.18),
-            MuhColors.surface,
-            MuhColors.surfaceSoft,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(MuhRadius.card),
-        border: Border.all(color: MuhColors.gold.withValues(alpha: 0.24)),
-        boxShadow: MuhShadows.cardSoft,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (eyebrow.trim().isNotEmpty || trailingAction != null) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    eyebrow,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: MuhColors.goldSoft,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                if (trailingAction != null) ...[
-                  const SizedBox(width: MuhSpace.sm),
-                  trailingAction!,
-                ],
-              ],
-            ),
-            if (eyebrow.trim().isNotEmpty) const SizedBox(height: MuhSpace.xs),
-          ] else if (trailingAction != null) ...[
-            Align(
-              alignment: Alignment.centerRight,
-              child: trailingAction!,
-            ),
-            const SizedBox(height: MuhSpace.xs),
-          ],
-          if (title.trim().isNotEmpty)
-            Text(
-              title.trim(),
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: MuhColors.cream,
-                fontWeight: FontWeight.w800,
-                height: 1.18,
-              ),
-            ),
-          if (body.trim().isNotEmpty) ...[
-            const SizedBox(height: MuhSpace.md),
-            Text(
-              body.trim(),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: MuhColors.cream,
-                height: 1.52,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-
-    return card;
-  }
-}
-
-class _V3Scroll extends StatelessWidget {
-  const _V3Scroll({
-    required this.title,
-    required this.subtitle,
-    required this.children,
-    this.onRefresh,
-  });
-
-  final String title;
-  final String subtitle;
-  final List<Widget> children;
-  final Future<void> Function()? onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final list = ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
-        MuhSpace.page,
-        MuhSpace.xxl,
-        MuhSpace.page,
-        MuhSpace.xl,
-      ),
-      children: [
-        Text(
-          title,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            color: MuhColors.cream,
-            fontWeight: FontWeight.w800,
-            height: 1.08,
-            letterSpacing: -0.4,
-          ),
-        ).muhEnter(0),
-        const SizedBox(height: MuhSpace.sm),
-        Text(
-          subtitle,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: MuhColors.creamMuted,
-            height: 1.45,
-          ),
-        ).muhEnter(1),
-        const SizedBox(height: MuhSpace.xl),
-        ...children.asMap().entries.expand(
-              (entry) => [
-                entry.value.muhEnter(entry.key + 2),
-                const SizedBox(height: MuhSpace.md),
-              ],
-            ),
-      ],
-    );
-    if (onRefresh == null) return list;
-    return RefreshIndicator(
-      color: MuhColors.brand,
-      onRefresh: onRefresh!,
-      child: list,
     );
   }
 }
@@ -1268,6 +781,7 @@ class _AskTabState extends State<_AskTab> {
   final _controller = TextEditingController();
   AsyncValue<AskAnswerResult?>? _result;
   String? _sessionId;
+  bool? _answerUseful;
 
   String get _lang =>
       widget.ref.read(localeProvider).languageCode.toLowerCase();
@@ -1358,14 +872,6 @@ class _AskTabState extends State<_AskTab> {
     ];
   }
 
-  Future<void> _recordPurposeIntent(String purposeValue) async {
-    final repo = widget.ref.read(profileRepositoryProvider);
-    if (repo == null) return;
-    try {
-      await repo.patchOnboardingIntent(intentPatchForPurpose(purposeValue));
-    } catch (_) {}
-  }
-
   Future<void> _ask() async {
     final question = _controller.text.trim();
     if (question.isEmpty) {
@@ -1376,7 +882,10 @@ class _AskTabState extends State<_AskTab> {
     }
     final api = widget.ref.read(muhurthaEngineApiProvider);
     if (api == null) return;
-    setState(() => _result = const AsyncValue.loading());
+    setState(() {
+      _result = const AsyncValue.loading();
+      _answerUseful = null;
+    });
     try {
       final packLocale =
           widget.ref.read(birthPackProvider).valueOrNull?.locale;
@@ -1463,7 +972,7 @@ class _AskTabState extends State<_AskTab> {
     final packAsync = widget.ref.watch(birthPackProvider);
     return packAsync.when(
       data: (pack) {
-        if (pack != null && !pack.isScreenReady(BirthPackScreen.ask)) {
+        if (pack != null && !pack.hasLlmPack && pack.isGenerating) {
           return MuhurthaLoadingView(
             mode: MuhurthaLoadingMode.ask,
             message: widget.l10n.loadingAsk,
@@ -1500,54 +1009,23 @@ class _AskTabState extends State<_AskTab> {
           Text(
             knowledgeHint.isNotEmpty ? knowledgeHint : _tx('sub'),
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: MuhColors.creamMuted,
+              color: MuhColors.inkSecondary,
               height: 1.45,
             ),
           ),
           const SizedBox(height: MuhSpace.xl),
-          Container(
-            padding: const EdgeInsets.all(MuhSpace.md),
-            decoration: BoxDecoration(
-              color: MuhColors.surface,
-              borderRadius: BorderRadius.circular(MuhRadius.card),
-              border: Border.all(color: MuhColors.gold.withValues(alpha: 0.22)),
-              boxShadow: MuhShadows.cardSoft,
-            ),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _controller,
-                  maxLines: 4,
-                  minLines: 3,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: MuhColors.cream,
-                    height: 1.4,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: _tx('placeholder'),
-                    hintStyle: theme.textTheme.bodyLarge?.copyWith(
-                      color: MuhColors.muted,
-                    ),
-                    border: InputBorder.none,
-                  ),
-                  textInputAction: TextInputAction.newline,
-                ),
-                const SizedBox(height: MuhSpace.sm),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: MuhPrimaryButton(
-                    label: _tx('send'),
-                    onPressed: _ask,
-                  ),
-                ),
-              ],
-            ),
+          MuhPromptComposer(
+            controller: _controller,
+            hint: _tx('placeholder'),
+            sendLabel: _tx('send'),
+            onSend: _ask,
+            sending: _result?.isLoading ?? false,
           ),
           const SizedBox(height: MuhSpace.lg),
           Text(
             _tx('suggested'),
             style: theme.textTheme.titleSmall?.copyWith(
-              color: MuhColors.gold,
+              color: MuhColors.goldDeep,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1555,39 +1033,18 @@ class _AskTabState extends State<_AskTab> {
           Wrap(
             spacing: MuhSpace.sm,
             runSpacing: MuhSpace.sm,
-            children: [
-              ..._suggestions(pack).map(
-                (q) => _PurposeChoiceChip(
-                  label: q,
-                  isSelected: false,
-                  onTap: () {
-                    _controller.text = q;
-                    _controller.selection = TextSelection.collapsed(
-                      offset: _controller.text.length,
-                    );
-                  },
-                ),
+            children: _suggestions(pack).map(
+              (q) => _PurposeChoiceChip(
+                label: q,
+                isSelected: false,
+                onTap: () {
+                  _controller.text = q;
+                  _controller.selection = TextSelection.collapsed(
+                    offset: _controller.text.length,
+                  );
+                },
               ),
-              ..._purposeEntries.take(4).map(
-                    (entry) => _PurposeChoiceChip(
-                      label: widget.purposeLabel(widget.l10n, entry.labelKey),
-                      isSelected: false,
-                      onTap: () {
-                        unawaited(_recordPurposeIntent(entry.value));
-                        final label =
-                            widget.purposeLabel(widget.l10n, entry.labelKey);
-                        _controller.text = _lang == 'te'
-                            ? '$label కి ఈరోజు మంచి సమయం ఏది?'
-                            : _lang == 'hi'
-                                ? '$label के लिए आज अच्छा समय कौन सा है?'
-                                : 'What is the best timing for $label today?';
-                        _controller.selection = TextSelection.collapsed(
-                          offset: _controller.text.length,
-                        );
-                      },
-                    ),
-                  ),
-            ],
+            ).toList(),
           ),
           const SizedBox(height: MuhSpace.xl),
           if (_result != null)
@@ -1603,7 +1060,16 @@ class _AskTabState extends State<_AskTab> {
                         'better': _tx('better'),
                         'action': _tx('action'),
                       },
+                      answerUseful: _answerUseful,
                       onShare: () => _shareAsk(r),
+                      onFeedback: (useful) {
+                        setState(() => _answerUseful = useful);
+                        unawaited(
+                          widget.ref
+                              .read(appAnalyticsProvider)
+                              .askAnswerResolved(useful: useful),
+                        );
+                      },
                     ),
               loading: () => Padding(
                 padding: const EdgeInsets.all(MuhSpace.lg),
@@ -1634,13 +1100,11 @@ class _InsightSection extends StatelessWidget {
     required this.title,
     required this.items,
     required this.accent,
-    this.trailingAction,
   });
 
   final String title;
   final List<String> items;
   final Color accent;
-  final Widget? trailingAction;
 
   @override
   Widget build(BuildContext context) {
@@ -1648,30 +1112,19 @@ class _InsightSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(MuhSpace.lg),
       decoration: BoxDecoration(
-        color: MuhColors.surface,
+        color: MuhColors.paper,
         borderRadius: BorderRadius.circular(MuhRadius.card),
         border: Border.all(color: MuhColors.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: accent,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              if (trailingAction != null) ...[
-                const SizedBox(width: MuhSpace.sm),
-                trailingAction!,
-              ],
-            ],
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: accent,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: MuhSpace.md),
           ...items.map(
@@ -1680,128 +1133,10 @@ class _InsightSection extends StatelessWidget {
               child: Text(
                 '- $item',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: MuhColors.cream,
+                  color: MuhColors.ink,
                   height: 1.5,
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TestFriendInviteCard extends StatelessWidget {
-  const _TestFriendInviteCard({
-    required this.title,
-    required this.body,
-    required this.cta,
-    required this.onTap,
-  });
-
-  final String title;
-  final String body;
-  final String cta;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(MuhSpace.lg),
-      margin: const EdgeInsets.only(bottom: MuhSpace.md),
-      decoration: BoxDecoration(
-        color: MuhColors.surface,
-        borderRadius: BorderRadius.circular(MuhRadius.card),
-        border: Border.all(color: MuhColors.gold.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: MuhColors.cream,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: MuhSpace.xs),
-          Text(
-            body,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: MuhColors.creamMuted,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: MuhSpace.md),
-          MuhPrimaryButton(
-            label: cta,
-            onPressed: onTap,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ShareableSignalCard extends StatelessWidget {
-  const _ShareableSignalCard({
-    required this.title,
-    required this.body,
-    this.trailingAction,
-  });
-
-  final String title;
-  final String body;
-  final Widget? trailingAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(MuhSpace.lg),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            MuhColors.gold.withValues(alpha: 0.16),
-            MuhColors.surfaceSoft,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(MuhRadius.card),
-        border: Border.all(color: MuhColors.gold.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: MuhColors.goldSoft,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-              if (trailingAction != null) ...[
-                const SizedBox(width: MuhSpace.sm),
-                trailingAction!,
-              ],
-            ],
-          ),
-          const SizedBox(height: MuhSpace.sm),
-          Text(
-            body,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: MuhColors.cream,
-              fontWeight: FontWeight.w700,
-              height: 1.35,
             ),
           ),
         ],
@@ -1815,11 +1150,15 @@ class _AskAnswerCard extends StatelessWidget {
     required this.result,
     required this.labels,
     required this.onShare,
+    required this.onFeedback,
+    this.answerUseful,
   });
 
   final AskAnswerResult result;
   final Map<String, String> labels;
   final VoidCallback onShare;
+  final void Function(bool useful) onFeedback;
+  final bool? answerUseful;
 
   @override
   Widget build(BuildContext context) {
@@ -1827,42 +1166,26 @@ class _AskAnswerCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(MuhSpace.lg),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            MuhColors.surfaceSoft,
-            MuhColors.surface,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: MuhColors.paper,
         borderRadius: BorderRadius.circular(MuhRadius.card),
-        border: Border.all(color: MuhColors.gold.withValues(alpha: 0.24)),
-        boxShadow: MuhShadows.cardSoft,
+        border: Border.all(color: MuhColors.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  labels['answer'] ?? 'Answer',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: MuhColors.gold,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-              WhatsAppShareButton(onTap: onShare),
-            ],
+          Text(
+            labels['answer'] ?? 'Answer',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: MuhColors.goldDeep,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.2,
+            ),
           ),
           const SizedBox(height: MuhSpace.sm),
           Text(
             result.directAnswer,
             style: theme.textTheme.titleMedium?.copyWith(
-              color: MuhColors.cream,
+              color: MuhColors.ink,
               fontWeight: FontWeight.w700,
               height: 1.38,
             ),
@@ -1890,7 +1213,7 @@ class _AskAnswerCard extends StatelessWidget {
           Text(
             labels['action'] ?? 'What to do now',
             style: theme.textTheme.labelLarge?.copyWith(
-              color: MuhColors.gold,
+              color: MuhColors.goldDeep,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1898,7 +1221,7 @@ class _AskAnswerCard extends StatelessWidget {
           Text(
             result.actionLine,
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: MuhColors.cream,
+              color: MuhColors.ink,
               height: 1.45,
             ),
           ),
@@ -1907,12 +1230,40 @@ class _AskAnswerCard extends StatelessWidget {
             Text(
               result.shareHook,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: MuhColors.creamMuted,
+                color: MuhColors.inkSecondary,
                 height: 1.45,
                 fontStyle: FontStyle.italic,
               ),
             ),
           ],
+          const SizedBox(height: MuhSpace.lg),
+          if (answerUseful == null)
+            Wrap(
+              spacing: MuhSpace.sm,
+              runSpacing: MuhSpace.sm,
+              children: [
+                OutlinedButton(
+                  onPressed: () => onFeedback(true),
+                  child: const Text('Useful'),
+                ),
+                OutlinedButton(
+                  onPressed: () => onFeedback(false),
+                  child: const Text('Didn\'t answer'),
+                ),
+              ],
+            )
+          else
+            Text(
+              answerUseful! ? 'Thanks — noted as useful.' : 'Thanks — we\'ll improve.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: MuhColors.inkSecondary,
+              ),
+            ),
+          MuhQuietButton(
+            label: 'Share answer',
+            icon: Icons.ios_share_rounded,
+            onPressed: onShare,
+          ),
         ],
       ),
     );
@@ -1958,7 +1309,7 @@ class _AskAnswerRow extends StatelessWidget {
                 Text(
                   value,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: MuhColors.cream,
+                    color: MuhColors.ink,
                     height: 1.42,
                   ),
                 ),
@@ -1987,7 +1338,7 @@ class _PurposeChoiceChip extends StatelessWidget {
     final bg =
         isSelected ? MuhColors.gold.withValues(alpha: 0.14) : MuhColors.surface;
     final border = isSelected ? MuhColors.gold : MuhColors.line;
-    final text = isSelected ? MuhColors.goldSoft : MuhColors.cream;
+    final text = isSelected ? MuhColors.goldDeep : MuhColors.ink;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(MuhRadius.button),

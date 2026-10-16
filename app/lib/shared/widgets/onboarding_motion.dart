@@ -1,33 +1,41 @@
 import 'package:flutter/material.dart';
 
 import '../../design_system/design_system.dart';
+import 'editorial/muh_page_scaffold.dart';
 import 'muh_enter.dart';
-import 'orbital_backdrop.dart';
 
-/// Staggered onboarding list (same motion language as home tabs).
+/// Onboarding list — limited stagger (max 4 groups per Golden §6).
 class MuhOnboardingList extends StatelessWidget {
   const MuhOnboardingList({
     super.key,
     required this.children,
     this.padding = const EdgeInsets.all(MuhSpace.page),
     this.controller,
+    this.stagger = true,
   });
 
   final List<Widget> children;
   final EdgeInsets padding;
   final ScrollController? controller;
+  final bool stagger;
 
   @override
   Widget build(BuildContext context) {
+    final items = stagger
+        ? muhStaggerChildren(
+            children,
+            maxIndex: MuhMotion.staggerMaxGroups,
+          )
+        : children;
     return ListView(
       controller: controller,
       padding: padding,
-      children: muhStaggerChildren(children),
+      children: items,
     );
   }
 }
 
-/// Flat graphite onboarding shell (no gold rings).
+/// Editorial onboarding shell — ivory canvas, no orbital art.
 class MuhOnboardingScaffold extends StatelessWidget {
   const MuhOnboardingScaffold({
     super.key,
@@ -42,20 +50,10 @@ class MuhOnboardingScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OrbitalBackdrop(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(title: Text(title)),
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: body),
-              if (bottom != null) bottom!,
-            ],
-          ),
-        ),
-      ),
+    return MuhPageScaffold(
+      title: title,
+      body: body,
+      bottom: bottom,
     );
   }
 }

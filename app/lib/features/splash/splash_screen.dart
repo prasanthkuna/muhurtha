@@ -7,6 +7,7 @@ import 'package:muhurta/l10n/app_localizations.dart';
 import '../../core/config/env.dart';
 import '../../core/data/profile_repository.dart';
 import '../../core/locale/locale_provider.dart';
+import '../../core/session/session_preferences.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -45,7 +46,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     switch (target) {
       case 'home':
-        context.go('/home');
+        final tab = await SessionPreferences.defaultHomeTabQuery();
+        if (!mounted) return;
+        context.go('/home?tab=$tab');
         return;
       case 'onboarding':
         context.go('/onboarding/birth-basics');

@@ -306,20 +306,19 @@ function mapRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-/** Which home tabs can render from the current partial pack content. */
+/** Which home tabs can render — content presence only (no phase/quality gates). */
 export function getPackScreensReady(
   content: BirthIntelligencePackContent,
 ): PackScreenId[] {
   const ready: PackScreenId[] = [];
-  const phasesDone = phasesDoneSet(content);
   const identity = mapRecord(content.user_identity) ?? mapRecord(content.me_profile);
   const preview = mapRecord(content.free_preview);
   if (
-    phasesDone.has("core_identity") &&
     identity &&
-    (hasText(identity.headline) || hasText(identity.summary) || hasText(identity.title)) &&
-    (hasText(preview?.decode_hit) || hasText(identity.summary))
+    (hasText(identity.headline) || hasText(identity.summary) || hasText(identity.title))
   ) {
+    ready.push("decode");
+  } else if (hasText(preview?.decode_hit) || hasText(preview?.today_teaser)) {
     ready.push("decode");
   }
 
@@ -327,20 +326,19 @@ export function getPackScreensReady(
   const past = asArray<Record<string, unknown>>(lifeMap?.past_chapters);
   const journey = asArray<PackJourneyPhase>(content.journey_phases);
   if (
-    phasesDone.has("life_map_journey") &&
-    (
-      past.some((row) => hasText(row.theme) || hasText(row.career)) ||
-      journey.filter((p) => hasText(p.title) || (p.sentences?.length ?? 0) > 0).length >= 3
-    )
+    past.some((row) => hasText(row.theme) || hasText(row.career) || hasText(row.title)) ||
+    hasText(lifeMap?.current_chapter && mapRecord(lifeMap.current_chapter)?.theme) ||
+    journey.some((p) => hasText(p.title) || (p.sentences?.length ?? 0) > 0)
   ) {
     ready.push("life_map");
   }
 
   const todayCards = asArray<PackTodayCard>(content.today_cards);
+  const todayGuidance = mapRecord(content.today_guidance);
   if (
-    phasesDone.has("today_cards") ||
-    phasesDone.has("playbook") ||
-    todayCards.length >= PACK_DAILY_DAYS
+    todayCards.length > 0 ||
+    hasText(todayGuidance?.main_advice) ||
+    hasText(todayGuidance?.one_remedy)
   ) {
     ready.push("today");
   }
@@ -348,15 +346,14 @@ export function getPackScreensReady(
   const weekly = asArray<PackRangeCard>(content.weekly_cards);
   const monthly = asArray<PackRangeCard>(content.monthly_cards);
   const timingPlan = mapRecord(content.timing_plan);
+  const horizons = mapRecord(content.horizons);
   if (
-    phasesDone.has("weekly_monthly_timing") ||
-    phasesDone.has("playbook") ||
-    (
-      (weekly.length >= 1 && weekly.some((c) => hasText(c.body))) ||
-      (monthly.length >= 1 && monthly.some((c) => hasText(c.body))) ||
-      hasText(timingPlan?.week && mapRecord(timingPlan.week)?.headline) ||
-      hasText(timingPlan?.month && mapRecord(timingPlan.month)?.headline)
-    )
+    weekly.some((c) => hasText(c.body) || hasText(c.title)) ||
+    monthly.some((c) => hasText(c.body) || hasText(c.title)) ||
+    hasText(mapRecord(timingPlan?.week)?.headline) ||
+    hasText(mapRecord(timingPlan?.month)?.headline) ||
+    hasText(horizons?.week) ||
+    hasText(horizons?.month)
   ) {
     ready.push("timing");
   }
@@ -364,20 +361,107 @@ export function getPackScreensReady(
   const askTemplates = asArray<Record<string, unknown>>(content.ask_templates);
   const askKnowledge = mapRecord(content.ask_knowledge);
   if (
-    phasesDone.has("extras") ||
-    phasesDone.has("playbook") ||
-    (
-      askTemplates.length >= 1 ||
-      hasText(askKnowledge?.compact_summary) ||
-      hasText(askKnowledge?.body) ||
-      hasText(askKnowledge?.headline) ||
-      asArray<Record<string, unknown>>(content.remedy_pack).length >= 1
-    )
+    askTemplates.length > 0 ||
+    hasText(askKnowledge?.compact_summary) ||
+    hasText(askKnowledge?.body) ||
+    hasText(askKnowledge?.headline)
   ) {
     ready.push("ask");
   }
 
   return ready;
+}
+
+/** True when the pack has any GPT/LLM reading body worth showing in the app. */
+export function packHasLlmReadingBody(
+  content: BirthIntelligencePackContent,
+): boolean {
+  return getPackScreensReady(content).length > 0;
+}
+
+/** Pad LLM partial calendar arrays so quality gates and notifications stay consistent. */
+export function backfillBirthPackCalendarCards(
+  content: BirthIntelligencePackContent,
+  keys: {
+    dailyKeys: string[];
+    weeklyKeys: string[];
+    monthlyKeys: string[];
+  },
+): BirthIntelligencePackContent {
+  const guidance = mapRecord(content.today_guidance);
+  const preview = mapRecord(content.free_preview);
+  const identity = mapRecord(content.user_identity) ?? mapRecord(content.me_profile);
+  const oneLine = safeString(guidance?.main_advice) ||
+    safeString(preview?.decode_hit) ||
+    safeString(identity?.summary) ||
+    "Stay practical and finish one clear task.";
+
+  const todayArr = asArray<PackTodayCard>(content.today_cards);
+  const todayMap = new Map(
+    todayArr
+      .filter((c) => safeString(c.key))
+      .map((c) => [safeString(c.key), c]),
+  );
+  const todayTemplate: PackTodayCard = todayArr[0] ?? {
+    key: keys.dailyKeys[0] ?? "",
+    title: "Today",
+    body: oneLine,
+    one_line: oneLine,
+    share_hook: oneLine,
+    better_for: asArray<string>(guidance?.best_for as unknown),
+    be_careful: asArray<string>(guidance?.be_careful as unknown),
+  };
+  const filledToday = keys.dailyKeys.map((key, idx) => {
+    const hit = todayMap.get(key);
+    if (hit) return { ...hit, key };
+    const donor = todayArr[idx] ?? todayArr[todayArr.length - 1] ?? todayTemplate;
+    return { ...donor, key };
+  });
+
+  const weeklyArr = asArray<PackRangeCard>(content.weekly_cards);
+  const weeklyMap = new Map(
+    weeklyArr
+      .filter((c) => safeString(c.key))
+      .map((c) => [safeString(c.key), c]),
+  );
+  const weeklyTemplate: PackRangeCard = weeklyArr[0] ?? {
+    key: keys.weeklyKeys[0] ?? "",
+    title: "This week",
+    body: oneLine,
+    share_hook: oneLine,
+  };
+  const filledWeekly = keys.weeklyKeys.map((key, idx) => {
+    const hit = weeklyMap.get(key);
+    if (hit) return { ...hit, key };
+    const donor = weeklyArr[idx] ?? weeklyArr[weeklyArr.length - 1] ?? weeklyTemplate;
+    return { ...donor, key };
+  });
+
+  const monthlyArr = asArray<PackRangeCard>(content.monthly_cards);
+  const monthlyMap = new Map(
+    monthlyArr
+      .filter((c) => safeString(c.key))
+      .map((c) => [safeString(c.key), c]),
+  );
+  const monthlyTemplate: PackRangeCard = monthlyArr[0] ?? {
+    key: keys.monthlyKeys[0] ?? "",
+    title: "This month",
+    body: oneLine,
+    share_hook: oneLine,
+  };
+  const filledMonthly = keys.monthlyKeys.map((key, idx) => {
+    const hit = monthlyMap.get(key);
+    if (hit) return { ...hit, key };
+    const donor = monthlyArr[idx] ?? monthlyArr[monthlyArr.length - 1] ?? monthlyTemplate;
+    return { ...donor, key };
+  });
+
+  return {
+    ...content,
+    today_cards: filledToday,
+    weekly_cards: filledWeekly,
+    monthly_cards: filledMonthly,
+  };
 }
 
 export async function generateBirthIntelligencePack(

@@ -1,39 +1,71 @@
 import 'package:flutter/material.dart';
 
-/// Pro product palette (RazorSense-inspired graphite + brand azure).
-/// Canonical reference: `MUHURTA_DESIGN.md` §5.
+/// Golden Editorial palette — canonical: `Muhurta_Golden_Editorial_Design_System_v1.md` §3.
+///
+/// Legacy names (`bg`, `cream`, `brand`, …) map to semantic light-mode roles so existing
+/// widgets migrate without a single mega-diff. Prefer the explicit `canvas` / `ink` names
+/// in new code.
 abstract final class MuhColors {
-  static const Color bg = Color(0xFF0B0C0E);
-  static const Color bgElevated = Color(0xFF141619);
-  static const Color surface = Color(0xFF141619);
-  static const Color surfaceSoft = Color(0xFF1C1F24);
-  static const Color surfaceGold = Color(0xFF22262D);
+  // —— Primary light reading surface ——
+  static const Color canvas = Color(0xFFF8F5EE);
+  static const Color paper = Color(0xFFFFFCF6);
+  static const Color ink = Color(0xFF242019);
+  static const Color inkSecondary = Color(0xFF5E574E);
+  static const Color inkTertiary = Color(0xFF6B6256);
 
-  static const Color brand = Color(0xFF528FF0);
-  static const Color brandSoft = Color(0xFF3D6FB8);
+  static const Color goldText = Color(0xFF77541F);
+  static const Color goldAccent = Color(0xFFA67B35);
+  static const Color goldButton = Color(0xFFC59B4F);
+  static const Color goldWash = Color(0xFFF3E8D2);
+  static const Color line = Color(0xFFE8E0D3);
+  static const Color white = Color(0xFFFFFFFF);
+  static const Color focusRing = Color(0xFF77541F);
 
-  static const Color cta = Color(0xFFFFFFFF);
-  static const Color onCta = Color(0xFF0B0C0E);
+  // —— Quiet feedback (not predictive “accuracy”) ——
+  static const Color successInk = Color(0xFF285D46);
+  static const Color successWash = Color(0xFFE4F0E7);
+  static const Color warningInk = Color(0xFF88551B);
+  static const Color warningWash = Color(0xFFFCEDD8);
+  static const Color errorInk = Color(0xFF933E39);
+  static const Color errorWash = Color(0xFFF9E9E6);
 
-  static const Color cream = Color(0xFFF4F6F8);
-  static const Color creamMuted = Color(0xFF9AA3AD);
-  static const Color muted = Color(0xFF5C6570);
+  // —— Share / night edition only ——
+  static const Color shareCanvas = Color(0xFF201B16);
+  static const Color shareSurface = Color(0xFF2C251D);
+  static const Color shareTitle = Color(0xFFF7F0E3);
+  static const Color shareBody = Color(0xFFD2C6B5);
+  static const Color shareGold = Color(0xFFC59B4F);
+  static const Color shareLine = Color(0xFF675742);
 
-  /// Heritage accent — Pro badge, nakshatra dot; not default borders.
-  static const Color gold = Color(0xFFC9A227);
-  static const Color goldDeep = Color(0xFF9A7B1A);
-  static const Color goldSoft = Color(0xFFE6C04A);
+  static const Color overlay = Color(0x66000000);
 
-  static const Color emerald = Color(0xFF27A644);
-  static const Color emeraldBg = Color(0xFF142318);
+  // —— Legacy aliases (light editorial) ——
+  static const Color bg = canvas;
+  static const Color bgElevated = paper;
+  static const Color surface = paper;
+  static const Color surfaceSoft = goldWash;
+  static const Color surfaceGold = goldWash;
 
-  static const Color amber = Color(0xFFF4A118);
-  static const Color amberBg = Color(0xFF241A0A);
+  static const Color brand = goldText;
+  static const Color brandSoft = goldAccent;
 
-  static const Color maroon = Color(0xFFE5484D);
-  static const Color maroonBg = Color(0xFF2A1214);
+  static const Color cta = goldButton;
+  static const Color onCta = ink;
 
-  static const Color line = Color(0xFF2A2E36);
-  static const Color lineBright = Color(0xFF3A404A);
-  static const Color overlay = Color(0x99000000);
+  static const Color cream = ink;
+  static const Color creamMuted = inkSecondary;
+  static const Color muted = inkTertiary;
+
+  static const Color gold = goldAccent;
+  static const Color goldDeep = goldText;
+  static const Color goldSoft = goldWash;
+
+  static const Color emerald = successInk;
+  static const Color emeraldBg = successWash;
+  static const Color amber = warningInk;
+  static const Color amberBg = warningWash;
+  static const Color maroon = errorInk;
+  static const Color maroonBg = errorWash;
+
+  static const Color lineBright = line;
 }

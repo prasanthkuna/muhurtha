@@ -8,9 +8,11 @@ import 'app/muh_app.dart';
 import 'core/config/env.dart';
 
 import 'core/data/muhurtha_engine_api.dart';
+import 'core/engagement/user_engagement_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await UserEngagementStore.ensureInitialized();
 
   // Maestro / accessibility drivers need an explicit semantics tree in release.
   if (const bool.fromEnvironment('MAESTRO_SEMANTICS', defaultValue: false)) {

@@ -1,40 +1,41 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/analytics/app_analytics.dart';
 import '../../core/config/env.dart';
 import '../../design_system/design_system.dart';
 import '../../shared/widgets/muh_primary_button.dart';
-import '../../shared/widgets/muh_enter.dart';
-import '../../shared/widgets/orbital_backdrop.dart';
+import '../../shared/widgets/editorial/muh_page_scaffold.dart';
 
-class WelcomeScreen extends StatefulWidget {
+class WelcomeScreen extends ConsumerStatefulWidget {
   const WelcomeScreen({super.key});
 
   @override
-  State<WelcomeScreen> createState() => _WelcomeScreenState();
+  ConsumerState<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
-class _WelcomeScreenState extends State<WelcomeScreen>
+class _WelcomeScreenState extends ConsumerState<WelcomeScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c;
   late final Animation<double> _opacity;
-  late final Animation<Offset> _slide;
 
   @override
   void initState() {
     super.initState();
     _c = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1100),
+      duration: MuhMotion.chapter,
     );
-    _opacity = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
-    _slide = Tween<Offset>(
-      begin: const Offset(0, 0.08),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _c, curve: Curves.easeOutCubic));
+    _opacity = CurvedAnimation(parent: _c, curve: MuhMotion.enterCurve);
     _c.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(ref.read(appAnalyticsProvider).welcomeViewed());
+    });
   }
 
   @override
@@ -44,6 +45,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }
 
   void _onBegin() {
+    unawaited(ref.read(appAnalyticsProvider).welcomeCtaTapped());
+    unawaited(ref.read(appAnalyticsProvider).setupStarted(entry: 'welcome'));
     if (!Env.hasSupabase) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppLocalizations.of(context)!.errorNeedSupabase)),
@@ -52,7 +55,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     }
     final session = Supabase.instance.client.auth.currentSession;
     if (session != null) {
-      context.go('/onboarding/birth-basics');
+      context.go('/onboarding/concern');
     } else {
       context.go('/auth');
     }
@@ -63,57 +66,41 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
 
-    return OrbitalBackdrop(
-      showGeometry: true,
-      intensity: 0.35,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: MuhSpace.page),
-            child: FadeTransition(
-              opacity: _opacity,
-              child: SlideTransition(
-                position: _slide,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: MuhSpace.xxl),
-                    Text(
-                      l10n.appTitle,
-                      style: theme.textTheme.headlineLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.5,
-                        height: 1.05,
-                      ),
-                    ).muhEnter(0),
-                    const SizedBox(height: MuhSpace.xl),
-                    Text(
-                      l10n.welcomeTagline,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: MuhColors.creamMuted,
-                        height: 1.45,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ).muhEnter(1),
-                    const Spacer(),
-                    MuhPrimaryButton(
-                      label: l10n.welcomeCta,
-                      onPressed: _onBegin,
-                    ).muhEnter(2),
-                    const SizedBox(height: MuhSpace.lg),
-                    Text(
-                      l10n.welcomeFootnote,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: MuhColors.muted,
-                        height: 1.35,
-                      ),
-                    ).muhEnter(3),
-                    const SizedBox(height: MuhSpace.xl),
-                  ],
+    return MuhPageScaffold(
+      body: FadeTransition(
+        opacity: _opacity,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: MuhSpace.page),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: MuhSpace.hero),
+              Text(
+                l10n.appTitle,
+                style: theme.textTheme.displayMedium,
+              ),
+              const SizedBox(height: MuhSpace.xl),
+              Text(
+                l10n.welcomeTagline,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: MuhColors.inkSecondary,
+                  height: 1.57,
                 ),
               ),
-            ),
+              const SizedBox(height: MuhSpace.md),
+              Text(
+                l10n.welcomeFootnote,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: MuhColors.inkTertiary,
+                ),
+              ),
+              const Spacer(),
+              MuhPrimaryButton(
+                label: l10n.welcomeCta,
+                onPressed: _onBegin,
+              ),
+              const SizedBox(height: MuhSpace.xxl),
+            ],
           ),
         ),
       ),

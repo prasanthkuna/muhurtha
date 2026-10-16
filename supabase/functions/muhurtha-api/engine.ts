@@ -32,6 +32,7 @@ import {
   BIRTH_PACK_VERSION,
   type BirthIntelligencePackContent,
   getPackScreensReady,
+  packHasLlmReadingBody,
   type PackJourneyPhase,
   type PackRangeCard,
   type PackTimingWindowCopy,
@@ -909,6 +910,89 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Promote packs stuck on `generating` after all LLM phases finished (e.g. partial today_cards). */
+async function tryPromoteBackfilledPack(
+  supabase: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow,
+  locale: AppLocale,
+  factSignature: string,
+  dateStr: string,
+  expiresOn: string,
+  partial: BirthIntelligencePackContent,
+  expected: Parameters<typeof validateBirthPackQuality>[1],
+  llm: { provider: string; model: string },
+  timing: DailyTimingFact[],
+): Promise<boolean> {
+  if (birthPackPhasesRemaining(partial).length > 0) return false;
+
+  let merged: BirthIntelligencePackContent = {
+    ...partial,
+    _generation: {
+      phases_done: partial._generation?.phases_done ?? [],
+      screens_ready: getPackScreensReady(partial),
+      updated_at: new Date().toISOString(),
+    },
+  };
+
+  if (!packHasLlmReadingBody(merged)) return false;
+
+  attachNatalLuckToContent(
+    merged as Record<string, unknown>,
+    birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+    locale,
+  );
+
+  const { data: saved, error: saveError } = await supabase
+    .from("birth_intelligence_packs")
+    .upsert({
+      profile_id: profile.id,
+      birth_input_id: bi.id,
+      locale,
+      pack_version: BIRTH_PACK_VERSION,
+      engine_version: ENGINE_V,
+      planner_version: PLANNER_VERSION,
+      kernel_version: KERNEL_VERSION,
+      provider: llm.provider,
+      model: llm.model,
+      status: "ready",
+      fact_signature: factSignature,
+      content: merged,
+      generated_for_date: dateStr,
+      expires_on: expiresOn,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: "profile_id,birth_input_id,locale,pack_version,fact_signature",
+    })
+    .select("id")
+    .maybeSingle();
+  if (saveError) {
+    console.warn(`[birth-pack] promote upsert failed: ${saveError.message}`);
+    return false;
+  }
+  if (!saved?.id) return false;
+
+  await pruneStalePacks(supabase, profile.id, bi.id, locale, saved.id as string);
+  await persistNotificationScheduleBestEffort(
+    supabase,
+    { id: saved.id, content: merged } as BirthPackRow,
+    profile,
+    bi,
+    locale,
+    timing,
+  );
+  await logAppEvent(
+    supabase,
+    profile.id,
+    "birth_pack",
+    "info",
+    "birth_pack_promoted_ready",
+    undefined,
+    { locale, reason: "calendar_backfill" },
+  );
+  return true;
+}
+
 function isStaleGeneration(
   updatedAt: string | null | undefined,
   staleMs: number = PACK_GENERATION_STALE_MS,
@@ -950,7 +1034,9 @@ function isClientServablePack(
     const phases = (row.content as BirthIntelligencePackContent)?._generation
       ?.phases_done ?? [];
     if (phases.includes("deterministic_seed")) return false;
-    const screens = getPackScreensReady(row.content as BirthIntelligencePackContent);
+    const content = row.content as BirthIntelligencePackContent;
+    if (!packHasLlmReadingBody(content)) return false;
+    const screens = getPackScreensReady(content);
     if (screens.length === 0) return false;
     if (
       row.provider === "pending" &&
@@ -1177,7 +1263,7 @@ async function findBestExistingPack(
   if (error) throw error;
   const rows = (data ?? []) as BirthPackRow[];
   return rows.find((row) =>
-    row.status === "ready" && countTodayCards(row.content) >= PACK_DAILY_DAYS
+    row.status === "ready" && packHasLlmReadingBody(row.content as BirthIntelligencePackContent)
   ) ?? null;
 }
 
@@ -1627,8 +1713,7 @@ async function tryAcquirePhaseLock(
     ...content,
     _generation: {
       phases_done: content._generation?.phases_done ?? [],
-      screens_ready: content._generation?.screens_ready ??
-        getPackScreensReady(content),
+      screens_ready: getPackScreensReady(content),
       updated_at: nowIso,
       advancing_phase: nextPhase,
       advancing_until: until,
@@ -1883,6 +1968,28 @@ async function continueBirthPackGeneration(
       return;
     }
 
+    if (
+      !result.complete &&
+      birthPackPhasesRemaining(result.merged).length === 0
+    ) {
+      const rowProvider = lockedRow?.provider ?? "openai";
+      const rowModel = lockedRow?.model ?? "gpt-5.4-mini";
+      const promoted = await tryPromoteBackfilledPack(
+        supabase,
+        profile,
+        bi,
+        locale,
+        factSignature,
+        dateStr,
+        expiresOn,
+        result.merged,
+        packQualityExpected,
+        { provider: rowProvider, model: rowModel },
+        timing,
+      );
+      if (promoted) return;
+    }
+
     if (result.failedPhase) {
       await logAppEvent(
         supabase,
@@ -2124,6 +2231,48 @@ async function ensureBirthPack(
     );
     await persistNotificationScheduleBestEffort(supabase, exactRow, profile, bi, locale, timing);
     if (exactRow.status === "generating") {
+      if (birthPackPhasesRemaining(exactRow.content as BirthIntelligencePackContent).length === 0) {
+        await tryPromoteBackfilledPack(
+          supabase,
+          profile,
+          bi,
+          locale,
+          factSignature,
+          dateStr,
+          expiresOn,
+          exactRow.content as BirthIntelligencePackContent,
+          packQualityExpected,
+          {
+            provider: exactRow.provider ?? "openai",
+            model: exactRow.model ?? "gpt-5.4-mini",
+          },
+          timing,
+        );
+        const promotedRow = await fetchPackByFactSignature(
+          supabase,
+          profile.id,
+          bi.id,
+          locale,
+          factSignature,
+          dateStr,
+        );
+        if (promotedRow?.status === "ready") {
+          attachNatalLuckToContent(
+            promotedRow.content as Record<string, unknown>,
+            birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+            locale,
+          );
+          await persistNotificationScheduleBestEffort(
+            supabase,
+            promotedRow,
+            profile,
+            bi,
+            locale,
+            timing,
+          );
+          return promotedRow;
+        }
+      }
       const resumed = await maybeResumeBirthPackGeneration(continuationCtx, exactRow);
       if (resumed && isClientServablePack(resumed)) {
         attachNatalLuckToContent(

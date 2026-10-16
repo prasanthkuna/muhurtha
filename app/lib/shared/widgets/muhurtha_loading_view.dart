@@ -77,7 +77,7 @@ class MuhurthaLoadingView extends StatelessWidget {
             child: Text(
               headline,
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: MuhColors.cream,
+                color: MuhColors.ink,
                 height: 1.3,
               ),
             ),
@@ -87,7 +87,7 @@ class MuhurthaLoadingView extends StatelessWidget {
     }
 
     return ColoredBox(
-      color: MuhColors.bg,
+      color: MuhColors.canvas,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(MuhSpace.page),
@@ -100,13 +100,15 @@ class MuhurthaLoadingView extends StatelessWidget {
                 headline,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.instrumentSans(
-                  color: MuhColors.cream,
+                  color: MuhColors.ink,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                   height: 1.15,
                   letterSpacing: -0.3,
                 ),
               ),
+              const SizedBox(height: MuhSpace.lg),
+              const _ReadingSkeletonSubline(),
               if (subline.isNotEmpty) ...[
                 const SizedBox(height: MuhSpace.md),
                 ConstrainedBox(
@@ -115,13 +117,49 @@ class MuhurthaLoadingView extends StatelessWidget {
                     subline,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: MuhColors.creamMuted,
+                      color: MuhColors.inkSecondary,
                       height: 1.45,
                     ),
                   ),
                 ),
               ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReadingSkeletonSubline extends StatelessWidget {
+  const _ReadingSkeletonSubline();
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Column(
+        children: [
+          _skeletonBar(widthFactor: 1),
+          const SizedBox(height: MuhSpace.sm),
+          _skeletonBar(widthFactor: 0.92),
+          const SizedBox(height: MuhSpace.sm),
+          _skeletonBar(widthFactor: 0.76),
+        ],
+      ),
+    );
+  }
+
+  Widget _skeletonBar({required double widthFactor}) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: widthFactor,
+        child: Container(
+          height: 10,
+          decoration: BoxDecoration(
+            color: MuhColors.line,
+            borderRadius: BorderRadius.circular(MuhRadius.chip),
           ),
         ),
       ),

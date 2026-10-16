@@ -1148,7 +1148,7 @@ Stream<BirthPackPayload?> _pollBirthPack(
         chartProfileId: chartProfileId,
       );
       yield pack;
-      if (pack.isComplete) return;
+      if (pack.isComplete || pack.hasLlmPack) return;
     } on EngineException catch (e) {
       if (e.code != 'birth_pack_not_ready' && e.code != 'timeout') rethrow;
     }

@@ -4,7 +4,7 @@
   "@appTitle": {
     "description": "App name"
   },
-  "welcomeTagline": "First check your past.\nThen choose the right time.",
+  "welcomeTagline": "Your life has a story.\nExplore chapters you've lived, understand traditional Jyotish themes, and discover your own reading.",
   "welcomeCta": "Begin",
   "welcomeFootnote": "Calm timing. No fear, no theatrics.",
   "authTitle": "Sign in with phone",
@@ -143,6 +143,7 @@
   "concernBusiness": "Business direction",
   "concernHealth": "Health / routine",
   "concernGoodBadTiming": "Good / bad time today",
+  "concernJustExploring": "Just exploring — no specific concern",
   "roleStudent": "Student / fresher",
   "roleEarlyCareer": "Early career (job)",
   "roleManager": "Manager / senior IC",

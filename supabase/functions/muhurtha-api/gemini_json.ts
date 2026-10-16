@@ -252,7 +252,7 @@ export async function generateJsonWithFallbackEnvelope(
     Deno.env.get("DISABLE_OPENAI")?.trim().toLowerCase() === "true";
 
   const isBirthPack = Boolean(opts?.birthPackPhase || opts?.largePayload);
-  const birthPackPrimary = (Deno.env.get("BIRTH_PACK_PRIMARY") ?? "gemini")
+  const birthPackPrimary = (Deno.env.get("BIRTH_PACK_PRIMARY") ?? "openai")
     .trim()
     .toLowerCase();
 
@@ -319,10 +319,17 @@ export async function generateJsonWithFallbackEnvelope(
     }
     return null;
   } else {
-    const gemini = await tryGemini();
-    if (gemini) return gemini;
-    const openAi = await tryOpenAi();
-    if (openAi) return openAi;
+    if (birthPackPrimary === "openai" && !openAiDisabled) {
+      const openAi = await tryOpenAi();
+      if (openAi) return openAi;
+      const gemini = await tryGemini();
+      if (gemini) return gemini;
+    } else {
+      const gemini = await tryGemini();
+      if (gemini) return gemini;
+      const openAi = await tryOpenAi();
+      if (openAi) return openAi;
+    }
   }
 
   if (opts?.supabase) {

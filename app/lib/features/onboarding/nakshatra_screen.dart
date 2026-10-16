@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
 import '../../design_system/design_system.dart';
 import '../../core/data/nakshatras.dart';
 import '../../shared/widgets/muh_choice_card.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/muh_enter.dart';
-import '../../shared/widgets/orbital_backdrop.dart';
+import '../../shared/widgets/editorial/muh_page_scaffold.dart';
 import 'birth_draft_notifier.dart';
+import 'onboarding_finish.dart';
 
 class NakshatraScreen extends ConsumerStatefulWidget {
   const NakshatraScreen({super.key});
@@ -26,12 +25,9 @@ class _NakshatraScreenState extends ConsumerState<NakshatraScreen> {
     final draft = ref.watch(birthDraftProvider);
     final notifier = ref.read(birthDraftProvider.notifier);
 
-    return OrbitalBackdrop(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(title: Text(l10n.nakshatraTitle)),
-        body: SafeArea(
-          child: Column(
+    return MuhPageScaffold(
+        title: l10n.nakshatraTitle,
+        body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
@@ -104,14 +100,12 @@ class _NakshatraScreenState extends ConsumerState<NakshatraScreen> {
                       );
                       return;
                     }
-                    context.push('/onboarding/concern');
+                    finishOnboardingToHome(context: context, ref: ref);
                   },
                 ).muhEnter(2),
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 }

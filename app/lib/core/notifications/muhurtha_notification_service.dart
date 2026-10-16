@@ -26,7 +26,7 @@ class MuhurthaNotificationService {
     final api = _ref.read(muhurthaEngineApiProvider);
     if (api == null) return;
     await _ensureInitialized();
-    if (!await _ensureNotificationPermission()) return;
+    if (!await _notificationsEnabled()) return;
     final access = _ref.read(subscriptionAccessProvider);
     await _plugin.cancelAll();
     final locale = _ref.read(localeProvider).languageCode;
@@ -77,12 +77,22 @@ class MuhurthaNotificationService {
     _initialized = true;
   }
 
-  Future<bool> _ensureNotificationPermission() async {
+  /// Call only from an explicit user action (saved plan reminder, settings).
+  Future<bool> requestNotificationPermission() async {
     if (!Platform.isAndroid) return true;
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     if (android == null) return true;
     final granted = await android.requestNotificationsPermission();
     return granted ?? false;
+  }
+
+  Future<bool> _notificationsEnabled() async {
+    if (!Platform.isAndroid) return true;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return true;
+    final enabled = await android.areNotificationsEnabled();
+    return enabled ?? false;
   }
 }

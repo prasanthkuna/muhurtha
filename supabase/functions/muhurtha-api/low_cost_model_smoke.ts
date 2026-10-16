@@ -101,7 +101,7 @@ export async function smokeTestLowCostModels(): Promise<Record<string, unknown>>
     openai: Deno.env.get("BIRTH_PACK_MODEL")?.trim() ||
       Deno.env.get("OPENAI_MODEL")?.trim() ||
       "gpt-5.4-mini",
-    birthPackPrimary: Deno.env.get("BIRTH_PACK_PRIMARY")?.trim() || "gemini",
+    birthPackPrimary: Deno.env.get("BIRTH_PACK_PRIMARY")?.trim() || "openai",
     disableOpenAi: Deno.env.get("DISABLE_OPENAI")?.trim().toLowerCase() === "true",
   };
 

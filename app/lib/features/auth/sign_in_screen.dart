@@ -32,7 +32,6 @@ import '../../shared/widgets/legal_links.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 
 import '../../shared/widgets/muh_enter.dart';
-import '../../shared/widgets/orbital_backdrop.dart';
 
 
 
@@ -934,11 +933,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
 
 
-    return OrbitalBackdrop(
+    return Scaffold(
 
-      child: Scaffold(
-
-        backgroundColor: Colors.transparent,
+        backgroundColor: MuhColors.canvas,
 
         appBar: AppBar(
 
@@ -1064,7 +1061,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       decoration: UnderlineDecoration(
                         textStyle: theme.textTheme.headlineSmall,
                         colorBuilder: FixedColorBuilder(
-                          MuhColors.creamMuted.withValues(alpha: 0.3),
+                          MuhColors.line,
                         ),
                       ),
                     )
@@ -1077,7 +1074,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         decoration: UnderlineDecoration(
                           textStyle: theme.textTheme.headlineSmall,
                           colorBuilder: FixedColorBuilder(
-                            MuhColors.creamMuted.withValues(alpha: 0.3),
+                            MuhColors.line,
                           ),
                         ),
                       ),
@@ -1206,8 +1203,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           ),
 
         ),
-
-      ),
 
     );
 

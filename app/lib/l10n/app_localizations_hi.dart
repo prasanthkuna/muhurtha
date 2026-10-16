@@ -451,6 +451,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get concernGoodBadTiming => 'आज अच्छा / बुरा समय';
 
   @override
+  String get concernJustExploring => 'बस देख रहा/रही हूँ — कोई खास चिंता नहीं';
+
+  @override
   String get roleStudent => 'छात्र / नौसिखिया';
 
   @override

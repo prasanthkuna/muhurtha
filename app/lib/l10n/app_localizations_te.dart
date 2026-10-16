@@ -455,6 +455,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get concernGoodBadTiming => 'ఈరోజు మంచి / చెడు సమయం';
 
   @override
+  String get concernJustExploring =>
+      'కేవలం చూస్తున్నాను — ప్రత్యేక ఆందోళన లేదు';
+
+  @override
   String get roleStudent => 'విద్యార్థి / ఫ్రెషర్';
 
   @override

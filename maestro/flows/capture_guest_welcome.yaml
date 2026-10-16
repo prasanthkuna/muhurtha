@@ -1,0 +1,19 @@
+# Welcome + auth entry (no OTP — manual device for full sign-in).
+appId: app.muhurta
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      text: "Muhūrta"
+    timeout: 30000
+- takeScreenshot:
+    path: ../app/test/audit/flows/guest-01-welcome
+- tapOn:
+    text: "Begin"
+- extendedWaitUntil:
+    visible:
+      text: "Sign in with phone"
+    timeout: 20000
+- takeScreenshot:
+    path: ../app/test/audit/flows/guest-02-sign-in

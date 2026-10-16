@@ -6,9 +6,11 @@ import '../../design_system/design_system.dart';
 import '../../shared/widgets/muh_choice_card.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/muh_enter.dart';
-import '../../shared/widgets/orbital_backdrop.dart';
+import '../../shared/widgets/editorial/muh_page_scaffold.dart';
 import 'birth_draft_notifier.dart';
-import 'onboarding_finish.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/analytics/app_analytics.dart';
 
 const _concernOptions = <({String id, String labelKey})>[
   (id: 'life_stuck', labelKey: 'concernLifeStuck'),
@@ -19,6 +21,7 @@ const _concernOptions = <({String id, String labelKey})>[
   (id: 'business_timing', labelKey: 'concernBusiness'),
   (id: 'health_timing', labelKey: 'concernHealth'),
   (id: 'good_bad_timing', labelKey: 'concernGoodBadTiming'),
+  (id: 'just_exploring', labelKey: 'concernJustExploring'),
 ];
 
 const _roleOptions = <({String id, String labelKey})>[
@@ -50,6 +53,7 @@ class _ConcernScreenState extends ConsumerState<ConcernScreen> {
       'concernBusiness' => l.concernBusiness,
       'concernHealth' => l.concernHealth,
       'concernGoodBadTiming' => l.concernGoodBadTiming,
+      'concernJustExploring' => l.concernJustExploring,
       'roleStudent' => l.roleStudent,
       'roleEarlyCareer' => l.roleEarlyCareer,
       'roleManager' => l.roleManager,
@@ -62,18 +66,17 @@ class _ConcernScreenState extends ConsumerState<ConcernScreen> {
 
   Future<void> _continue() async {
     if (_finishing) return;
-    final notifier = ref.read(birthDraftProvider.notifier);
     final draft = ref.read(birthDraftProvider);
     if (draft.intent.mainConcern == null || draft.intent.mainConcern!.isEmpty) {
-      notifier.update(
-        (d) => d.copyWith(
-          intent: d.intent.copyWith(mainConcern: 'good_bad_timing'),
-        ),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.errorGeneric)),
       );
+      return;
     }
     setState(() => _finishing = true);
     try {
-      await finishOnboardingToHome(context: context, ref: ref);
+      await ref.read(appAnalyticsProvider).onboardingStepViewed(step: 'concern');
+      if (context.mounted) context.push('/onboarding/birth-basics');
     } finally {
       if (mounted) setState(() => _finishing = false);
     }
@@ -88,13 +91,9 @@ class _ConcernScreenState extends ConsumerState<ConcernScreen> {
     final concern = draft.intent.mainConcern;
     final role = draft.intent.lifeRole;
 
-    return OrbitalBackdrop(
-      intensity: 0.35,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(title: Text(l10n.concernTitle)),
-        body: SafeArea(
-          child: Column(
+    return MuhPageScaffold(
+        title: l10n.concernTitle,
+        body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
@@ -171,8 +170,6 @@ class _ConcernScreenState extends ConsumerState<ConcernScreen> {
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 }

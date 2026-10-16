@@ -41,7 +41,7 @@ class MuhChoiceCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(MuhRadius.button),
               border: Border.all(
-                color: selected ? MuhColors.brand : MuhColors.line,
+                color: selected ? MuhColors.goldDeep : MuhColors.line,
                 width: selected ? 1.2 : 1,
               ),
             ),

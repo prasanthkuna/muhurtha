@@ -27,7 +27,7 @@ cd c:\Users\PrashanthKuna\muhurtha
 supabase secrets list --project-ref kdngizqrybkrckvphyin
 ```
 
-**Birth pack (screen-by-screen multiturn):** primary is **Gemini** (`gemini-3.5-flash` via `BIRTH_PACK_GEMINI_MODEL`), then OpenAI, then OpenRouter fallback. Override with `BIRTH_PACK_PRIMARY` secret (`gemini` | `openai` | `openrouter`). Deploy + warm-up:
+**Birth pack (screen-by-screen multiturn):** primary is **OpenAI** (`gpt-5.4-mini` via `BIRTH_PACK_MODEL` / `OPENAI_MODEL`), then Gemini, then OpenRouter fallback. Override with `BIRTH_PACK_PRIMARY` secret (`openai` | `gemini` | `openrouter`). Deploy + warm-up:
 
 ```powershell
 .\scripts\deploy-muhurtha-api.ps1 -SkipRevenueCat

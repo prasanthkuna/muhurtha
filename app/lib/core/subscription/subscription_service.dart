@@ -106,7 +106,15 @@ class SubscriptionService {
 
   Future<Offerings?> fetchOfferings() async {
     _requireConfigured();
-    return Purchases.getOfferings();
+    try {
+      return await Purchases.getOfferings();
+    } on PlatformException catch (e) {
+      final code = PurchasesErrorHelper.getErrorCode(e);
+      if (code == PurchasesErrorCode.configurationError) {
+        return null;
+      }
+      rethrow;
+    }
   }
 
   Future<Package?> packageForBillingPeriod({

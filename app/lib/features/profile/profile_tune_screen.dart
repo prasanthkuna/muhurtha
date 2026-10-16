@@ -19,10 +19,10 @@ import '../../shared/widgets/chart_profile_switcher.dart';
 import '../../shared/widgets/legal_links.dart';
 import '../../design_system/design_system.dart';
 import '../../features/onboarding/birth_draft.dart';
+import '../../shared/widgets/editorial/muh_page_scaffold.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/onboarding_motion.dart';
-import '../../shared/widgets/orbital_backdrop.dart';
 
 /// Edit display name, language, birth time window, nakshatra — then hard-refresh engine content.
 class ProfileTuneScreen extends ConsumerStatefulWidget {
@@ -58,7 +58,7 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
         content: Text(
           l10n.profileSignOutConfirmBody,
           style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                color: MuhColors.creamMuted,
+                color: MuhColors.inkSecondary,
               ),
         ),
         actions: [
@@ -224,38 +224,26 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
     ];
 
     if (_loading) {
-      return OrbitalBackdrop(
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(title: Text(l10n.profileTuneTitle)),
-          body: MuhurthaLoadingView(
-            mode: MuhurthaLoadingMode.auth,
-            message: l10n.loadingProfile,
-          ),
+      return MuhPageScaffold(
+        title: l10n.profileTuneTitle,
+        body: MuhurthaLoadingView(
+          mode: MuhurthaLoadingMode.auth,
+          message: l10n.loadingProfile,
         ),
       );
     }
 
     if (_birthInputId == null) {
-      return OrbitalBackdrop(
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(title: Text(l10n.profileTuneTitle)),
-          body: Center(child: Text(l10n.errorGeneric)),
-        ),
+      return MuhPageScaffold(
+        title: l10n.profileTuneTitle,
+        body: Center(child: Text(l10n.errorGeneric)),
       );
     }
 
-    return OrbitalBackdrop(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: Text(l10n.profileTuneTitle),
-          foregroundColor: MuhColors.cream,
-        ),
-        body: SafeArea(
-          child: MuhOnboardingList(
-            children: [
+    return MuhPageScaffold(
+      title: l10n.profileTuneTitle,
+      body: MuhOnboardingList(
+        children: [
               const ChartProfileSwitcher(),
               const SizedBox(height: MuhSpace.lg),
               _ProfileSection(
@@ -491,7 +479,7 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
                     Text(
                       l10n.profileDeleteAccountBody,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: MuhColors.creamMuted,
+                        color: MuhColors.inkSecondary,
                         height: 1.45,
                       ),
                     ),
@@ -512,13 +500,11 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
                 ),
               ),
               const SizedBox(height: MuhSpace.xl),
-              MuhPrimaryButton(
-                label: l10n.profileSaveRefresh,
-                onPressed: _saving ? null : _save,
-              ),
-            ],
+          MuhPrimaryButton(
+            label: l10n.profileSaveRefresh,
+            onPressed: _saving ? null : _save,
           ),
-        ),
+        ],
       ),
     );
   }
@@ -541,7 +527,7 @@ class _ProfileSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(MuhSpace.lg),
       decoration: BoxDecoration(
-        color: MuhColors.surface,
+        color: MuhColors.paper,
         borderRadius: BorderRadius.circular(MuhRadius.card),
         border: Border.all(color: MuhColors.line),
       ),
@@ -551,7 +537,7 @@ class _ProfileSection extends StatelessWidget {
           Text(
             title,
             style: theme.textTheme.titleMedium?.copyWith(
-              color: MuhColors.gold,
+              color: MuhColors.ink,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -559,7 +545,7 @@ class _ProfileSection extends StatelessWidget {
           Text(
             subtitle,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: MuhColors.creamMuted,
+              color: MuhColors.inkSecondary,
               height: 1.45,
             ),
           ),

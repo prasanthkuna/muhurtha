@@ -1,8 +1,8 @@
-/// **Muhūrta design system** — Flutter tokens (colors, space, radius, shadows, type).
+/// **Muhūrta design system** — Golden Editorial tokens + motion + icons.
 ///
-/// Canonical reference: repo root `MUHURTA_DESIGN.md` §5–7. Import this library instead
-/// of scattering literals or parallel token files; it is the closest equivalent to a
-/// central CSS variables layer in a web stack.
+/// Canonical specs:
+/// - `Muhurta_Golden_Editorial_Design_System_v1.md`
+/// - `Muhurta_Retention_Engagement_Screenwise_Plan_v1.md`
 library;
 
 export 'muhurta_colors.dart';
@@ -12,3 +12,5 @@ export 'muhurta_shadows.dart';
 export 'muhurta_spacing.dart';
 export 'muhurta_type_scale.dart';
 export 'muhurta_motion.dart';
+
+export '../shared/widgets/editorial/editorial.dart';

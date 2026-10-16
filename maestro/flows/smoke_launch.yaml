@@ -1,9 +1,9 @@
-appId: com.example.muhurta
+appId: app.muhurta
 ---
 - launchApp:
     clearState: true
 - extendedWaitUntil:
-    visible: "Begin"
-    timeout: 20000
+    visible:
+      text: "Muhūrta"
+    timeout: 30000
 - assertVisible: "Muhūrta"
-- assertVisible: "Begin"

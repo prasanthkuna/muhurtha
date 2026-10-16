@@ -13,7 +13,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get welcomeTagline =>
-      'First check your past.\nThen choose the right time.';
+      'Your life has a story.\nExplore chapters you\'ve lived, understand traditional Jyotish themes, and discover your own reading.';
 
   @override
   String get welcomeCta => 'Begin';
@@ -452,6 +452,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get concernGoodBadTiming => 'Good / bad time today';
+
+  @override
+  String get concernJustExploring => 'Just exploring — no specific concern';
 
   @override
   String get roleStudent => 'Student / fresher';

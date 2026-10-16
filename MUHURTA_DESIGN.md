@@ -1,5 +1,7 @@
 # MUHŪRTA — DESIGN.md
 
+> **Superseded for visual and UX implementation** by `Muhurta_Golden_Editorial_Design_System_v1.md` and `Muhurta_Retention_Engagement_Screenwise_Plan_v1.md` (Golden Editorial ivory + antique gold, Decode-first, retention loops). Keep this file for historical product notes only; do not implement new UI from the graphite/azure tokens below.
+
 ## 1. Product
 
 **Muhūrta** is a purpose-first Jyotish timing companion for India.

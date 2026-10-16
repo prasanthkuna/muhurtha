@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../data/muhurtha_engine_api.dart';
 
 final appAnalyticsProvider = Provider<AppAnalytics>((ref) {
@@ -21,6 +23,9 @@ class AppAnalytics {
   }) async {
     if (kDebugMode) {
       debugPrint('[analytics] $event $params');
+    }
+    if (Supabase.instance.client.auth.currentSession == null) {
+      return;
     }
     final api = _ref.read(muhurthaEngineApiProvider);
     if (api == null) return;
@@ -96,5 +101,113 @@ class AppAnalytics {
   Future<void> paywallView({String? source}) => log(
         'paywall_view',
         params: {if (source != null) 'source': source},
+      );
+
+  // —— Retention §6.1 allowlisted funnel (no PII) ——
+
+  Future<void> welcomeViewed() => log('welcome_viewed', params: {'screen': 'welcome'});
+
+  Future<void> welcomeCtaTapped() =>
+      log('welcome_cta_tapped', params: {'screen': 'welcome'});
+
+  Future<void> setupStarted({required String entry}) => log(
+        'setup_started',
+        params: {'screen': 'onboarding', 'entry_point': entry},
+      );
+
+  Future<void> onboardingStepViewed({
+    required String step,
+    String? inputMode,
+  }) =>
+      log(
+        'onboarding_step_viewed',
+        params: {
+          'step': step,
+          if (inputMode != null) 'input_mode': inputMode,
+        },
+      );
+
+  Future<void> firstInsightViewed({required String screen}) => log(
+        'first_insight_viewed',
+        params: {'screen': screen},
+      );
+
+  Future<void> decodeLifeMapCta() => log(
+        'decode_life_map_cta',
+        params: {'screen': 'decode'},
+      );
+
+  Future<void> lifeMapOpened() => log(
+        'life_map_opened',
+        params: {'screen': 'life_map'},
+      );
+
+  Future<void> chapterOpened({
+    required String screen,
+    required String chapterPhase,
+    required String entryPoint,
+  }) =>
+      log(
+        'chapter_opened',
+        params: {
+          'screen': screen,
+          'chapter_phase': chapterPhase,
+          'entry_point': entryPoint,
+        },
+      );
+
+  Future<void> reflectionSubmitted({
+    required String screen,
+    required String feedback,
+  }) =>
+      log(
+        'reflection_submitted',
+        params: {
+          'screen': screen,
+          'feedback': feedback,
+        },
+      );
+
+  Future<void> todayOpened({required bool hasNewContent}) => log(
+        'today_opened',
+        params: {
+          'screen': 'today',
+          'has_new_content': hasNewContent,
+        },
+      );
+
+  Future<void> purposeSelected({required String purpose}) => log(
+        'purpose_selected',
+        params: {'screen': 'today', 'purpose': purpose},
+      );
+
+  Future<void> timingEvaluated({required String purpose}) => log(
+        'timing_evaluated',
+        params: {'screen': 'timing', 'purpose': purpose},
+      );
+
+  Future<void> intentionSaved({required String purpose}) => log(
+        'intention_saved',
+        params: {'screen': 'timing', 'purpose': purpose},
+      );
+
+  Future<void> askQuestionSent({required int lengthBucket}) => log(
+        'ask_question_sent',
+        params: {'screen': 'ask', 'length_bucket': lengthBucket},
+      );
+
+  Future<void> askAnswerResolved({required bool useful}) => log(
+        'ask_answer_resolved',
+        params: {'screen': 'ask', 'useful': useful},
+      );
+
+  Future<void> sharePreviewOpened({required String sourceType}) => log(
+        'share_preview_opened',
+        params: {'source_type': sourceType},
+      );
+
+  Future<void> paywallRequested({required String feature}) => log(
+        'paywall_requested',
+        params: {'feature': feature},
       );
 }

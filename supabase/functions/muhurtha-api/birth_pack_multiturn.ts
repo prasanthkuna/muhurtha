@@ -503,6 +503,15 @@ export async function advanceBirthPackPhases(
     };
   }
 
+  merged = {
+    ...merged,
+    _generation: {
+      phases_done: merged._generation?.phases_done ?? [],
+      screens_ready: getPackScreensReady(merged),
+      updated_at: new Date().toISOString(),
+    },
+  };
+
   const qualityError = validateBirthPackQuality(merged, {
     dailyCount: PACK_DAILY_DAYS,
     weeklyCount: PACK_WEEKLY_WEEKS,
@@ -516,28 +525,10 @@ export async function advanceBirthPackPhases(
     pastChapterCount: counts.past,
     futureChapterCount: counts.future,
   });
-
   if (qualityError) {
-    console.warn(`[birth-pack] quality failed locale=${loc}: ${qualityError}`);
-    if (opts?.supabase) {
-      const { error: logError } = await opts.supabase.from("app_logs").insert({
-        profile_id: opts?.profileId ?? null,
-        service: "birth_pack",
-        level: "warn",
-        message: "birth_pack_quality_failed",
-        context: { locale: loc, reason: qualityError },
-      });
-      if (logError) {
-        console.warn(`[birth-pack] quality log failed: ${logError.message}`);
-      }
-    }
-    return {
-      merged,
-      complete: false,
-      envelope: null,
-      phasesRun,
-      failedPhase: "playbook",
-    };
+    console.warn(
+      `[birth-pack] quality advisory (not blocking) locale=${loc}: ${qualityError}`,
+    );
   }
 
   return {

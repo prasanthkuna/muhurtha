@@ -75,7 +75,7 @@ ScreenshotApp storeScreenshotApp({
   return ScreenshotApp(
     device: device,
     debugShowCheckedModeBanner: false,
-    theme: MuhTheme.darkForLocale(locale),
+    theme: MuhTheme.lightForLocale(locale),
     locale: locale,
     supportedLocales: const [
       Locale('en'),

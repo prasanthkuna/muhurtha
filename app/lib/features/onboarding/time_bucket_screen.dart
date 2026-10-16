@@ -7,9 +7,10 @@ import '../../design_system/design_system.dart';
 import '../../shared/widgets/muh_choice_card.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/onboarding_motion.dart';
-import '../../shared/widgets/orbital_backdrop.dart';
+import '../../shared/widgets/editorial/muh_page_scaffold.dart';
 import 'birth_draft.dart';
 import 'birth_draft_notifier.dart';
+import 'onboarding_finish.dart';
 
 class TimeBucketScreen extends ConsumerStatefulWidget {
   const TimeBucketScreen({super.key});
@@ -69,12 +70,9 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
       }
     }
 
-    return OrbitalBackdrop(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(title: Text(l10n.timeTitle)),
-        body: SafeArea(
-          child: MuhOnboardingList(
+    return MuhPageScaffold(
+        title: l10n.timeTitle,
+        body: MuhOnboardingList(
             children: [
               Text(
                 l10n.timeSubtitle,
@@ -144,7 +142,7 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
                               clearJanmaNakshatra: true,
                             ),
                           );
-                          context.push('/onboarding/concern');
+                          finishOnboardingToHome(context: context, ref: ref);
                         } else {
                           context.push('/onboarding/nakshatra');
                         }
@@ -152,8 +150,6 @@ class _TimeBucketScreenState extends ConsumerState<TimeBucketScreen> {
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 }

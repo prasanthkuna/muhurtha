@@ -7,10 +7,15 @@ import '../../design_system/muhurta_motion.dart';
 List<Widget> muhStaggerChildren(
   List<Widget> children, {
   int startIndex = 0,
+  int? maxIndex,
 }) {
   return [
     for (var i = 0; i < children.length; i++)
-      children[i].muhEnter(startIndex + i),
+      children[i].muhEnter(
+        maxIndex != null
+            ? (startIndex + i).clamp(0, maxIndex)
+            : startIndex + i,
+      ),
   ];
 }
 
@@ -20,8 +25,13 @@ Widget muhStaggerEnter(
   int index, {
   Duration? duration,
   double slideY = MuhMotion.enterSlideY,
+  bool? reduceMotion,
 }) {
   final d = duration ?? MuhMotion.medium;
+  final disable = reduceMotion ??
+      WidgetsBinding.instance.platformDispatcher.accessibilityFeatures
+          .disableAnimations;
+  if (disable) return child;
   return Animate(
     delay: MuhMotion.staggerStep * index,
     child: child,

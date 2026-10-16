@@ -15,6 +15,7 @@ import '../config/marketing_urls.dart';
 import '../data/muhurtha_engine_api.dart';
 import '../locale/locale_provider.dart';
 import '../../shared/widgets/muhurtha_loading_view.dart';
+import '../../shared/widgets/editorial/muh_share_preview.dart';
 import '../../shared/widgets/share_story_card.dart';
 
 final shareCardServiceProvider = Provider<ShareCardService>((ref) {
@@ -113,6 +114,24 @@ class ShareCardService {
       }
 
       if (!context.mounted) return;
+
+      await _ref.read(appAnalyticsProvider).sharePreviewOpened(
+            sourceType: sourceType,
+          );
+
+      final approved = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: MuhColors.paper,
+        builder: (ctx) => MuhSharePreview(
+          title: registered?.shareTitle ?? shareTitle,
+          body: registered?.shareBody ?? shareBody,
+          redacted: true,
+          onCancel: () => Navigator.pop(ctx, false),
+          onShare: () => Navigator.pop(ctx, true),
+        ),
+      );
+      if (approved != true || !context.mounted) return;
 
       _insertShareOverlay(context);
 

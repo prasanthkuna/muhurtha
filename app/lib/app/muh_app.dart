@@ -20,7 +20,7 @@ class MuhApp extends ConsumerWidget {
       child: MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'Muhūrta',
-      theme: MuhTheme.darkForLocale(locale),
+      theme: MuhTheme.lightForLocale(locale),
       locale: locale,
       supportedLocales: const [
         Locale('en'),

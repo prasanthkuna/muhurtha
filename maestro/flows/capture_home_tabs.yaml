@@ -1,0 +1,49 @@
+# Signed-in home tabs + profile (locale-safe coordinate nav).
+# Tab bar: Today 10% | Life Map 30% | Decode 50% | Timing 70% | Ask 90%
+appId: app.muhurta
+---
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd:
+    timeout: 8000
+- tapOn:
+    text: "Today"
+    optional: true
+- tapOn:
+    text: "ఈరోజు"
+    optional: true
+- tapOn:
+    point: "10%,94%"
+- waitForAnimationToEnd
+- takeScreenshot:
+    path: ../app/test/audit/flows/01-home-today
+- tapOn:
+    point: "30%,94%"
+- waitForAnimationToEnd
+- takeScreenshot:
+    path: ../app/test/audit/flows/02-home-life-map
+- tapOn:
+    point: "50%,94%"
+- waitForAnimationToEnd
+- takeScreenshot:
+    path: ../app/test/audit/flows/03-home-decode
+- tapOn:
+    point: "70%,94%"
+- waitForAnimationToEnd
+- takeScreenshot:
+    path: ../app/test/audit/flows/04-home-timing
+- tapOn:
+    point: "90%,94%"
+- waitForAnimationToEnd
+- takeScreenshot:
+    path: ../app/test/audit/flows/05-home-ask
+- tapOn:
+    text: "Profile settings"
+    optional: true
+- tapOn:
+    point: "92%,6%"
+- waitForAnimationToEnd
+- takeScreenshot:
+    path: ../app/test/audit/flows/06-profile-tune
+- back
+- waitForAnimationToEnd

@@ -9,7 +9,7 @@ import '../../design_system/design_system.dart';
 import '../../core/locale/locale_provider.dart';
 import '../../shared/widgets/muh_primary_button.dart';
 import '../../shared/widgets/onboarding_motion.dart';
-import '../../shared/widgets/orbital_backdrop.dart';
+import '../../shared/widgets/editorial/muh_page_scaffold.dart';
 import 'birth_draft_notifier.dart';
 
 class BirthBasicsScreen extends ConsumerStatefulWidget {
@@ -82,14 +82,9 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
     final draft = ref.watch(birthDraftProvider);
     final notifier = ref.read(birthDraftProvider.notifier);
 
-    return OrbitalBackdrop(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: Text(l10n.onboardingBirthTitle),
-        ),
-        body: SafeArea(
-          child: MuhOnboardingList(
+    return MuhPageScaffold(
+        title: l10n.onboardingBirthTitle,
+        body: MuhOnboardingList(
             children: [
               Text(
                 l10n.onboardingBirthSubtitle,
@@ -194,8 +189,6 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 }

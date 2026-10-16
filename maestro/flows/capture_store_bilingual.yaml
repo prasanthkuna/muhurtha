@@ -1,75 +1,19 @@
-# Bilingual store screenshots — Decode | Life Map | Today | Timing | Ask
 appId: app.muhurta
 ---
 - launchApp:
     stopApp: false
 - waitForAnimationToEnd:
-    timeout: 10000
-
-# te-IN
+    timeout: 30000
+- runFlow:
+    file: capture_store_te_steps.yaml
 - tapOn:
-    point: "10%,94%"
-- waitForAnimationToEnd
-- takeScreenshot:
-    path: ../play/assets/screenshots/te-IN/02-decode
-- tapOn:
-    point: "30%,94%"
-- waitForAnimationToEnd
-- takeScreenshot:
-    path: ../play/assets/screenshots/te-IN/03-life-map
-- tapOn:
-    point: "50%,94%"
-- waitForAnimationToEnd:
-    timeout: 12000
-- takeScreenshot:
-    path: ../play/assets/screenshots/te-IN/01-today
-- tapOn:
-    point: "70%,94%"
-- waitForAnimationToEnd
-- takeScreenshot:
-    path: ../play/assets/screenshots/te-IN/04-timing
-- tapOn:
-    point: "90%,94%"
-- waitForAnimationToEnd
-- takeScreenshot:
-    path: ../play/assets/screenshots/te-IN/05-ask
-
-# Switch to English (profile)
-- tapOn:
-    point: "93%,6%"
+    point: "92%,6%"
 - waitForAnimationToEnd
 - tapOn:
     point: "50%,42%"
 - tapOn:
     point: "50%,88%"
-- extendedWaitUntil:
-    visible: "Today"
-    timeout: 180000
-
-# en-IN
-- tapOn:
-    point: "10%,94%"
-- waitForAnimationToEnd
-- takeScreenshot:
-    path: ../play/assets/screenshots/en-IN/02-decode
-- tapOn:
-    point: "30%,94%"
-- waitForAnimationToEnd
-- takeScreenshot:
-    path: ../play/assets/screenshots/en-IN/03-life-map
-- tapOn:
-    point: "50%,94%"
 - waitForAnimationToEnd:
-    timeout: 12000
-- takeScreenshot:
-    path: ../play/assets/screenshots/en-IN/01-today
-- tapOn:
-    point: "70%,94%"
-- waitForAnimationToEnd
-- takeScreenshot:
-    path: ../play/assets/screenshots/en-IN/04-timing
-- tapOn:
-    point: "90%,94%"
-- waitForAnimationToEnd
-- takeScreenshot:
-    path: ../play/assets/screenshots/en-IN/05-ask
+    timeout: 30000
+- runFlow:
+    file: capture_store_en_steps.yaml

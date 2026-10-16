@@ -47,7 +47,7 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
     secrets.OPENROUTER_API_KEY;
 
   const config = {
-    birthPackPrimary: Deno.env.get("BIRTH_PACK_PRIMARY")?.trim() || "gemini",
+    birthPackPrimary: Deno.env.get("BIRTH_PACK_PRIMARY")?.trim() || "openai",
     birthPackOpenAiModel: Deno.env.get("BIRTH_PACK_MODEL")?.trim() ||
       Deno.env.get("OPENAI_MODEL")?.trim() || "gpt-5.4-mini",
     birthPackOpenRouterModel: Deno.env.get("BIRTH_PACK_OPENROUTER_MODEL")?.trim() ||
@@ -65,6 +65,7 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
       Deno.env.get("DISABLE_OPENAI")?.trim().toLowerCase() !== "true",
   };
 
+  const birthPackPrimary = config.birthPackPrimary.toLowerCase();
   let llm: Record<string, unknown> | null = null;
   if (probeLlm && (secrets.GEMINI_API_KEY || secrets.OPENAI_API_KEY)) {
     const llmStarted = Date.now();
@@ -72,18 +73,28 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
       'Return valid JSON only: {"greeting":string,"model_check":string}. Write one short Sakha hello.';
     const probeUser = JSON.stringify({ task: "warmup_probe", phase: "core_identity" });
 
-    let envelope = secrets.GEMINI_API_KEY
-      ? await geminiGenerateJsonEnvelope(probeSystem, probeUser, {
-        modelEnvName: "BIRTH_PACK_GEMINI_MODEL",
-        birthPackPhase: "core_identity",
-      })
-      : null;
+    const probeOpenAi = () =>
+      secrets.OPENAI_API_KEY
+        ? openAiGenerateJsonEnvelope(probeSystem, probeUser, {
+          modelEnvName: "BIRTH_PACK_MODEL",
+          birthPackPhase: "core_identity",
+        })
+        : Promise.resolve(null);
+    const probeGemini = () =>
+      secrets.GEMINI_API_KEY
+        ? geminiGenerateJsonEnvelope(probeSystem, probeUser, {
+          modelEnvName: "BIRTH_PACK_GEMINI_MODEL",
+          birthPackPhase: "core_identity",
+        })
+        : Promise.resolve(null);
 
-    if (!envelope && secrets.OPENAI_API_KEY) {
-      envelope = await openAiGenerateJsonEnvelope(probeSystem, probeUser, {
-        modelEnvName: "BIRTH_PACK_MODEL",
-        birthPackPhase: "core_identity",
-      });
+    let envelope = birthPackPrimary === "openai"
+      ? await probeOpenAi()
+      : await probeGemini();
+    if (!envelope) {
+      envelope = birthPackPrimary === "openai"
+        ? await probeGemini()
+        : await probeOpenAi();
     }
 
     llm = {
@@ -107,7 +118,7 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
     config,
     llm,
     recommendation: ok
-      ? "Deploy warm-up passed. Gemini primary for birth pack (gemini-3.5-flash); OpenAI/OpenRouter fallback."
+      ? "Deploy warm-up passed. OpenAI primary for birth pack (gpt-5.4-mini); Gemini/OpenRouter fallback."
       : !secretsOk
       ? "Missing OPENROUTER_API_KEY on the project."
       : "Module graph loaded but LLM probe failed. Check app_logs and Gemini model availability.",

@@ -109,7 +109,7 @@ abstract class AppLocalizations {
   /// No description provided for @welcomeTagline.
   ///
   /// In en, this message translates to:
-  /// **'First check your past.\nThen choose the right time.'**
+  /// **'Your life has a story.\nExplore chapters you\'ve lived, understand traditional Jyotish themes, and discover your own reading.'**
   String get welcomeTagline;
 
   /// No description provided for @welcomeCta.
@@ -939,6 +939,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Good / bad time today'**
   String get concernGoodBadTiming;
+
+  /// No description provided for @concernJustExploring.
+  ///
+  /// In en, this message translates to:
+  /// **'Just exploring — no specific concern'**
+  String get concernJustExploring;
 
   /// No description provided for @roleStudent.
   ///

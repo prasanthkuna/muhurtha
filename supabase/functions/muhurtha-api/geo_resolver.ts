@@ -34,6 +34,36 @@ function cleanPlace(place: string): string {
   return place.trim().replace(/\s+/g, " ");
 }
 
+/** Known Indian localities when Nominatim rate-limits or misses spelling variants. */
+const IN_CITY_FALLBACKS: Record<string, { lat: number; lng: number; label: string }> = {
+  gudivada: { lat: 16.441, lng: 80.9926, label: "Gudivada" },
+  gudivadaandhra: { lat: 16.441, lng: 80.9926, label: "Gudivada" },
+  hyderabad: { lat: 17.385, lng: 78.4867, label: "Hyderabad" },
+  vijayawada: { lat: 16.5062, lng: 80.648, label: "Vijayawada" },
+  visakhapatnam: { lat: 17.6868, lng: 83.2185, label: "Visakhapatnam" },
+  vizag: { lat: 17.6868, lng: 83.2185, label: "Visakhapatnam" },
+};
+
+function fallbackIndianCity(place: string): BirthPlaceResolution | null {
+  const key = place.toLowerCase().replace(/[^a-z]/g, "");
+  const hit = IN_CITY_FALLBACKS[key];
+  if (!hit) return null;
+  let timezone = "Asia/Kolkata";
+  try {
+    timezone = tzLookup(hit.lat, hit.lng);
+  } catch {
+    timezone = "Asia/Kolkata";
+  }
+  return {
+    place,
+    resolvedLabel: hit.label,
+    lat: hit.lat,
+    lng: hit.lng,
+    timezone,
+    source: "nominatim",
+  };
+}
+
 export async function resolveBirthPlace(
   placeRaw: string | null | undefined,
 ): Promise<BirthPlaceResolution | null> {
@@ -55,13 +85,15 @@ export async function resolveBirthPlace(
   });
   if (!res.ok) {
     console.warn("Birth place geocode failed", res.status, await res.text());
-    return null;
+    return fallbackIndianCity(place);
   }
   const rows = await res.json() as NominatimRow[];
   const top = Array.isArray(rows) ? rows[0] : null;
   const lat = Number(top?.lat);
   const lng = Number(top?.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return fallbackIndianCity(place);
+  }
 
   let timezone = "Asia/Kolkata";
   try {
