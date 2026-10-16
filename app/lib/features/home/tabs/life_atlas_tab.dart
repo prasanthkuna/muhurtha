@@ -19,6 +19,7 @@ import '../../../core/subscription/subscription_service.dart';
 import '../../../shared/widgets/paywall_sheet.dart';
 import '../home_copy.dart';
 import '../home_empty_state.dart';
+import '../home_share.dart';
 import '../home_editorial_scroll.dart';
 import '../home_prose_card.dart';
 
@@ -247,6 +248,19 @@ class _LifeAtlasTabState extends ConsumerState<LifeAtlasTab> {
                     context,
                     plain: chapter.story,
                     traditional: chapter.evidenceLine,
+                  ),
+                ),
+              if (chapter.shareHook.isNotEmpty)
+                MuhQuietButton(
+                  label: 'Share this chapter',
+                  icon: Icons.ios_share_rounded,
+                  onPressed: () => shareExactCard(
+                    ref,
+                    context,
+                    title: chapter.title,
+                    body: chapter.shareHook,
+                    sourceType: 'journey_phase',
+                    sourceId: chapterKey,
                   ),
                 ),
               MuhReflectionChoice(
