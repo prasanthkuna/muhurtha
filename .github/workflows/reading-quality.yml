@@ -1,0 +1,36 @@
+name: Muhurta reading quality
+on:
+  push:
+    branches:
+      - fix/reading-quality-screen-ux-20261016
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'supabase/functions/muhurtha-api/**'
+      - '.github/workflows/reading-quality.yml'
+jobs:
+  pack-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Verify pack merge behavior
+        run: deno test supabase/functions/muhurtha-api/birth_pack_merge_test.ts
+  flutter-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Install Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+      - name: Check targeted Dart source
+        working-directory: app
+        run: dart analyze lib/core/data/life_period_matching.dart lib/core/data/birth_pack_views.dart lib/features/home/tabs/life_atlas_tab.dart test/reading_quality_test.dart
+      - name: Run reading quality regressions
+        working-directory: app
+        run: flutter test test/reading_quality_test.dart
