@@ -16,7 +16,6 @@ import '../../../core/engagement/user_engagement_store.dart';
 import '../widgets/pack_coverage_banner.dart';
 import '../../../core/session/session_preferences.dart';
 import '../../../design_system/design_system.dart';
-import '../../../shared/widgets/editorial/editorial.dart';
 import '../../../shared/widgets/muhurtha_loading_view.dart';
 import '../home_copy.dart';
 import '../home_editorial_scroll.dart';
@@ -49,7 +48,6 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
     final packAsync = ref.watch(birthPackProvider);
     ref.watch(activeChartProfileIdProvider);
     final copy = HomeCopy(l10n);
-    final subjectName = ref.watch(chartDisplayNameProvider);
 
     return packAsync.when(
       data: (pack) {
