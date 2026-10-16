@@ -914,12 +914,11 @@ class _AskTabState extends State<_AskTab> {
   }
 
   Widget _askBody(ThemeData theme, {BirthPackPayload? pack}) {
-    final knowledgeHint = pack == null ? '' : BirthPackViews(pack).askKnowledgeHint;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
           MuhSpace.page,
-          MuhSpace.xxl,
+          MuhSpace.md,
           MuhSpace.page,
           MuhSpace.xl,
         ),
@@ -932,13 +931,13 @@ class _AskTabState extends State<_AskTab> {
           ),
           const SizedBox(height: MuhSpace.sm),
           Text(
-            knowledgeHint.isNotEmpty ? knowledgeHint : _tx('sub'),
+            _tx('sub'),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: MuhColors.inkSecondary,
               height: 1.45,
             ),
           ),
-          const SizedBox(height: MuhSpace.xl),
+          const SizedBox(height: MuhSpace.md),
           MuhPromptComposer(
             controller: _controller,
             hint: _tx('placeholder'),
