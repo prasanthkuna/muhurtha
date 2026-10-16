@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/env.dart';
 import '../data/muhurtha_engine_api.dart';
 
 final appAnalyticsProvider = Provider<AppAnalytics>((ref) {
@@ -24,7 +25,12 @@ class AppAnalytics {
     if (kDebugMode) {
       debugPrint('[analytics] $event $params');
     }
-    if (Supabase.instance.client.auth.currentSession == null) {
+    // Startup and preview builds may not have initialized Supabase yet.
+    // Analytics must never crash the app or a widget test.
+    if (!Env.hasSupabase) return;
+    try {
+      if (Supabase.instance.client.auth.currentSession == null) return;
+    } catch (_) {
       return;
     }
     final api = _ref.read(muhurthaEngineApiProvider);
