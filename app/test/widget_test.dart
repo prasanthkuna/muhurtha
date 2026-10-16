@@ -9,6 +9,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Begin'), findsOneWidget);
-    expect(find.textContaining('First check your past'), findsOneWidget);
+    expect(find.textContaining('Your life has a story.'), findsOneWidget);
   });
 }
