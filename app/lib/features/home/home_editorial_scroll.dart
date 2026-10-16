@@ -32,10 +32,10 @@ class HomeEditorialScroll extends StatelessWidget {
       ),
       children: [
         MuhEditorialHero(title: title, subtitle: subtitle).muhEnter(0),
-        const SizedBox(height: MuhSpace.xl),
+        const SizedBox(height: MuhSpace.md),
         ...children.asMap().entries.expand(
               (entry) => [
-                entry.value.muhEnter(entry.key + 1),
+                entry.value.muhEnter((entry.key + 1).clamp(0, 2)),
                 const SizedBox(height: MuhSpace.md),
               ],
             ),
