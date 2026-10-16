@@ -13,7 +13,6 @@ import '../../../core/data/birth_pack_views.dart';
 import '../../../core/data/muhurtha_engine_api.dart';
 import '../../../core/engagement/engagement_scope.dart';
 import '../../../core/engagement/user_engagement_store.dart';
-import '../widgets/pack_coverage_banner.dart';
 import '../../../core/session/session_preferences.dart';
 import '../../../design_system/design_system.dart';
 import '../../../shared/widgets/muhurtha_loading_view.dart';
@@ -126,7 +125,6 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
                 message: l10n.loadingDecode,
                 kind: MuhInlineStatusKind.loading,
               ),
-            PackCoverageBanner(pack: pack),
             if (hasCopy) ...[
               Container(
                 width: double.infinity,
