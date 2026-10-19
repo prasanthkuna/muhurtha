@@ -4301,7 +4301,7 @@ async function _handleInternal(
       provenance:buildProvenance({
         promptVersion:"panchanga-v1",provider:"deterministic",model:"none",
         source:"fallback",factSignature:buildFactSignature([
-          profile.id,bi?.id,purposeType,selected.date,tz,lat,lng,selected.method
+          profile.id,bi?.id,purposeType,selected.date,tz,lat.toString(),lng.toString(),selected.method
         ]),
       }),
       locale,access:buildAccessPayload(access),
