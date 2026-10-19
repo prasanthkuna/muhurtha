@@ -392,10 +392,12 @@ class _PurposeResultCard extends StatelessWidget {
           ],
           if (result.factors.isNotEmpty) ...[
             const SizedBox(height:MuhSpace.md),
-            ExpansionTile(
-              tilePadding:EdgeInsets.zero,
-              title:const Text('Calculated factors & why'),
-              children:[
+            Material(
+              color: MuhColors.paper,
+              child: ExpansionTile(
+                tilePadding:EdgeInsets.zero,
+                title:const Text('Calculated factors & why'),
+                children:[
                 for (final factor in result.factors)
                   ListTile(
                     dense:true,
@@ -407,7 +409,8 @@ class _PurposeResultCard extends StatelessWidget {
                     padding:const EdgeInsets.only(bottom:MuhSpace.sm),
                     child:Text(limitation,style:Theme.of(context).textTheme.bodySmall),
                   ),
-              ],
+                ],
+              ),
             ),
           ],
           if (result.candidateDates.isNotEmpty) ...[

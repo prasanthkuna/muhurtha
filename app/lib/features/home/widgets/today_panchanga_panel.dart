@@ -65,12 +65,15 @@ class TodayPanchangaPanel extends StatelessWidget {
           Text('Chandrabala · ' + value('chandrabala','value'),style:text.bodyMedium),
         const SizedBox(height:MuhSpace.sm),
         Text('Calculated calendar facts; interpretations are traditional, not guaranteed outcomes.',style:text.bodySmall),
-        ExpansionTile(tilePadding:EdgeInsets.zero,title:const Text('Method & limitations'),children:[
+        Material(
+          color: MuhColors.paper,
+          child: ExpansionTile(tilePadding:EdgeInsets.zero,title:const Text('Method & limitations'),children:[
           for(final item in (panchanga?['limitations'] as List? ?? const []))
             Padding(padding:const EdgeInsets.only(bottom:MuhSpace.sm),
               child:Text(item.toString(),style:text.bodySmall)),
           Text('Method: ' + (panchanga?['method']?.toString() ?? ''),style:text.bodySmall),
-        ]),
+          ]),
+        ),
       ]),
     );
   }
