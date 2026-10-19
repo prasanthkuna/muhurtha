@@ -185,6 +185,8 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
         } catch (_) {}
       }
       await applyAppLanguage(ref, _draft.languageCode);
+      ref.invalidate(todayPayloadProvider);
+      ref.invalidate(birthPackProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.profileSaved)),
@@ -299,7 +301,11 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
                               ),
                       ),
                       onChanged: (v) => setState(() {
-                        _draft = _draft.copyWith(currentCity: v);
+                        _draft = _draft.copyWith(
+                          currentCity: v,
+                          clearCurrentLocation: true,
+                          locationDetected: false,
+                        );
                       }),
                     ),
                     const SizedBox(height: MuhSpace.md),

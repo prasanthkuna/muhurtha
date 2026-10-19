@@ -128,7 +128,11 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
               TextField(
                 controller: _city,
                 onChanged: (v) =>
-                    notifier.update((d) => d.copyWith(currentCity: v)),
+                    notifier.update((d) => d.copyWith(
+                      currentCity: v,
+                      clearCurrentLocation: true,
+                      locationDetected: false,
+                    )),
                 decoration: InputDecoration(
                   labelText: l10n.fieldCurrentCity,
                   suffixIcon: _detectingLocation

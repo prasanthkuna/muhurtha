@@ -189,6 +189,7 @@ class BirthDraft {
     double? currentLat,
     double? currentLng,
     String? currentTimezone,
+    bool clearCurrentLocation = false,
     bool? locationDetected,
     OnboardingIntent? intent,
   }) {
@@ -206,9 +207,9 @@ class BirthDraft {
           : (janmaNakshatra ?? this.janmaNakshatra),
       nakshatraPada: nakshatraPada ?? this.nakshatraPada,
       nakshatraUnknown: nakshatraUnknown ?? this.nakshatraUnknown,
-      currentLat: currentLat ?? this.currentLat,
-      currentLng: currentLng ?? this.currentLng,
-      currentTimezone: currentTimezone ?? this.currentTimezone,
+      currentLat: clearCurrentLocation ? null : (currentLat ?? this.currentLat),
+      currentLng: clearCurrentLocation ? null : (currentLng ?? this.currentLng),
+      currentTimezone: clearCurrentLocation ? null : (currentTimezone ?? this.currentTimezone),
       locationDetected: locationDetected ?? this.locationDetected,
       intent: intent ?? this.intent,
     );
