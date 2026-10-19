@@ -128,7 +128,11 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
               TextField(
                 controller: _city,
                 onChanged: (v) =>
-                    notifier.update((d) => d.copyWith(currentCity: v)),
+                    notifier.update((d) => d.copyWith(
+                      currentCity: v,
+                      clearCurrentLocation: true,
+                      locationDetected: false,
+                    )),
                 decoration: InputDecoration(
                   labelText: l10n.fieldCurrentCity,
                   suffixIcon: _detectingLocation
@@ -147,6 +151,14 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
                         ),
                 ),
               ),
+              if (!draft.locationDetected)
+                Padding(
+                  padding: const EdgeInsets.only(top: MuhSpace.xs),
+                  child: Text(
+                    'Your city is used for local timing calculations; you can enter it manually.',
+                    style: theme.textTheme.bodySmall?.copyWith(color:MuhColors.inkSecondary),
+                  ),
+                ),
               if (draft.locationDetected)
                 Padding(
                   padding: const EdgeInsets.only(top: MuhSpace.xs),

@@ -210,6 +210,8 @@ class TodayPayload {
     required this.beCarefulWith,
     required this.goodWindows,
     required this.cautionWindows,
+    this.locationVerified = false,
+    this.panchanga,
     this.displayName,
     this.moonSign,
     this.moonNakshatra,
@@ -235,6 +237,8 @@ class TodayPayload {
   final List<String> beCarefulWith;
   final List<TimingWindow> goodWindows;
   final List<TimingWindow> cautionWindows;
+  final bool locationVerified;
+  final Map<String, dynamic>? panchanga;
   final String? displayName;
   final MoonSignInfo? moonSign;
   final String? moonNakshatra;
@@ -261,6 +265,8 @@ class TodayPayload {
       beCarefulWith: _stringList(j['beCarefulWith']),
       goodWindows: _windows(j['goodWindows']),
       cautionWindows: _windows(j['cautionWindows']),
+      locationVerified: j['locationVerified'] == true,
+      panchanga: j['panchanga'] is Map ? Map<String, dynamic>.from(j['panchanga'] as Map) : null,
       displayName: j['displayName']?.toString(),
       moonSign:
           j['moonSign'] != null ? MoonSignInfo.fromJson(j['moonSign']) : null,
@@ -461,6 +467,15 @@ class PurposeCheckResult {
     this.shareHook,
     this.personalSignals = const <String>[],
     this.domainLenses = const <String>[],
+    this.factors = const <Map<String, dynamic>>[],
+    this.candidateDates = const <Map<String, dynamic>>[],
+    this.supportingFactors = const <String>[],
+    this.cautionFactors = const <String>[],
+    this.limitations = const <String>[],
+    this.targetDate,
+    this.locationLabel,
+    this.timezone,
+    this.method,
   });
 
   final String id;
@@ -475,6 +490,15 @@ class PurposeCheckResult {
   final String? shareHook;
   final List<String> personalSignals;
   final List<String> domainLenses;
+  final List<Map<String, dynamic>> factors;
+  final List<Map<String, dynamic>> candidateDates;
+  final List<String> supportingFactors;
+  final List<String> cautionFactors;
+  final List<String> limitations;
+  final String? targetDate;
+  final String? locationLabel;
+  final String? timezone;
+  final String? method;
 
   factory PurposeCheckResult.fromJson(Map<String, dynamic> j) {
     return PurposeCheckResult(
@@ -490,6 +514,19 @@ class PurposeCheckResult {
       shareHook: j['shareHook']?.toString(),
       personalSignals: _stringList(j['personalSignals']),
       domainLenses: _stringList(j['domainLenses']),
+      factors: j['factors'] is List
+          ? (j['factors'] as List).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+          : const <Map<String, dynamic>>[],
+      candidateDates: j['candidateDates'] is List
+          ? (j['candidateDates'] as List).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+          : const <Map<String, dynamic>>[],
+      supportingFactors: _stringList(j['supportingFactors']),
+      cautionFactors: _stringList(j['cautionFactors']),
+      limitations: _stringList(j['limitations']),
+      targetDate: j['targetDate']?.toString(),
+      locationLabel: j['locationLabel']?.toString(),
+      timezone: j['timezone']?.toString(),
+      method: j['method']?.toString(),
     );
   }
 }
@@ -1063,6 +1100,24 @@ class MuhurthaEngineApi {
       chartProfileId: chartProfileId,
       extra: {
         'purpose_type': purposeType,
+        if (targetDate != null) 'target_date': targetDate,
+      },
+    );
+    return PurposeCheckResult.fromJson(m);
+  }
+
+  Future<PurposeCheckResult> purposeCompare({
+    required String purposeType,
+    String? targetDate,
+    int days = 7,
+    String? chartProfileId,
+  }) async {
+    final m = await _invoke(
+      'purpose_compare',
+      chartProfileId: chartProfileId,
+      extra: {
+        'purpose_type': purposeType,
+        'days': days.clamp(1, 30),
         if (targetDate != null) 'target_date': targetDate,
       },
     );

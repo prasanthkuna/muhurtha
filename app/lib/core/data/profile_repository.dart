@@ -75,19 +75,35 @@ class ProfileRepository {
 
     final profileId = await ensureSignedInProfile();
 
+    // The engine reads the canonical current_lat/current_lng/current_timezone
+    // columns, not only location_meta. Do not silently reuse old coordinates
+    // after the user types a different city.
+    final city = draft.currentCity?.trim();
+    final resolvedCity = city?.isNotEmpty == true
+        ? await _resolveBirthPlace(city)
+        : null;
+    final useDetected = draft.locationDetected &&
+        draft.currentLat != null && draft.currentLng != null;
+    final currentLat = useDetected ? draft.currentLat : resolvedCity?.lat;
+    final currentLng = useDetected ? draft.currentLng : resolvedCity?.lng;
+    final currentTimezone =
+        useDetected ? draft.currentTimezone : resolvedCity?.timezone;
     final locationMeta = <String, dynamic>{
-      if (draft.currentLat != null) 'current_lat': draft.currentLat,
-      if (draft.currentLng != null) 'current_lng': draft.currentLng,
-      if (draft.currentTimezone != null) 'timezone': draft.currentTimezone,
-      'detected': draft.locationDetected,
+      if (currentLat != null) 'current_lat': currentLat,
+      if (currentLng != null) 'current_lng': currentLng,
+      if (currentTimezone != null) 'timezone': currentTimezone,
+      'detected': useDetected,
+      'resolved': currentLat != null && currentLng != null,
     };
-
     await _client.from('profiles').upsert(
       {
         'id': profileId,
         'user_id': user.id,
         'display_name': draft.displayName,
         'current_city': draft.currentCity,
+        'current_lat': currentLat,
+        'current_lng': currentLng,
+        'current_timezone': currentTimezone,
         'language_code': draft.languageCode,
         'onboarding_intent': draft.intent.toJson(),
         'location_meta': locationMeta,
@@ -215,7 +231,7 @@ class ProfileRepository {
 
     final profile = await _client
         .from('profiles')
-        .select('id, display_name, current_city, language_code')
+        .select('id, display_name, current_city, current_lat, current_lng, current_timezone, location_meta, language_code')
         .eq('user_id', user.id)
         .maybeSingle();
     if (profile == null) return null;
@@ -252,6 +268,10 @@ class ProfileRepository {
       dateOfBirth: dob,
       birthPlace: b['birth_place'] as String?,
       currentCity: profile['current_city'] as String?,
+      currentLat: (profile['current_lat'] as num?)?.toDouble(),
+      currentLng: (profile['current_lng'] as num?)?.toDouble(),
+      currentTimezone: profile['current_timezone'] as String?,
+      locationDetected: (profile['location_meta'] as Map?)?['detected'] == true,
       languageCode: (profile['language_code'] as String?) ?? 'en',
       timeBucket: bucket,
       exactBirthTime: parseDbTime(b['exact_birth_time'] as String?),

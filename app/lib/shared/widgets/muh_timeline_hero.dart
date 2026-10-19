@@ -32,17 +32,10 @@ class MuhTimelineHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    final bias = dayActionBias(payload);
-    final biasLabel = switch (bias) {
-      DayActionBias.act => l10n.timelineBiasAct,
-      DayActionBias.soft => l10n.timelineBiasSoft,
-      DayActionBias.wait => l10n.timelineBiasWait,
-    };
-    final biasColor = switch (bias) {
-      DayActionBias.act => MuhColors.emerald,
-      DayActionBias.soft => MuhColors.amber,
-      DayActionBias.wait => MuhColors.maroon,
-    };
+    final biasLabel = payload.locationVerified
+        ? 'Traditional daylight guidance · not a prediction'
+        : 'Confirm your current city for verified clock times';
+    final biasColor = MuhColors.inkSecondary;
 
     final dateLine = formatTodayDateLabel(payload.date);
     final location = payload.locationLabel;

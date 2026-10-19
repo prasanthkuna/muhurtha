@@ -84,14 +84,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         transition: MuhRouteTransition.fade,
         builder: (context, state) {
           final tab = state.uri.queryParameters['tab'];
-          // Tab order: Today | Life Map | Decode | Timing | Ask (Retention §2.1).
+          // Tab order: Decode | Life Map | Today | Timing | Ask.
           final initialIndex = switch (tab) {
-            'today' || 'remedies' || 'timeline' => 0,
+            'decode' => 0,
             'life_map' || 'journey' => 1,
-            'decode' => 2,
+            'today' || 'remedies' || 'timeline' => 2,
             'timing' => 3,
             'ask' || 'purpose' => 4,
-            _ => 0,
+            _ => 2,
           };
           final purpose = state.uri.queryParameters['purpose'];
           final date = state.uri.queryParameters['date'];

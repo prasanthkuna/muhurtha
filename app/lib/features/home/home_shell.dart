@@ -37,6 +37,7 @@ import 'home_purpose_provider.dart';
 import 'home_share.dart';
 import 'widgets/pack_coverage_banner.dart';
 import 'widgets/today_timing_panel.dart';
+import 'widgets/today_panchanga_panel.dart';
 import '../../core/data/birth_pack_coverage.dart';
 import '../../core/engagement/ask_conversation_store.dart';
 import '../../core/engagement/engagement_scope.dart';
@@ -88,7 +89,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     });
   }
 
-  static const _tabNames = ['today', 'life_map', 'decode', 'timing', 'ask'];
+  static const _tabNames = ['decode', 'life_map', 'today', 'timing', 'ask'];
 
   void _syncTabFromRoute() {
     final tab = GoRouterState.of(context).uri.queryParameters['tab'];
@@ -195,9 +196,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       }
     });
     final pages = <Widget>[
-      _TodayFocusTab(l10n: l10n, purposeLabel: _purposeLabel),
-      LifeAtlasTab(l10n: l10n),
       DecodeEditorialTab(l10n: l10n),
+      LifeAtlasTab(l10n: l10n),
+      _TodayFocusTab(l10n: l10n, purposeLabel: _purposeLabel),
       TimingEditorialTab(l10n: l10n, purposeLabel: _purposeLabel),
       _AskTab(
         l10n: l10n,
@@ -276,9 +277,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             onDestinationSelected: _selectTab,
             destinations: [
               NavigationDestination(
-                icon: const Icon(MuhTabIcons.today),
-                selectedIcon: const Icon(MuhTabIcons.todaySelected),
-                label: _navLabel('today'),
+                icon: const Icon(MuhTabIcons.decode),
+                selectedIcon: const Icon(MuhTabIcons.decodeSelected),
+                label: _navLabel('decode'),
               ),
               NavigationDestination(
                 icon: const Icon(MuhTabIcons.lifeMap),
@@ -286,9 +287,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 label: _navLabel('life_map'),
               ),
               NavigationDestination(
-                icon: const Icon(MuhTabIcons.decode),
-                selectedIcon: const Icon(MuhTabIcons.decodeSelected),
-                label: _navLabel('decode'),
+                icon: const Icon(MuhTabIcons.today),
+                selectedIcon: const Icon(MuhTabIcons.todaySelected),
+                label: _navLabel('today'),
               ),
               NavigationDestination(
                 icon: const Icon(MuhTabIcons.timing),
@@ -434,6 +435,13 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
                 personalizing: true,
               ),
               const SizedBox(height: MuhSpace.md),
+              TodayPanchangaPanel(
+                locationVerified: payload.locationVerified,
+                locationLabel: payload.locationLabel,
+                panchanga: payload.panchanga,
+                onSetLocation: () => context.push('/profile'),
+              ),
+              const SizedBox(height: MuhSpace.md),
               TodayTimingPanel(
                 payload: payload,
                 goodTitle: copy.goodWindow,
@@ -446,9 +454,13 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
         }
         final views = BirthPackViews(pack);
         final playbook = views.playbookFor(payload.date);
-        final mainAdvice = playbook?.oneLine.trim().isNotEmpty == true
+        final generatedAdvice = playbook?.oneLine.trim().isNotEmpty == true
             ? playbook!.oneLine.trim()
             : payload.oneLine ?? '';
+        final mainAdvice = !payload.locationVerified &&
+                RegExp(r'\b\d{1,2}:\d{2}\b').hasMatch(generatedAdvice)
+            ? 'Confirm your current city to verify today\'s clock-time guidance.'
+            : generatedAdvice;
         final detailedAdvice = playbook?.body.trim() ?? '';
         final goodSummary = playbook?.goodSummary ?? '';
         final avoidSummary = playbook?.avoidSummary ?? '';
@@ -508,6 +520,28 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
             MuhTimelineHero(
               payload: payload,
               headline: mainAdvice.isNotEmpty ? mainAdvice : (payload.oneLine ?? ''),
+            ),
+            if (payload.lifeChapter != null && payload.lifeChapter!.summary.isNotEmpty) ...[
+              const SizedBox(height: MuhSpace.md),
+              HomeProseCard(
+                eyebrow: 'YOUR CURRENT CHAPTER',
+                title: payload.lifeChapter!.currentChapterLabel.isNotEmpty
+                  ? payload.lifeChapter!.currentChapterLabel
+                  : payload.lifeChapter!.title,
+                body: payload.lifeChapter!.summary,
+              ),
+              MuhQuietButton(
+                label: 'Read this chapter in Life Map',
+                icon: Icons.auto_stories_outlined,
+                onPressed: () => context.go('/home?tab=life_map'),
+              ),
+            ],
+            const SizedBox(height: MuhSpace.md),
+            TodayPanchangaPanel(
+              locationVerified: payload.locationVerified,
+              locationLabel: payload.locationLabel,
+              panchanga: payload.panchanga,
+              onSetLocation: () => context.push('/profile'),
             ),
             if (detailedAdvice.isNotEmpty && detailedAdvice != mainAdvice)
               ExpansionTile(
@@ -677,6 +711,7 @@ class _AskTabState extends State<_AskTab> {
   bool? _answerUseful;
   List<AskTurn> _history = const [];
   var _loadedHistory = false;
+  var _showFullHistory = false;
 
   String get _lang =>
       widget.ref.read(localeProvider).languageCode.toLowerCase();
@@ -914,6 +949,7 @@ class _AskTabState extends State<_AskTab> {
   }
 
   Widget _askBody(ThemeData theme, {BirthPackPayload? pack}) {
+    final currentChapter = pack != null ? BirthPackViews(pack).currentChapter : null;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -945,6 +981,32 @@ class _AskTabState extends State<_AskTab> {
             onSend: _ask,
             sending: _result?.isLoading ?? false,
           ),
+          if (currentChapter != null && currentChapter.title.isNotEmpty) ...[
+            const SizedBox(height: MuhSpace.md),
+            Container(
+              padding: const EdgeInsets.all(MuhSpace.md),
+              decoration: BoxDecoration(
+                color: MuhColors.goldWash,
+                borderRadius: BorderRadius.circular(MuhRadius.card),
+              ),
+              child: Column(
+                crossAxisAlignment:CrossAxisAlignment.start,
+                children:[
+                  Text('FROM YOUR LIFE MAP',
+                    style:theme.textTheme.labelSmall?.copyWith(color:MuhColors.goldDeep)),
+                  const SizedBox(height:MuhSpace.xs),
+                  Text(currentChapter.title,style:theme.textTheme.titleMedium),
+                  MuhQuietButton(
+                    label:'Ask about this chapter',
+                    onPressed:(){
+                      _controller.text = 'Explain my current life chapter and its main themes.';
+                      _controller.selection = TextSelection.collapsed(offset:_controller.text.length);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: MuhSpace.lg),
           Text(
             _tx('suggested'),
@@ -980,7 +1042,7 @@ class _AskTabState extends State<_AskTab> {
               ),
             ),
             const SizedBox(height: MuhSpace.sm),
-            for (final turn in _history.reversed.take(6))
+            for (final turn in _history.reversed.take(_showFullHistory ? _history.length : 6))
               Padding(
                 padding: const EdgeInsets.only(bottom: MuhSpace.md),
                 child: Container(
@@ -1011,6 +1073,12 @@ class _AskTabState extends State<_AskTab> {
                     ],
                   ),
                 ),
+              ),
+            if (_history.length > 6)
+              MuhQuietButton(
+                label: _showFullHistory ? 'Show fewer' : 'Show all recent conversations',
+                icon: _showFullHistory ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                onPressed: () => setState(() => _showFullHistory = !_showFullHistory),
               ),
           ],
           const SizedBox(height: MuhSpace.xl),

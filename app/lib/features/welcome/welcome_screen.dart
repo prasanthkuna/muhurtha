@@ -119,7 +119,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen>
               const SizedBox(height: MuhSpace.xxl),
               MuhBrandMark(
                 title: l10n.appTitle,
-                subtitle: 'purpose-first timing',
+                subtitle: 'Your story · Your chapters · Your timing',
                 markSize: 52,
                 compact: true,
               ),

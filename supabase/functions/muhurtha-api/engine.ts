@@ -4,6 +4,7 @@ import { antardashaFallbackCopy, plainPeriodLabel } from "./copy.ts";
 import { resolveBirthPlace, resolveCoordinates } from "./geo_resolver.ts";
 import { attachNatalLuckToContent, buildNatalLuck } from "./natal_luck.ts";
 import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
+import { evaluateDay } from "./panchanga.ts";
 import {
   allAntardashasFromMahadashas,
   type AdSegment,
@@ -151,21 +152,6 @@ function requireProfile(prof: ProfRow | null, action: string): ProfRow {
   return prof;
 }
 
-/** Small deterministic spread so different purposes rarely tie on the same day. */
-const PURPOSE_SCORE_BIAS: Record<string, number> = {
-  career_interview: 4,
-  business_launch: 2,
-  money_talk: -2,
-  property_vehicle: 1,
-  relationship_marriage_talk: 3,
-  family_discussion: 0,
-  travel: 5,
-  study_exam: 1,
-  health_routine: -4,
-  legal_dispute: -3,
-  spiritual_puja: 2,
-  creative_public: 3,
-};
 
 export function resolveEngineMode(bi: BioRow): string {
   const hasExact = bi.exact_birth_time != null;
@@ -3647,12 +3633,14 @@ async function _handleInternal(
     const dateStr = (body.date as string) ?? todayInTimezone(tz);
 
     const refInstant = parseDateAsUtcInstant(dateStr, tz);
-    const lat = Number(profile.current_lat ?? DEFAULT_LAT);
-    const lng = Number(profile.current_lng ?? DEFAULT_LNG);
-
-    const sun = sunriseSunset(refInstant, lat, lng);
-    const slices = divideDaylight(sun, refInstant.getUTCDay());
-    const { good, caution } = goodAndCautionWindows(slices, tz);
+    const lat = profile.current_lat == null ? NaN : Number(profile.current_lat);
+    const lng = profile.current_lng == null ? NaN : Number(profile.current_lng);
+    const locationVerified = Number.isFinite(lat) && Number.isFinite(lng);
+    const sun = locationVerified ? sunriseSunset(refInstant, lat, lng) : null;
+    const slices = sun ? divideDaylight(sun, jsWeekday(dateStr, tz)) : [];
+    const { good, caution } = sun
+      ? goodAndCautionWindows(slices, tz)
+      : { good: [], caution: [] };
 
     const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
     const bi = await ensureBirthPlacePrecision(supabase, rawBi);
@@ -3764,8 +3752,19 @@ async function _handleInternal(
       });
     }
 
+    const panchanga = locationVerified
+      ? evaluateDay({
+          date: dateStr, zone: tz, latitude: lat, longitude: lng,
+          purpose: "today_general",
+          natalNakshatra: natalMoon?.nakshatra ?? bi?.janma_nakshatra ?? null,
+          natalRashi: natalMoon?.sign.key ?? null,
+        })
+      : null;
+
     const result = {
       cacheVersion: NARRATIVE_CACHE_VERSION,
+      locationVerified,
+      panchanga,
       locale,
       displayName: subjectName,
       date: dateStr,
@@ -4202,219 +4201,110 @@ async function _handleInternal(
     };
   }
 
-  if (action === "purpose_check") {
+  if (action === "purpose_check" || action === "purpose_compare") {
     const locale = requestLocale(body, profile);
     const access = await getSubscriptionAccess(supabase, profile.id);
-    const purposeType = body.purpose_type as string;
-    if (!purposeType) {
-      throw new ActionError(
-        "missing_purpose_type",
-        "purpose_type required",
-        400,
-      );
+    const purposeType = String(body.purpose_type ?? "").trim();
+    if (!purposeType || !Object.hasOwn(purposeRules, purposeType)) {
+      throw new ActionError("invalid_purpose_type", "Choose a supported activity", 400);
     }
-    const rules = purposeRules[purposeType] ??
-      { favor: ["Jupiter", "Mercury"], caution: ["Rahu"] };
     const tz = profile.current_timezone ?? "Asia/Kolkata";
-    const targetDate = (body.target_date as string) ?? todayInTimezone(tz);
-    const rawBi = await getLatestBirthInput(supabase, profile.id);
-    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
-    let score = 48 + (PURPOSE_SCORE_BIAS[purposeType] ?? 0);
-    let lord = "";
-    let adLordCtx = "";
-    if (bi) {
-      const { segments, nk } = computeTimeline(
-        bi,
-        profile.current_timezone ?? "Asia/Kolkata",
-      );
-      if (nk != null && segments.length) {
-        const at = zonedNoonJsDate(targetDate, tz);
-        const vl = vimshottariLordsAt(segments, at);
-        if (vl) {
-          lord = vl.mdLord;
-          adLordCtx = vl.adLord;
-          if (rules.favor.includes(vl.mdLord)) score += 26;
-          if (rules.favor.includes(vl.adLord)) score += 20;
-          if (rules.caution.includes(vl.mdLord)) score -= 20;
-          if (rules.caution.includes(vl.adLord)) score -= 16;
-        }
-      }
+    const targetDate = String(body.target_date ?? todayInTimezone(tz));
+    const local = DateTime.fromISO(targetDate, { zone: tz });
+    if (!local.isValid || local.toISODate() !== targetDate) {
+      throw new ActionError("invalid_target_date", "Choose a valid date", 400);
     }
-    if (score > 100) score = 100;
-    if (score < 0) score = 0;
-    const status = score >= 75 ? "matched" : score >= 45 ? "partly_matched" : "not_matched";
-    const day = zonedNoonJsDate(targetDate, tz);
+    const lat = profile.current_lat == null ? NaN : Number(profile.current_lat);
+    const lng = profile.current_lng == null ? NaN : Number(profile.current_lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new ActionError("location_required",
+        "Select and save your current city in Profile to calculate its local timings.", 422);
+    }
+    const bi = await getLatestBirthInput(supabase, profile.id);
+    const natal = birthMoonDetails(bi, tz, locale);
+    const compare = action === "purpose_compare";
+    const length = compare
+      ? Math.min(30, Math.max(1, Number(body.days) || 7))
+      : 1;
+    const evaluations = Array.from({ length }, (_, i) =>
+      evaluateDay({
+        date: local.plus({ days: i }).toISODate()!,
+        zone: tz, latitude: lat, longitude: lng, purpose: purposeType,
+        natalNakshatra: natal?.nakshatra ?? bi?.janma_nakshatra ?? null,
+        natalRashi: natal?.sign.key ?? null,
+      })
+    );
+    const sorted = [...evaluations].sort((a, b) =>
+      b.rank - a.rank ||
+      b.best_windows.length - a.best_windows.length ||
+      a.date.localeCompare(b.date)
+    );
+    const selected = compare ? sorted[0]! : evaluations[0]!;
+    const status = selected.status;
+    const headline = status === "limited_assessment"
+      ? "General traditional timing factors"
+      : status === "matched"
+      ? "Supportive traditional factors"
+      : status === "not_matched"
+      ? "Several traditional cautions"
+      : "Mixed traditional factors";
+    const summary =
+      "This is a traditional Panchanga comparison, not an outcome prediction. " +
+      selected.tithi.value + "; " + selected.nakshatra.value +
+      "; " + selected.yoga.value + ".";
+    const lords = bi ? computeTimeline(bi, tz) : null;
+    const at = zonedNoonJsDate(selected.date, tz);
+    const period = lords?.segments.length
+      ? vimshottariLordsAt(lords.segments, at)
+      : null;
     const kernel = buildKernelForBirthInput(
-      bi,
-      profile,
-      locale,
-      day,
-      lord,
-      adLordCtx,
+      bi, profile, locale, at, period?.mdLord ?? "", period?.adLord ?? "",
     );
-    const purposePlan = buildPurposePlan(
-      purposeType,
-      status,
-      score,
-      lord,
-      adLordCtx,
-      locale,
-      kernel,
+    const plan = buildPurposePlan(
+      purposeType, status, 0, period?.mdLord ?? "", period?.adLord ?? "", locale, kernel,
     );
-
-    const lat = profile.current_lat != null ? Number(profile.current_lat) : DEFAULT_LAT;
-    const lng = profile.current_lng != null ? Number(profile.current_lng) : DEFAULT_LNG;
-    const sun = sunriseSunset(day, lat, lng);
-    const slices = divideDaylight(sun, jsWeekday(targetDate, tz));
-    const { good, caution } = goodAndCautionWindows(slices, tz);
-
-    const best_windows = good.slice(0, 2).map((w) => ({
-      start: w.start,
-      end: w.end,
-      label: "Best window",
+    const candidates = compare ? sorted.slice(0, 5) : [];
+    const better_options = candidates.slice(1).map(e=>({
+      label:e.date,
+      detail:[...e.support,...e.caution].slice(0,2).join("; ") ||
+        "General location-based traditional factors",
     }));
-    const caution_windows = caution.slice(0, 2).map((w) => ({
-      start: w.start,
-      end: w.end,
-      label: w.label,
-    }));
-
-    let better_options = status === "not_matched"
-      ? [{
-        label: locale === "te" ? "రేపు ఉదయం" : locale === "hi" ? "कल सुबह" : "Tomorrow morning",
-        detail: purposePlan.betterOptionSeed ??
-          (locale === "te"
-            ? "సూర్యోదయానికి తరువాత మళ్లీ ప్రయత్నించండి. మొదటి రాహు భాగాన్ని తప్పించి అడుగును చిన్నగా ఉంచండి."
-            : locale === "hi"
-            ? "सूर्योदय के बाद फिर से कोशिश करें। पहले राहु हिस्से से बचें और कदम छोटा रखें।"
-            : "Retry after sunrise, avoiding the first Rahu segment. Keep the step small and clear."),
-      }]
-      : [];
-
-    let headline = purposePlan.headline;
-    let summary = status === "matched"
-      ? "The current life-period rhythm leans supportive for this purpose—still use common sense."
-      : status === "partly_matched"
-      ? "Mixed support: workable if you keep logistics clean and tone gentle."
-      : "Not the strongest match for this purpose today—shift timing rather than forcing the moment.";
-
-    let action_line = status === "not_matched"
-      ? "Pick the next clear morning window or shorten the ask."
-      : "Proceed with a written note of what success means.";
-    let timing_note = purposePlan.supportSummary;
-    let shareHook = purposePlan.shareHook;
-
-    const pcopy = await generatePurposeCopy(locale, {
-      purpose_type: purposeType,
-      status,
-      score,
-      md_lord: lord,
-      ad_lord: adLordCtx,
-      target_date: targetDate,
-      age: bi ? calculateAge(bi.date_of_birth) : undefined,
-      planner: purposePlan,
-      purpose_lens: kernel?.purposeLenses[purposeType],
-      personalization_kernel: kernel,
-      domain_lenses: purposePlan.domainLenses,
-      best_windows,
-      caution_windows,
-      suggest_alternatives: status === "not_matched",
-    }, { supabase, profileId: profile.id });
-    if (pcopy?.data.headline?.trim()) headline = pcopy.data.headline.trim();
-    if (pcopy?.data.summary) summary = pcopy.data.summary;
-    if (pcopy?.data.action_line) action_line = pcopy.data.action_line;
-    if (pcopy?.data.timing_note) timing_note = pcopy.data.timing_note;
-    if (pcopy?.data.share_hook?.trim()) shareHook = pcopy.data.share_hook.trim();
-    if (Array.isArray(pcopy?.data.better_options) && pcopy.data.better_options.length > 0) {
-      better_options = pcopy.data.better_options.map((b: { label: string; detail: string }) => ({
-        label: String(b.label),
-        detail: String(b.detail),
-      }));
-    }
-
-    const ctx = {
-      score,
-      purposeType,
-      lord,
-      ad_lord: adLordCtx,
-      rules,
-      planner: purposePlan,
-      provenance: pcopy
-        ? buildProvenance({
-          promptVersion: pcopy.promptVersion,
-          provider: pcopy.provider,
-          model: pcopy.model,
-          source: "llm",
-          factSignature: buildFactSignature([
-            profile.id,
-            bi?.id,
-            purposeType,
-            targetDate,
-            locale,
-            KERNEL_VERSION,
-            status,
-            score.toString(),
-            lord,
-            adLordCtx,
-            purposePlan.domainLenses.join(","),
-            purposePlan.personalSignals.join(","),
-          ]),
-        })
-        : buildProvenance({
-          promptVersion: CONTENT_PROMPT_VERSION,
-          provider: "deterministic",
-          model: "none",
-          source: "fallback",
-          factSignature: buildFactSignature([
-            profile.id,
-            bi?.id,
-            purposeType,
-            targetDate,
-            locale,
-            KERNEL_VERSION,
-            status,
-            score.toString(),
-            lord,
-            adLordCtx,
-            purposePlan.domainLenses.join(","),
-            purposePlan.personalSignals.join(","),
-          ]),
-        }),
-    };
-
-    // This is a calculated, transient interpretation. The old purpose_checks
-    // table was retired; do not issue writes to a missing table.
-    // The client can store an explicitly user-saved intention separately.
-    const purposeCheckId = crypto.randomUUID();
-
-    let responseBetterOptions = better_options;
-    if (!access.isPlus && responseBetterOptions.length > 0) {
-      responseBetterOptions = [{
-        label: locale === "te"
-          ? "Pro తో మంచి రోజులు"
-          : locale === "hi"
-          ? "Pro से बेहतर दिन"
-          : "Better days with Pro",
-        detail: lockedTeaser(locale),
-      }];
-    }
-
     return {
-      id: purposeCheckId,
-      status,
-      headline,
-      summary,
-      action_line,
-      timing_note,
-      shareHook,
-      best_windows,
-      caution_windows,
-      better_options: responseBetterOptions,
-      domainLenses: purposePlan.domainLenses,
-      personalSignals: purposePlan.personalSignals,
-      provenance: ctx.provenance,
-      locale,
-      access: buildAccessPayload(access),
+      id:crypto.randomUUID(),status,headline,summary,
+      action_line: "Consider real-world availability, preparation and professional advice first.",
+      timing_note: selected.limitations.join(" "),
+      shareHook: plan.shareHook,
+      best_windows:selected.best_windows,
+      caution_windows:selected.caution_windows,
+      better_options,
+      domainLenses:plan.domainLenses,
+      personalSignals:plan.personalSignals,
+      factors:[
+        selected.tithi, selected.nakshatra, selected.yoga,
+        selected.karana, selected.vara,
+        ...(selected.tarabala ? [selected.tarabala] : []),
+        ...(selected.chandrabala ? [selected.chandrabala] : []),
+      ],
+      supportingFactors:selected.support,
+      cautionFactors:selected.caution,
+      limitations:selected.limitations,
+      targetDate:selected.date, timezone:tz,
+      locationLabel:profile.current_city ?? "Selected city",
+      method:selected.method,
+      candidateDates:candidates.map(e=>({
+        date:e.date,status:e.status,
+        tithi:e.tithi.value,nakshatra:e.nakshatra.value,
+        support:e.support,caution:e.caution,rank:e.rank,
+        best_windows:e.best_windows.slice(0,2),
+        limitations:e.limitations,
+      })),
+      provenance:buildProvenance({
+        promptVersion:"panchanga-v1",provider:"deterministic",model:"none",
+        source:"fallback",factSignature:buildFactSignature([
+          profile.id,bi?.id,purposeType,selected.date,tz,lat.toString(),lng.toString(),selected.method
+        ]),
+      }),
+      locale,access:buildAccessPayload(access),
     };
   }
 

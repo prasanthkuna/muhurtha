@@ -131,6 +131,23 @@ class _LifeAtlasTabState extends ConsumerState<LifeAtlasTab> {
           subtitle: '',
           onRefresh: () async => ref.invalidate(birthPackProvider),
           children: [
+            Wrap(
+              spacing: MuhSpace.sm,
+              children: const <(String,String)>[
+                ('past','Past'),('current','Now'),('future','Ahead'),
+              ].map((stage) {
+                final exists = chapters.any((e) => e.$2 == stage.$1);
+                return ChoiceChip(
+                  label: Text(stage.$2),
+                  selected: tense == stage.$1,
+                  onSelected: exists ? (_) {
+                    final next = chapters.firstWhere((e) => e.$2 == stage.$1);
+                    setState(() => _selectedId = next.$1.periodLabel);
+                  } : null,
+                );
+              }).toList(),
+            ),
+            const SizedBox(height:MuhSpace.md),
             MuhPeriodRail(
               items: chapters
                   .map(
