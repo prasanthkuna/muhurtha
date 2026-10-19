@@ -57,7 +57,7 @@ class _TodayTimingPanelState extends State<TodayTimingPanel> {
     final good = widget.payload.goodWindows;
     if (good.isEmpty) return null;
     final w = good.first;
-    return '${widget.goodTitle}: ${clock12h(clockHm(w.start))}–${clock12h(clockHm(w.end))}';
+    return '${widget.goodTitle} (general Panchanga): ${clock12h(clockHm(w.start))}–${clock12h(clockHm(w.end))}';
   }
 
   @override

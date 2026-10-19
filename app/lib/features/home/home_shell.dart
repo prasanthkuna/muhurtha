@@ -88,7 +88,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     });
   }
 
-  static const _tabNames = ['today', 'life_map', 'decode', 'timing', 'ask'];
+  static const _tabNames = ['decode', 'life_map', 'today', 'timing', 'ask'];
 
   void _syncTabFromRoute() {
     final tab = GoRouterState.of(context).uri.queryParameters['tab'];
@@ -195,9 +195,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       }
     });
     final pages = <Widget>[
-      _TodayFocusTab(l10n: l10n, purposeLabel: _purposeLabel),
-      LifeAtlasTab(l10n: l10n),
       DecodeEditorialTab(l10n: l10n),
+      LifeAtlasTab(l10n: l10n),
+      _TodayFocusTab(l10n: l10n, purposeLabel: _purposeLabel),
       TimingEditorialTab(l10n: l10n, purposeLabel: _purposeLabel),
       _AskTab(
         l10n: l10n,
@@ -276,9 +276,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             onDestinationSelected: _selectTab,
             destinations: [
               NavigationDestination(
-                icon: const Icon(MuhTabIcons.today),
-                selectedIcon: const Icon(MuhTabIcons.todaySelected),
-                label: _navLabel('today'),
+                icon: const Icon(MuhTabIcons.decode),
+                selectedIcon: const Icon(MuhTabIcons.decodeSelected),
+                label: _navLabel('decode'),
               ),
               NavigationDestination(
                 icon: const Icon(MuhTabIcons.lifeMap),
@@ -286,9 +286,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 label: _navLabel('life_map'),
               ),
               NavigationDestination(
-                icon: const Icon(MuhTabIcons.decode),
-                selectedIcon: const Icon(MuhTabIcons.decodeSelected),
-                label: _navLabel('decode'),
+                icon: const Icon(MuhTabIcons.today),
+                selectedIcon: const Icon(MuhTabIcons.todaySelected),
+                label: _navLabel('today'),
               ),
               NavigationDestination(
                 icon: const Icon(MuhTabIcons.timing),

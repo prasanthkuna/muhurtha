@@ -13,7 +13,7 @@ const TITHIS = ["Pratipada","Dwitiya","Tritiya","Chaturthi","Panchami","Shashthi
 const YOGAS = ["Vishkambha","Priti","Ayushman","Saubhagya","Shobhana","Atiganda","Sukarma","Dhriti","Shula","Ganda","Vriddhi","Dhruva","Vyaghata","Harshana","Vajra","Siddhi","Vyatipata","Variyan","Parigha","Shiva","Siddha","Sadhya","Shubha","Shukla","Brahma","Indra","Vaidhriti"];
 const KARANAS = ["Bava","Balava","Kaulava","Taitila","Garaja","Vanija","Vishti"];
 const WEEKDAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-const RASHIS = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
+const RASHIS = ["mesha","vrishabha","mithuna","karka","simha","kanya","tula","vrishchika","dhanu","makara","kumbha","meena"];
 const TARAS = ["Janma","Sampat","Vipat","Kshema","Pratyak","Sadhana","Naidhana","Mitra","Parama Mitra"];
 const norm = (degrees: number) => ((degrees % 360) + 360) % 360;
 function sunSidereal(instant: Date): number {
