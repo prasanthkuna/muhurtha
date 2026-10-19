@@ -214,7 +214,7 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
               Wrap(
                 spacing:MuhSpace.sm,
                 children:[7,14,30].map((n)=>ChoiceChip(
-                  label:Text(n.toString() + ' days'),
+                  label:Text('$n days'),
                   selected:_comparisonDays==n,
                   onSelected:(_)=>setState((){
                     _comparisonDays=n;
@@ -368,7 +368,7 @@ class _PurposeResultCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (result.locationLabel?.isNotEmpty == true)
-            Text((result.locationLabel ?? '') + ' · ' + (result.timezone ?? ''),
+            Text('${result.locationLabel ?? ''} · ${result.timezone ?? ''}',
               style: Theme.of(context).textTheme.bodySmall),
           if (result.bestWindows.isNotEmpty) ...[
             const SizedBox(height: MuhSpace.md),
@@ -376,7 +376,7 @@ class _PurposeResultCard extends StatelessWidget {
             for (final window in result.bestWindows)
               Padding(
                 padding:const EdgeInsets.only(top:MuhSpace.xs),
-                child:Text(window.start + '–' + window.end + ' · ' + window.label,
+                child:Text('${window.start}–${window.end} · ${window.label}',
                   style:Theme.of(context).textTheme.bodyMedium),
               ),
           ],
@@ -386,7 +386,7 @@ class _PurposeResultCard extends StatelessWidget {
             for (final window in result.cautionWindows)
               Padding(
                 padding:const EdgeInsets.only(top:MuhSpace.xs),
-                child:Text(window.start + '–' + window.end + ' · ' + window.label,
+                child:Text('${window.start}–${window.end} · ${window.label}',
                   style:Theme.of(context).textTheme.bodyMedium),
               ),
           ],
@@ -418,8 +418,7 @@ class _PurposeResultCard extends StatelessWidget {
               ListTile(
                 contentPadding:EdgeInsets.zero,
                 title:Text(item['date']?.toString() ?? ''),
-                subtitle:Text((item['nakshatra']?.toString() ?? '') +
-                  ' · ' + (item['tithi']?.toString() ?? '')),
+                subtitle:Text('${item['nakshatra'] ?? ''} · ${item['tithi'] ?? ''}'),
                 trailing:const Icon(Icons.chevron_right_rounded),
                 onTap:()=>onDateSelected(item['date']?.toString() ?? ''),
               ),
@@ -427,7 +426,7 @@ class _PurposeResultCard extends StatelessWidget {
           if (result.betterOptions.isNotEmpty && result.candidateDates.isEmpty) ...[
             const SizedBox(height:MuhSpace.sm),
             for(final option in result.betterOptions)
-              Text((option['label'] ?? '') + ' · ' + (option['detail'] ?? ''),
+              Text('${option['label'] ?? ''} · ${option['detail'] ?? ''}',
                 style:Theme.of(context).textTheme.bodyMedium),
           ],
           const SizedBox(height:MuhSpace.sm),

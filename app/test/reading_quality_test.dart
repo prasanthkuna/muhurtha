@@ -55,10 +55,10 @@ void main() {
       'date':'2026-10-20',
       'locationLabel':'Hyderabad',
       'locationVerified':false,
-      'goodWindows':[],
-      'cautionWindows':[],
-      'betterFor':[],
-      'beCarefulWith':[],
+      'goodWindows':<dynamic>[],
+      'cautionWindows':<dynamic>[],
+      'betterFor':<dynamic>[],
+      'beCarefulWith':<dynamic>[],
     });
     expect(today.locationVerified,isFalse);
     expect(today.panchanga,isNull);
@@ -67,7 +67,7 @@ void main() {
   test('parsed Panchanga and date comparisons remain inspectable', () {
     final today = TodayPayload.fromJson({
       'date':'2026-10-20','locationLabel':'Hyderabad','locationVerified':true,
-      'betterFor':[],'beCarefulWith':[],'goodWindows':[],'cautionWindows':[],
+      'betterFor':<dynamic>[],'beCarefulWith':<dynamic>[],'goodWindows':<dynamic>[],'cautionWindows':<dynamic>[],
       'panchanga':{'tithi':{'value':'Shukla Pratipada'},'method':'test'}
     });
     expect(today.locationVerified,isTrue);
@@ -75,7 +75,7 @@ void main() {
     final timing = PurposeCheckResult.fromJson({
       'status':'limited_assessment','headline':'General facts','summary':'',
       'best_windows':[{'start':'11:00','end':'12:00','label':'General'}],
-      'caution_windows':[],
+      'caution_windows':<dynamic>[],
       'factors':[{'name':'Tithi','value':'Pratipada'}],
       'candidateDates':[{'date':'2026-10-20'}],
       'limitations':['Specialist rules needed'],
