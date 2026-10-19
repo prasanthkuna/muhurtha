@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:muhurta/l10n/app_localizations.dart';
 
 import '../../../core/analytics/app_analytics.dart';
@@ -51,6 +52,8 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
   AsyncValue<PurposeCheckResult?>? _result;
   var _outlookExpanded = false;
   var _autoEvaluated = false;
+  var _compareMode = false;
+  var _comparisonDays = 7;
 
   @override
   void initState() {
@@ -81,10 +84,16 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
         ref.read(birthPackProvider).valueOrNull?.date;
     setState(() => _result = const AsyncValue.loading());
     try {
-      final r = await api.purposeCheck(
-        purposeType: purpose,
-        targetDate: targetDate?.isNotEmpty == true ? targetDate : null,
-      );
+      final r = _compareMode
+          ? await api.purposeCompare(
+              purposeType: purpose,
+              targetDate: targetDate?.isNotEmpty == true ? targetDate : null,
+              days: _comparisonDays,
+            )
+          : await api.purposeCheck(
+              purposeType: purpose,
+              targetDate: targetDate?.isNotEmpty == true ? targetDate : null,
+            );
       setState(() => _result = AsyncValue.data(r));
       unawaited(
         ref.read(appAnalyticsProvider).purposeSelected(purpose: purpose),
@@ -131,6 +140,18 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
           children: [
             PackCoverageBanner(pack: pack),
             const SizedBox(height: MuhSpace.md),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value:false,label:Text('Check a date'),icon:Icon(Icons.event)),
+                ButtonSegment(value:true,label:Text('Find a date'),icon:Icon(Icons.date_range)),
+              ],
+              selected: {_compareMode},
+              onSelectionChanged:(v)=>setState((){
+                _compareMode=v.first;
+                _result=null;
+              }),
+            ),
+            const SizedBox(height: MuhSpace.md),
             Text(
               l10n.purposeChoose,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -151,6 +172,7 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
                   onTap: () {
                     ref.read(homeSelectedPurposeProvider.notifier).state =
                         entry.value;
+                    setState(() => _result = null);
                   },
                 );
               }).toList(),
@@ -185,9 +207,25 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
                 }
               },
             ),
+            if (_compareMode) ...[
+              const SizedBox(height: MuhSpace.sm),
+              Text('Compare the next',style:Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: MuhSpace.xs),
+              Wrap(
+                spacing:MuhSpace.sm,
+                children:[7,14,30].map((n)=>ChoiceChip(
+                  label:Text(n.toString() + ' days'),
+                  selected:_comparisonDays==n,
+                  onSelected:(_)=>setState((){
+                    _comparisonDays=n;
+                    _result=null;
+                  }),
+                )).toList(),
+              ),
+            ],
             const SizedBox(height: MuhSpace.sm),
             MuhQuietButton(
-              label: l10n.purposeCheck,
+              label: _compareMode ? 'Compare traditional dates' : l10n.purposeCheck,
               icon: Icons.event_available_outlined,
               enabled: selectedPurpose != null && selectedPurpose.isNotEmpty,
               onPressed: _evaluate,
@@ -199,6 +237,11 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
                   if (r == null) return const SizedBox.shrink();
                   return _PurposeResultCard(
                     result: r,
+                    onDateSelected: (date) {
+                      ref.read(homeTimingTargetDateProvider.notifier).state = date;
+                      setState(() { _compareMode = false; _result = null; });
+                      unawaited(_evaluate());
+                    },
                     onWhy: () => MuhWhyDrawer.show(
                       context,
                       plain: r.summary,
@@ -244,9 +287,20 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
                   message: l10n.loadingTimingPlan,
                   kind: MuhInlineStatusKind.loading,
                 ),
-                error: (_, __) => MuhInlineStatus(
-                  message: l10n.errorGeneric,
-                  kind: MuhInlineStatusKind.empty,
+                error: (error, __) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MuhInlineStatus(
+                      message: error is EngineException ? error.message : l10n.errorGeneric,
+                      kind: MuhInlineStatusKind.empty,
+                    ),
+                    if (error is EngineException && error.code == 'location_required')
+                      MuhQuietButton(
+                        label: 'Set current city',
+                        icon: Icons.place_outlined,
+                        onPressed: () => context.push('/profile'),
+                      ),
+                  ],
                 ),
               ),
             const SizedBox(height: MuhSpace.lg),
@@ -291,12 +345,14 @@ class _PurposeResultCard extends StatelessWidget {
     required this.onWhy,
     required this.onSave,
     required this.onShare,
+    required this.onDateSelected,
   });
 
   final PurposeCheckResult result;
   final VoidCallback onWhy;
   final VoidCallback onSave;
   final VoidCallback onShare;
+  final void Function(String) onDateSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -311,6 +367,73 @@ class _PurposeResultCard extends StatelessWidget {
       footer: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (result.locationLabel?.isNotEmpty == true)
+            Text((result.locationLabel ?? '') + ' · ' + (result.timezone ?? ''),
+              style: Theme.of(context).textTheme.bodySmall),
+          if (result.bestWindows.isNotEmpty) ...[
+            const SizedBox(height: MuhSpace.md),
+            Text('General daylight windows',style:Theme.of(context).textTheme.titleSmall),
+            for (final window in result.bestWindows)
+              Padding(
+                padding:const EdgeInsets.only(top:MuhSpace.xs),
+                child:Text(window.start + '–' + window.end + ' · ' + window.label,
+                  style:Theme.of(context).textTheme.bodyMedium),
+              ),
+          ],
+          if (result.cautionWindows.isNotEmpty) ...[
+            const SizedBox(height: MuhSpace.md),
+            Text('Traditional caution intervals',style:Theme.of(context).textTheme.titleSmall),
+            for (final window in result.cautionWindows)
+              Padding(
+                padding:const EdgeInsets.only(top:MuhSpace.xs),
+                child:Text(window.start + '–' + window.end + ' · ' + window.label,
+                  style:Theme.of(context).textTheme.bodyMedium),
+              ),
+          ],
+          if (result.factors.isNotEmpty) ...[
+            const SizedBox(height:MuhSpace.md),
+            ExpansionTile(
+              tilePadding:EdgeInsets.zero,
+              title:const Text('Calculated factors & why'),
+              children:[
+                for (final factor in result.factors)
+                  ListTile(
+                    dense:true,
+                    title:Text(factor['name']?.toString() ?? ''),
+                    subtitle:Text(factor['value']?.toString() ?? ''),
+                  ),
+                for(final limitation in result.limitations)
+                  Padding(
+                    padding:const EdgeInsets.only(bottom:MuhSpace.sm),
+                    child:Text(limitation,style:Theme.of(context).textTheme.bodySmall),
+                  ),
+              ],
+            ),
+          ],
+          if (result.candidateDates.isNotEmpty) ...[
+            const SizedBox(height:MuhSpace.md),
+            Text('Compared dates · choose one to inspect',
+              style:Theme.of(context).textTheme.titleSmall),
+            for(final item in result.candidateDates)
+              ListTile(
+                contentPadding:EdgeInsets.zero,
+                title:Text(item['date']?.toString() ?? ''),
+                subtitle:Text((item['nakshatra']?.toString() ?? '') +
+                  ' · ' + (item['tithi']?.toString() ?? '')),
+                trailing:const Icon(Icons.chevron_right_rounded),
+                onTap:()=>onDateSelected(item['date']?.toString() ?? ''),
+              ),
+          ],
+          if (result.betterOptions.isNotEmpty && result.candidateDates.isEmpty) ...[
+            const SizedBox(height:MuhSpace.sm),
+            for(final option in result.betterOptions)
+              Text((option['label'] ?? '') + ' · ' + (option['detail'] ?? ''),
+                style:Theme.of(context).textTheme.bodyMedium),
+          ],
+          const SizedBox(height:MuhSpace.sm),
+          Text('Traditional interpretation only; practical constraints come first.',
+            style:Theme.of(context).textTheme.bodySmall),
+
           MuhQuietButton(
             label: 'Why this reading',
             onPressed: onWhy,
