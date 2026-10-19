@@ -77,6 +77,22 @@ class _TodayTimingPanelState extends State<TodayTimingPanel> {
               fontWeight: FontWeight.w600,
             ),
           ),
+        if (widget.betterFor.isNotEmpty || widget.beCareful.isNotEmpty) ...[
+          const SizedBox(height:MuhSpace.sm),
+          Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(l10n.v3BetterFor,
+                style:theme.textTheme.labelMedium?.copyWith(color:MuhColors.successInk)),
+              Text(widget.betterFor.take(2).join(' · '),style:theme.textTheme.bodyMedium),
+            ])),
+            const SizedBox(width:MuhSpace.md),
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(l10n.v3CarefulWith,
+                style:theme.textTheme.labelMedium?.copyWith(color:MuhColors.warningInk)),
+              Text(widget.beCareful.take(2).join(' · '),style:theme.textTheme.bodyMedium),
+            ])),
+          ]),
+        ],
         const SizedBox(height: MuhSpace.sm),
         MuhQuietButton(
           label: _expanded ? 'Hide full timeline' : 'Show full timeline',

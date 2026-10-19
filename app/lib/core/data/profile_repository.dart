@@ -231,7 +231,7 @@ class ProfileRepository {
 
     final profile = await _client
         .from('profiles')
-        .select('id, display_name, current_city, language_code')
+        .select('id, display_name, current_city, current_lat, current_lng, current_timezone, location_meta, language_code')
         .eq('user_id', user.id)
         .maybeSingle();
     if (profile == null) return null;
@@ -268,6 +268,10 @@ class ProfileRepository {
       dateOfBirth: dob,
       birthPlace: b['birth_place'] as String?,
       currentCity: profile['current_city'] as String?,
+      currentLat: (profile['current_lat'] as num?)?.toDouble(),
+      currentLng: (profile['current_lng'] as num?)?.toDouble(),
+      currentTimezone: profile['current_timezone'] as String?,
+      locationDetected: (profile['location_meta'] as Map?)?['detected'] == true,
       languageCode: (profile['language_code'] as String?) ?? 'en',
       timeBucket: bucket,
       exactBirthTime: parseDbTime(b['exact_birth_time'] as String?),

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:muhurta/core/data/birth_pack_views.dart';
 import 'package:muhurta/core/data/life_period_matching.dart';
 import 'package:muhurta/core/data/muhurtha_engine_api.dart';
+import 'package:muhurta/features/onboarding/birth_draft.dart';
 
 BirthPackPayload pack(Map<String, dynamic> content) => BirthPackPayload(
   date: '2026-10-16',
@@ -49,4 +50,50 @@ void main() {
     expect(views.chapters.length, 1);
     expect(views.chapters.single.title, 'A more personal chapter');
   });
+  test('missing city coordinates cannot be mistaken for verified Today', () {
+    final today = TodayPayload.fromJson({
+      'date':'2026-10-20',
+      'locationLabel':'Hyderabad',
+      'locationVerified':false,
+      'goodWindows':[],
+      'cautionWindows':[],
+      'betterFor':[],
+      'beCarefulWith':[],
+    });
+    expect(today.locationVerified,isFalse);
+    expect(today.panchanga,isNull);
+    expect(today.goodWindows,isEmpty);
+  });
+  test('parsed Panchanga and date comparisons remain inspectable', () {
+    final today = TodayPayload.fromJson({
+      'date':'2026-10-20','locationLabel':'Hyderabad','locationVerified':true,
+      'betterFor':[],'beCarefulWith':[],'goodWindows':[],'cautionWindows':[],
+      'panchanga':{'tithi':{'value':'Shukla Pratipada'},'method':'test'}
+    });
+    expect(today.locationVerified,isTrue);
+    expect((today.panchanga?['tithi'] as Map)['value'],'Shukla Pratipada');
+    final timing = PurposeCheckResult.fromJson({
+      'status':'limited_assessment','headline':'General facts','summary':'',
+      'best_windows':[{'start':'11:00','end':'12:00','label':'General'}],
+      'caution_windows':[],
+      'factors':[{'name':'Tithi','value':'Pratipada'}],
+      'candidateDates':[{'date':'2026-10-20'}],
+      'limitations':['Specialist rules needed'],
+    });
+    expect(timing.status,'limited_assessment');
+    expect(timing.candidateDates.single['date'],'2026-10-20');
+    expect(timing.factors.single['name'],'Tithi');
+    expect(timing.bestWindows.single.start,'11:00');
+  });
+  test('editing a city invalidates previously detected coordinates', () {
+    const old = BirthDraft(currentCity:'Old city',currentLat:17.38,
+      currentLng:78.48,currentTimezone:'Asia/Kolkata',locationDetected:true);
+    final changed = old.copyWith(currentCity:'New city',
+      clearCurrentLocation:true,locationDetected:false);
+    expect(changed.currentLat,isNull);
+    expect(changed.currentLng,isNull);
+    expect(changed.currentTimezone,isNull);
+    expect(changed.locationDetected,isFalse);
+  });
+
 }

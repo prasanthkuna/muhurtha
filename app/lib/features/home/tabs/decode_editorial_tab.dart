@@ -105,6 +105,11 @@ class _DecodeEditorialTabState extends ConsumerState<DecodeEditorialTab> {
                       },
                     ),
                     MuhQuietButton(
+                      label: 'Ask about this pattern',
+                      icon: Icons.chat_bubble_outline_rounded,
+                      onPressed: () => context.go('/home?tab=ask'),
+                    ),
+                    MuhQuietButton(
                       label: 'Share reading',
                       icon: Icons.ios_share_rounded,
                       onPressed: () => shareExactCard(

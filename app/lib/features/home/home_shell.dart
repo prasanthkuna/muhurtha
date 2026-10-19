@@ -454,9 +454,13 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
         }
         final views = BirthPackViews(pack);
         final playbook = views.playbookFor(payload.date);
-        final mainAdvice = playbook?.oneLine.trim().isNotEmpty == true
+        final generatedAdvice = playbook?.oneLine.trim().isNotEmpty == true
             ? playbook!.oneLine.trim()
             : payload.oneLine ?? '';
+        final mainAdvice = !payload.locationVerified &&
+                RegExp(r'\b\d{1,2}:\d{2}\b').hasMatch(generatedAdvice)
+            ? 'Confirm your current city to verify today\'s clock-time guidance.'
+            : generatedAdvice;
         final detailedAdvice = playbook?.body.trim() ?? '';
         final goodSummary = playbook?.goodSummary ?? '';
         final avoidSummary = playbook?.avoidSummary ?? '';
