@@ -308,6 +308,12 @@ class _ProfileTuneScreenState extends ConsumerState<ProfileTuneScreen> {
                         );
                       }),
                     ),
+                    Text(
+                      _draft.currentLat != null && _draft.currentLng != null
+                        ? 'Current city coordinates available for local timings.'
+                        : 'Select Detect location or save a resolvable city to enable exact local timings.',
+                      style: theme.textTheme.bodySmall?.copyWith(color:MuhColors.inkSecondary),
+                    ),
                     const SizedBox(height: MuhSpace.md),
                     DropdownButtonFormField<String>(
                       key: ValueKey(_draft.languageCode),

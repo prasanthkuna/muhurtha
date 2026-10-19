@@ -711,6 +711,7 @@ class _AskTabState extends State<_AskTab> {
   bool? _answerUseful;
   List<AskTurn> _history = const [];
   var _loadedHistory = false;
+  var _showFullHistory = false;
 
   String get _lang =>
       widget.ref.read(localeProvider).languageCode.toLowerCase();
@@ -948,6 +949,7 @@ class _AskTabState extends State<_AskTab> {
   }
 
   Widget _askBody(ThemeData theme, {BirthPackPayload? pack}) {
+    final currentChapter = pack != null ? BirthPackViews(pack).currentChapter : null;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -979,6 +981,32 @@ class _AskTabState extends State<_AskTab> {
             onSend: _ask,
             sending: _result?.isLoading ?? false,
           ),
+          if (currentChapter != null && currentChapter.title.isNotEmpty) ...[
+            const SizedBox(height: MuhSpace.md),
+            Container(
+              padding: const EdgeInsets.all(MuhSpace.md),
+              decoration: BoxDecoration(
+                color: MuhColors.goldWash,
+                borderRadius: BorderRadius.circular(MuhRadius.card),
+              ),
+              child: Column(
+                crossAxisAlignment:CrossAxisAlignment.start,
+                children:[
+                  Text('FROM YOUR LIFE MAP',
+                    style:theme.textTheme.labelSmall?.copyWith(color:MuhColors.goldDeep)),
+                  const SizedBox(height:MuhSpace.xs),
+                  Text(currentChapter.title,style:theme.textTheme.titleMedium),
+                  MuhQuietButton(
+                    label:'Ask about this chapter',
+                    onPressed:(){
+                      _controller.text = 'Explain my current life chapter and its main themes.';
+                      _controller.selection = TextSelection.collapsed(offset:_controller.text.length);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: MuhSpace.lg),
           Text(
             _tx('suggested'),
@@ -1014,7 +1042,7 @@ class _AskTabState extends State<_AskTab> {
               ),
             ),
             const SizedBox(height: MuhSpace.sm),
-            for (final turn in _history.reversed.take(6))
+            for (final turn in _history.reversed.take(_showFullHistory ? _history.length : 6))
               Padding(
                 padding: const EdgeInsets.only(bottom: MuhSpace.md),
                 child: Container(
@@ -1045,6 +1073,12 @@ class _AskTabState extends State<_AskTab> {
                     ],
                   ),
                 ),
+              ),
+            if (_history.length > 6)
+              MuhQuietButton(
+                label: _showFullHistory ? 'Show fewer' : 'Show all recent conversations',
+                icon: _showFullHistory ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                onPressed: () => setState(() => _showFullHistory = !_showFullHistory),
               ),
           ],
           const SizedBox(height: MuhSpace.xl),

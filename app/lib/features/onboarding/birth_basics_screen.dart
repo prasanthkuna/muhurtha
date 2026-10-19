@@ -151,6 +151,14 @@ class _BirthBasicsScreenState extends ConsumerState<BirthBasicsScreen> {
                         ),
                 ),
               ),
+              if (!draft.locationDetected)
+                Padding(
+                  padding: const EdgeInsets.only(top: MuhSpace.xs),
+                  child: Text(
+                    'Your city is used for local timing calculations; you can enter it manually.',
+                    style: theme.textTheme.bodySmall?.copyWith(color:MuhColors.inkSecondary),
+                  ),
+                ),
               if (draft.locationDetected)
                 Padding(
                   padding: const EdgeInsets.only(top: MuhSpace.xs),
