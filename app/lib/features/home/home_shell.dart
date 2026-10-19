@@ -37,6 +37,7 @@ import 'home_purpose_provider.dart';
 import 'home_share.dart';
 import 'widgets/pack_coverage_banner.dart';
 import 'widgets/today_timing_panel.dart';
+import 'widgets/today_panchanga_panel.dart';
 import '../../core/data/birth_pack_coverage.dart';
 import '../../core/engagement/ask_conversation_store.dart';
 import '../../core/engagement/engagement_scope.dart';
@@ -434,6 +435,13 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
                 personalizing: true,
               ),
               const SizedBox(height: MuhSpace.md),
+              TodayPanchangaPanel(
+                locationVerified: payload.locationVerified,
+                locationLabel: payload.locationLabel,
+                panchanga: payload.panchanga,
+                onSetLocation: () => context.push('/profile'),
+              ),
+              const SizedBox(height: MuhSpace.md),
               TodayTimingPanel(
                 payload: payload,
                 goodTitle: copy.goodWindow,
@@ -508,6 +516,28 @@ class _TodayFocusTabState extends ConsumerState<_TodayFocusTab> {
             MuhTimelineHero(
               payload: payload,
               headline: mainAdvice.isNotEmpty ? mainAdvice : (payload.oneLine ?? ''),
+            ),
+            if (payload.lifeChapter != null && payload.lifeChapter!.summary.isNotEmpty) ...[
+              const SizedBox(height: MuhSpace.md),
+              HomeProseCard(
+                eyebrow: 'YOUR CURRENT CHAPTER',
+                title: payload.lifeChapter!.currentChapterLabel.isNotEmpty
+                  ? payload.lifeChapter!.currentChapterLabel
+                  : payload.lifeChapter!.title,
+                body: payload.lifeChapter!.summary,
+              ),
+              MuhQuietButton(
+                label: 'Read this chapter in Life Map',
+                icon: Icons.auto_stories_outlined,
+                onPressed: () => context.go('/home?tab=life_map'),
+              ),
+            ],
+            const SizedBox(height: MuhSpace.md),
+            TodayPanchangaPanel(
+              locationVerified: payload.locationVerified,
+              locationLabel: payload.locationLabel,
+              panchanga: payload.panchanga,
+              onSetLocation: () => context.push('/profile'),
             ),
             if (detailedAdvice.isNotEmpty && detailedAdvice != mainAdvice)
               ExpansionTile(
