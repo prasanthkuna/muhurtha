@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:muhurta/features/home/widgets/today_panchanga_panel.dart';
 import 'package:muhurta/core/data/birth_pack_views.dart';
 import 'package:muhurta/core/data/life_period_matching.dart';
 import 'package:muhurta/core/data/muhurtha_engine_api.dart';
@@ -94,6 +96,38 @@ void main() {
     expect(changed.currentLng,isNull);
     expect(changed.currentTimezone,isNull);
     expect(changed.locationDetected,isFalse);
+  });
+
+  testWidgets('Today requires verified location before time factors', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: TodayPanchangaPanel(
+        locationVerified:false,locationLabel:'Hyderabad',
+        panchanga:null,onSetLocation:(){},
+      )),
+    ));
+    expect(find.text('Confirm your current city'),findsOneWidget);
+    expect(find.text('Set current city'),findsOneWidget);
+  });
+  testWidgets('Today shows the supplied Panchanga without inventing factors',(tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: TodayPanchangaPanel(
+          locationVerified:true,locationLabel:'Hyderabad',
+          panchanga:{
+            'tithi':{'name':'Tithi','value':'Shukla Pratipada'},
+            'nakshatra':{'name':'Nakshatra','value':'Ashwini'},
+            'yoga':{'name':'Yoga','value':'Siddha'},
+            'karana':{'name':'Karana','value':'Bava'},
+            'vara':{'name':'Vara','value':'Tuesday'},
+            'method':'test',
+          },
+          onSetLocation:(){},
+        ),
+      )),
+    ));
+    expect(find.text('Shukla Pratipada'),findsOneWidget);
+    expect(find.text('Ashwini'),findsOneWidget);
+    expect(find.text('Confirm your current city'),findsNothing);
   });
 
 }

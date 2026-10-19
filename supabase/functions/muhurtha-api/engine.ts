@@ -3637,7 +3637,7 @@ async function _handleInternal(
     const lng = profile.current_lng == null ? NaN : Number(profile.current_lng);
     const locationVerified = Number.isFinite(lat) && Number.isFinite(lng);
     const sun = locationVerified ? sunriseSunset(refInstant, lat, lng) : null;
-    const slices = sun ? divideDaylight(sun, refInstant.getUTCDay()) : [];
+    const slices = sun ? divideDaylight(sun, jsWeekday(dateStr, tz)) : [];
     const { good, caution } = sun
       ? goodAndCautionWindows(slices, tz)
       : { good: [], caution: [] };

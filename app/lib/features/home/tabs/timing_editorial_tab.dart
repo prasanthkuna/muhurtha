@@ -80,8 +80,7 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
     }
     final api = ref.read(muhurthaEngineApiProvider);
     if (api == null) return;
-    final targetDate = ref.read(homeTimingTargetDateProvider) ??
-        ref.read(birthPackProvider).valueOrNull?.date;
+    final targetDate = ref.read(homeTimingTargetDateProvider);
     setState(() => _result = const AsyncValue.loading());
     try {
       final r = _compareMode
@@ -256,8 +255,9 @@ class _TimingEditorialTabState extends ConsumerState<TimingEditorialTab> {
                     onSave: () {
                       final scope = engagementScope(ref);
                       final purpose = selectedPurpose ?? 'unknown';
-                      final dateIso = ref.read(homeTimingTargetDateProvider) ??
-                          pack.date;
+                      final dateIso = r.targetDate ??
+                          ref.read(homeTimingTargetDateProvider) ??
+                          DateTime.now().toIso8601String().substring(0, 10);
                       unawaited(
                         UserEngagementStore.instance.saveIntention(
                           scope: scope,
