@@ -102,7 +102,7 @@ function AskInner() {
         const code = json.error_code?.toString() ?? "";
         const errText =
           code === "free_ask_limit_reached"
-            ? "You’ve used today’s free Ask limit. Try again tomorrow or upgrade."
+            ? t("ask.limit")
             : json.error?.toString() ?? "Ask failed. Try again.";
         setMessages((m) => [
           ...m,
