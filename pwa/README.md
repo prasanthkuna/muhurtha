@@ -35,12 +35,9 @@ bun run dev
 
 ## Auth (Supabase)
 
-PWA uses **Google OAuth** (`signInWithOAuth`) with callback `/auth/callback`. Enable **Google** under Supabase → Authentication → Providers and add redirect URLs:
+PWA uses **Google OAuth** only. Full setup (Google Cloud + Supabase + linking `prasanthkuna@gmail.com` to phone user **kuna**): [`docs/pwa-google-auth.md`](../docs/pwa-google-auth.md).
 
-- `https://pwa-lyart-phi.vercel.app/auth/callback`
-- `http://localhost:3000/auth/callback`
-
-After sign-in, routing matches the Flutter app: **Today** if birth data exists, otherwise **/onboarding** (Play Store handoff). Apple Sign-In button is shown as “Soon”.
+After sign-in: **Today** if birth data exists, else **/onboarding**.
 
 ## E2E (Playwright, mobile Chromium)
 

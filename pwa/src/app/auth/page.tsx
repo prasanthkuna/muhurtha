@@ -12,11 +12,16 @@ export default function AuthPage() {
   const params = useSearchParams();
   const nextPath = params.get("next") || "/today";
   const urlError = params.get("error");
+  const urlErrorDesc = params.get("error_description");
 
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(
-    urlError ? decodeURIComponent(urlError) : null,
-  );
+  const [error, setError] = useState<string | null>(() => {
+    if (urlErrorDesc) return decodeURIComponent(urlErrorDesc);
+    if (urlError === "provider_not_enabled") {
+      return "Google sign-in is not configured yet. Add Client ID and secret in Supabase → Authentication → Google.";
+    }
+    return urlError ? decodeURIComponent(urlError) : null;
+  });
 
   useEffect(() => {
     void (async () => {
