@@ -8,6 +8,7 @@ import { LoadingState } from "@/components/editorial/loading-state";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { TodayTimingPanel } from "@/components/today/today-timing-panel";
 import { useAppData } from "@/context/app-data-context";
+import { useLocale } from "@/context/locale-context";
 
 function HorizonCard({
   eyebrow,
@@ -29,15 +30,16 @@ function HorizonCard({
 }
 
 export default function TodayPage() {
+  const { t } = useLocale();
   const { views, today, loading, error, pack } = useAppData();
   const [outlookOpen, setOutlookOpen] = useState(false);
 
   const date = today?.date || pack?.date || "";
   const playbook = date && views ? views.playbookFor(date) : null;
 
-  if (loading && !pack) return <LoadingState message="Preparing today…" />;
+  if (loading && !pack) return <LoadingState message={t("today.loading")} />;
   if (error || !views) {
-    return <PageHeader title="Today" subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("nav.today")} subtitle={error ?? "Unavailable"} />;
   }
 
   const mainAdvice =
@@ -73,24 +75,25 @@ export default function TodayPage() {
 
       {!today?.locationVerified ? (
         <p className="rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink-secondary">
-          Confirm your current city in{" "}
+          {t("today.locationHint")}{" "}
           <Link href="/settings" className="font-medium text-gold-text">
-            Settings
-          </Link>{" "}
-          for accurate good and caution clock times.
+            {t("common.settings")}
+          </Link>
         </p>
       ) : today.locationLabel ? (
-        <p className="text-xs text-ink-tertiary">Local timings for {today.locationLabel}</p>
+        <p className="text-xs text-ink-tertiary">
+          {t("today.localFor")} {today.locationLabel}
+        </p>
       ) : null}
 
       {today?.lifeChapter?.summary || today?.currentLifePeriod?.summary ? (
         <ProseBlock>
-          <p className="text-xs uppercase tracking-wide text-gold-text">Your current chapter</p>
+          <p className="text-xs uppercase tracking-wide text-gold-text">{t("today.chapter")}</p>
           <p className="mt-2 text-sm text-ink-secondary">
             {today.lifeChapter?.summary ?? today.currentLifePeriod?.summary}
           </p>
           <Link href="/life" className="mt-3 inline-block text-sm text-gold-text">
-            Read in Life map →
+            {t("today.readLife")}
           </Link>
         </ProseBlock>
       ) : null}
@@ -114,20 +117,20 @@ export default function TodayPage() {
           onClick={() => setOutlookOpen((v) => !v)}
           className="text-sm font-medium text-gold-text underline-offset-4 hover:underline"
         >
-          {outlookOpen ? "Hide outlook" : "This week, month & year"}
+          {outlookOpen ? t("today.hideOutlook") : t("today.outlook")}
         </button>
         {outlookOpen ? (
           <div className="mt-4 space-y-4">
-            <HorizonCard eyebrow="This week" headline={week.headline} body={week.body} />
-            <HorizonCard eyebrow="This month" headline={month.headline} body={month.body} />
-            <HorizonCard eyebrow="This year" headline={year.headline} body={year.body} />
+            <HorizonCard eyebrow={t("today.week")} headline={week.headline} body={week.body} />
+            <HorizonCard eyebrow={t("today.month")} headline={month.headline} body={month.body} />
+            <HorizonCard eyebrow={t("today.year")} headline={year.headline} body={year.body} />
           </div>
         ) : null}
       </div>
 
-      <PrimaryButton href="/timing?purpose=career_interview">Check timing for a purpose</PrimaryButton>
+      <PrimaryButton href="/timing?purpose=career_interview">{t("today.checkTiming")}</PrimaryButton>
       <Link href="/decode" className="block text-center text-sm text-gold-text">
-        Why this fits you → Decode
+        {t("today.whyDecode")}
       </Link>
     </div>
   );

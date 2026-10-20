@@ -8,7 +8,8 @@ import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { PurposeResultCard } from "@/components/timing/purpose-result-card";
-import { useAppData } from "@/context/app-data-context";
+import { useAppData, useEngineBody } from "@/context/app-data-context";
+import { useLocale } from "@/context/locale-context";
 import { parsePurposeCheck, type PurposeCheckResult } from "@/lib/engine-parsers";
 import { normalizePurposeType, PURPOSE_OPTIONS } from "@/lib/purpose-types";
 
@@ -20,6 +21,8 @@ function TimingInner() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const autoRan = useRef(false);
+  const { t } = useLocale();
+  const engineBody = useEngineBody();
   const { views, loading, error, pack } = useAppData();
 
   useEffect(() => {
@@ -37,10 +40,7 @@ function TimingInner() {
       const res = await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "purpose_check",
-          purpose_type: purpose,
-        }),
+        body: JSON.stringify(engineBody("purpose_check", { purpose_type: purpose })),
       });
       const json = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
@@ -68,9 +68,9 @@ function TimingInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when purpose from URL is ready
   }, [purpose, loading, views]);
 
-  if (loading) return <LoadingState message="Loading timing…" />;
+  if (loading) return <LoadingState message={t("timing.loading")} />;
   if (error || !views) {
-    return <PageHeader title="Timing" subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("nav.timing")} subtitle={error ?? "Unavailable"} />;
   }
 
   const timingPlan = (pack?.content?.timing_plan ?? {}) as Record<string, Record<string, string>>;
@@ -80,9 +80,9 @@ function TimingInner() {
   return (
     <div className="space-y-6" data-testid="timing-loaded">
       <PageHeader
-        eyebrow="Purpose timing"
-        title="Is today aligned?"
-        subtitle="Traditional Panchanga comparison for one purpose — not an outcome guarantee."
+        eyebrow={t("timing.eyebrow")}
+        title={t("timing.title")}
+        subtitle={t("timing.subtitle")}
       />
 
       <div className="flex flex-wrap gap-2">
@@ -110,7 +110,7 @@ function TimingInner() {
         onClick={() => void runCheck()}
         className={!purpose ? "pointer-events-none opacity-50" : undefined}
       >
-        {busy ? "Checking…" : "Run purpose check"}
+        {busy ? t("timing.checking") : t("timing.run")}
       </PrimaryButton>
 
       {errorMsg ? (
@@ -129,11 +129,11 @@ function TimingInner() {
       {!result && !errorMsg && !busy ? (
         <ProseBlock>
           <p className="text-sm text-ink-secondary">
-            <strong className="text-ink">This week:</strong>{" "}
+            <strong className="text-ink">{t("timing.week")}:</strong>{" "}
             {week.headline || timingPlan.week?.headline || "Finish before you fantasise."}
           </p>
           <p className="mt-3 text-sm text-ink-secondary">
-            <strong className="text-ink">This month:</strong>{" "}
+            <strong className="text-ink">{t("timing.month")}:</strong>{" "}
             {month.headline || timingPlan.month?.headline || "Cleanup month."}
           </p>
         </ProseBlock>
@@ -144,7 +144,7 @@ function TimingInner() {
 
 export default function TimingPage() {
   return (
-    <Suspense fallback={<LoadingState message="Loading timing…" />}>
+    <Suspense fallback={<LoadingState message="Loading…" />}>
       <TimingInner />
     </Suspense>
   );

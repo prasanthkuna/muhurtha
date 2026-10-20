@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PageTransition } from "@/components/motion/page-transition";
+import { ChartProfileBanner } from "@/components/shell/chart-profile-banner";
 import { cn } from "@/components/ui/cn";
+import { useLocale } from "@/context/locale-context";
 import {
   NavIconAsk,
   NavIconDecode,
@@ -13,16 +15,17 @@ import {
   NavIconToday,
 } from "./nav-icons";
 
-const tabs = [
-  { href: "/decode", label: "Decode", Icon: NavIconDecode },
-  { href: "/life", label: "Life", Icon: NavIconLife },
-  { href: "/today", label: "Today", center: true, Icon: NavIconToday },
-  { href: "/timing", label: "Timing", Icon: NavIconTiming },
-  { href: "/ask", label: "Ask", Icon: NavIconAsk },
+const tabKeys = [
+  { href: "/decode", key: "nav.decode", Icon: NavIconDecode },
+  { href: "/life", key: "nav.life", Icon: NavIconLife },
+  { href: "/today", key: "nav.today", center: true, Icon: NavIconToday },
+  { href: "/timing", key: "nav.timing", Icon: NavIconTiming },
+  { href: "/ask", key: "nav.ask", Icon: NavIconAsk },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { t } = useLocale();
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas text-ink">
@@ -33,12 +36,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Link
           href="/settings"
           className="flex h-10 w-10 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-paper hover:text-gold-text"
-          aria-label="Settings"
+          aria-label={t("common.settings")}
         >
           <NavIconSettings />
         </Link>
       </header>
       <main className="flex-1 px-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2">
+        <ChartProfileBanner />
         <PageTransition>{children}</PageTransition>
       </main>
       <nav
@@ -46,7 +50,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         aria-label="Primary"
       >
         <div className="mx-auto grid max-w-lg grid-cols-5 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
-          {tabs.map((tab) => {
+          {tabKeys.map((tab) => {
             const active =
               pathname === tab.href || pathname.startsWith(`${tab.href}/`);
             const Icon = tab.Icon;
@@ -57,13 +61,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className={cn(
                   "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-[10px] font-medium leading-none transition-colors",
                   active ? "text-gold-text" : "text-ink-tertiary",
-                  tab.center && active && "font-semibold",
+                  "center" in tab && tab.center && active && "font-semibold",
                 )}
               >
                 <span className="flex h-[22px] items-center justify-center">
                   <Icon active={active} className={active ? "text-gold-accent" : undefined} />
                 </span>
-                <span>{tab.label}</span>
+                <span>{t(tab.key)}</span>
               </Link>
             );
           })}

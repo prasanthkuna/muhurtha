@@ -1,3 +1,4 @@
+import type { AppLocale } from "@/lib/locale";
 import type { TodayPayload } from "@/lib/today-types";
 
 const ENABLED_KEY = "muh_timing_notifications_v1";
@@ -87,7 +88,10 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return result === "granted";
 }
 
-export async function syncTimingNotifications(today: TodayPayload | null): Promise<void> {
+export async function syncTimingNotifications(
+  today: TodayPayload | null,
+  locale: AppLocale = "en",
+): Promise<void> {
   if (!notificationsEnabled()) return;
   if (Notification.permission !== "granted") return;
 
@@ -97,7 +101,7 @@ export async function syncTimingNotifications(today: TodayPayload | null): Promi
     const res = await fetch("/api/engine", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "notification_schedule_get", locale: "en" }),
+      body: JSON.stringify({ action: "notification_schedule_get", locale }),
     });
     const json = (await res.json()) as Record<string, unknown>;
     if (res.ok) {

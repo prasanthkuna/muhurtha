@@ -5,7 +5,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/editorial/page-header";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { ProseBlock } from "@/components/editorial/prose-block";
-import { useAppData } from "@/context/app-data-context";
+import { useAppData, useEngineBody } from "@/context/app-data-context";
+import { useLocale } from "@/context/locale-context";
 import { formatAskMessage, parseAskAnswer } from "@/lib/engine-parsers";
 import type { AskMessage } from "@/lib/types";
 
@@ -56,6 +57,8 @@ function AskAnswerCard({
 function AskInner() {
   const params = useSearchParams();
   const seed = params.get("q") ?? "";
+  const { t } = useLocale();
+  const engineBody = useEngineBody();
   const { views, loading, error } = useAppData();
   const [messages, setMessages] = useState<AskMessage[]>([]);
   const [input, setInput] = useState(seed);
@@ -67,9 +70,9 @@ function AskInner() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  if (loading) return <LoadingState message="Loading Ask…" />;
+  if (loading) return <LoadingState message={t("ask.loading")} />;
   if (error || !views) {
-    return <PageHeader title="Ask" subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("nav.ask")} subtitle={error ?? "Unavailable"} />;
   }
 
   const suggestions = views.askSuggestions();
@@ -87,12 +90,12 @@ function AskInner() {
       const res = await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "ask",
-          question: q,
-          locale: "en",
-          ...(sessionId ? { session_id: sessionId } : {}),
-        }),
+        body: JSON.stringify(
+          engineBody("ask", {
+            question: q,
+            ...(sessionId ? { session_id: sessionId } : {}),
+          }),
+        ),
       });
       const json = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
@@ -127,14 +130,16 @@ function AskInner() {
   return (
     <div className="flex min-h-[70dvh] flex-col">
       <PageHeader
-        eyebrow="Ask"
-        title="One clear question"
-        subtitle="Spacious answers grounded in your pack — not a junk drawer."
+        eyebrow={t("ask.eyebrow")}
+        title={t("ask.title")}
+        subtitle={t("ask.subtitle")}
       />
 
       {currentChapter?.title ? (
         <div className="mb-4 rounded-2xl border border-line bg-gold-wash/40 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">From your life map</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">
+            {t("ask.fromLife")}
+          </p>
           <p className="mt-1 text-sm font-medium text-ink">{currentChapter.title}</p>
           <button
             type="button"
@@ -143,7 +148,7 @@ function AskInner() {
               void send("Explain my current life chapter and its main themes.")
             }
           >
-            Ask about this chapter →
+            {t("ask.askChapter")}
           </button>
         </div>
       ) : null}
@@ -204,7 +209,7 @@ function AskInner() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask one thing…"
+          placeholder={t("ask.placeholder")}
           className="min-h-11 flex-1 rounded-full border border-line bg-paper px-4 text-sm outline-none focus:ring-2 focus:ring-gold-text/25"
         />
         <button
@@ -212,7 +217,7 @@ function AskInner() {
           disabled={busy}
           className="rounded-full bg-gold-button px-5 text-sm font-semibold text-ink disabled:opacity-50"
         >
-          Send
+          {t("ask.send")}
         </button>
       </form>
     </div>
