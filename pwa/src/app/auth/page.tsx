@@ -29,7 +29,7 @@ export default function AuthPage() {
       if (!supabase) return;
 
       if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
-        router.replace(`/auth/callback?next=${encodeURIComponent(nextPath)}${window.location.hash}`);
+        router.replace(`/auth/finish?next=${encodeURIComponent(nextPath)}${window.location.hash}`);
         return;
       }
 

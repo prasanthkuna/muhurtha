@@ -1,17 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { resolveInitialAppPath } from "@/lib/auth/routing";
 import { createClient } from "@/lib/supabase/client";
 
-export default function AuthCallbackPage() {
+/** Magic-link / implicit flow (#access_token=). Google OAuth uses /auth/callback?code= (server route). */
+export default function AuthFinishPage() {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const handled = useRef(false);
 
   useEffect(() => {
+    if (handled.current) return;
+    handled.current = true;
+
     void (async () => {
       const supabase = createClient();
       if (!supabase) {
@@ -20,27 +25,25 @@ export default function AuthCallbackPage() {
       }
 
       const next = params.get("next") ?? "/today";
-      const code = params.get("code");
 
       try {
-        if (code) {
-          const { error: err } = await supabase.auth.exchangeCodeForSession(code);
-          if (err) throw err;
-        } else if (typeof window !== "undefined" && window.location.hash) {
+        if (typeof window !== "undefined" && window.location.hash) {
           const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
           const access_token = hash.get("access_token");
           const refresh_token = hash.get("refresh_token");
-          if (access_token && refresh_token) {
-            const { error: err } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
-            if (err) throw err;
-          } else {
-            throw new Error("No auth code or session in callback URL.");
+          if (!access_token || !refresh_token) {
+            throw new Error("No session tokens in callback URL.");
           }
+          const { error: err } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (err) throw err;
         } else {
-          throw new Error("No auth code or session in callback URL.");
+          const { data } = await supabase.auth.getSession();
+          if (!data.session) {
+            throw new Error("No session in callback URL.");
+          }
         }
 
         const dest = await resolveInitialAppPath(supabase, next);

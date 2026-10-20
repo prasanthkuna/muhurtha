@@ -4,7 +4,7 @@ Next.js App Router PWA — **live Supabase auth + `muhurtha-api` only** (no demo
 
 | Route | Screen |
 |-------|--------|
-| `/auth` | Phone OTP |
+| `/auth` | Google sign-in |
 | `/decode` | Janma reading |
 | `/life` | Life atlas spine |
 | `/life/[chapterId]` | Full chapter |
@@ -36,6 +36,8 @@ bun run dev
 ## Auth (Supabase)
 
 PWA uses **Google OAuth** only. Full setup (Google Cloud + Supabase + linking `prasanthkuna@gmail.com` to phone user **kuna**): [`docs/pwa-google-auth.md`](../docs/pwa-google-auth.md).
+
+Google **client_secret_*.json** downloads belong in `pwa/` for local CLI push only — they are **gitignored**; never commit them.
 
 After sign-in: **Today** if birth data exists, else **/onboarding**.
 

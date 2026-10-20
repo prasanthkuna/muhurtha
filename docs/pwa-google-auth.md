@@ -10,7 +10,7 @@
      - `http://localhost:3000`
    - **Authorized redirect URIs** (Supabase — not Vercel):
      - `https://kdngizqrybkrckvphyin.supabase.co/auth/v1/callback`
-4. Copy **Client ID** and **Client secret**.
+4. Copy **Client ID** and **Client secret**, or **Download JSON** (keep under `pwa/` — `client_secret_*.json` is gitignored).
 
 ## 2. Supabase → Authentication → Providers → Google
 
@@ -37,6 +37,11 @@ First Google sign-in with `prasanthkuna@gmail.com` should attach a `google` iden
 ## 5. Push config (after Google Cloud credentials exist)
 
 ```powershell
+# From downloaded JSON (recommended — no secrets on the command line)
+.\scripts\setup-pwa-google-auth.ps1 `
+  -GoogleClientJsonPath "pwa\client_secret_720261847380-apduv6nvql1fgtbmbipghsgui9e2kbg4.apps.googleusercontent.com.json"
+
+# Or paste ID + secret manually
 .\scripts\setup-pwa-google-auth.ps1 `
   -GoogleClientId "YOUR_CLIENT_ID.apps.googleusercontent.com" `
   -GoogleClientSecret "YOUR_CLIENT_SECRET"
@@ -54,3 +59,13 @@ This runs `supabase config push` with `GOOGLE_OAUTH_*` env vars (see `supabase/c
 6. **Application → Local Storage** — `muhurtha_birth_pack_v1` after first load.
 
 If authorize URL returns **400**, Google client ID/secret are still empty in Supabase.
+
+### Console noise (usually not the PWA)
+
+| Message | Source |
+|---------|--------|
+| `inject.js` / `contentscript.js`, `ObjectMultiplex`, `MaxListenersExceededWarning` | Browser extensions (e.g. wallet, password managers) |
+| `message channel closed before a response was received` | Extension content scripts on OAuth redirect pages |
+| **`PKCE code verifier not found in storage`** | Real auth bug — fixed by server `auth/callback/route.ts` (deploy latest PWA) |
+
+Sign in again from `/welcome` after deploy; do not bookmark `/auth/callback` without a `?code=`.

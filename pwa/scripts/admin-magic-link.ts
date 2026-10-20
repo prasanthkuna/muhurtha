@@ -11,7 +11,7 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const email = process.argv[2] ?? "prasanthkuna@gmail.com";
 const redirectTo =
   process.env.PWA_AUTH_REDIRECT ??
-  "https://pwa-lyart-phi.vercel.app/auth/callback?next=/today";
+  "https://pwa-lyart-phi.vercel.app/auth/finish?next=/today";
 
 if (!serviceKey) {
   console.error("Set SUPABASE_SERVICE_ROLE_KEY (service_role from Supabase dashboard or CLI).");
