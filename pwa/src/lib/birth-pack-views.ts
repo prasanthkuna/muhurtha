@@ -91,9 +91,9 @@ export class BirthPackViews {
       moonSignKey: j.moon_sign_key?.toString() ?? "",
       moonSignLabel: j.moon_sign_label?.toString() ?? "",
       moonSymbol: j.moon_symbol?.toString() ?? "☽",
-      luckyNumbers: Array.isArray(nums) ? nums.map(String) : [],
-      luckyDays: Array.isArray(days) ? days.map(String) : [],
-      luckyColours: colours,
+      luckyNumbers: Array.isArray(nums) ? nums.map(String).slice(0, 3) : [],
+      luckyDays: Array.isArray(days) ? days.map(String).slice(0, 3) : [],
+      luckyColours: colours.slice(0, 3),
     };
   }
 
@@ -136,6 +136,10 @@ export class BirthPackViews {
 
   chapterById(id: string): ChapterView | undefined {
     return this.chapters().find((c) => c.id === id);
+  }
+
+  currentChapter(): ChapterView | undefined {
+    return this.chapters().find((c) => c.tense === "current");
   }
 
   todayCard(date: string) {

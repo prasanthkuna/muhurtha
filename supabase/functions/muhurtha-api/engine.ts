@@ -1531,9 +1531,27 @@ async function persistNotificationSchedule(
     }];
     const goodFirst = day.good[0];
     if (goodFirst) {
-      const start = DateTime.fromISO(`${day.date}T${goodFirst.start}`, {
-        zone: profile.current_timezone ?? "Asia/Kolkata",
-      });
+      const zone = profile.current_timezone ?? "Asia/Kolkata";
+      const start = DateTime.fromISO(`${day.date}T${goodFirst.start}`, { zone });
+      const reminder = start.minus({ minutes: 10 });
+      if (reminder > DateTime.now().setZone(zone)) {
+        rows.push({
+          profile_id: profile.id,
+          birth_input_id: bi.id,
+          pack_id: pack.id,
+          notification_key: `good-reminder:${day.date}:${goodFirst.start}`,
+          notification_type: "good_time_reminder",
+          scheduled_at: reminder.toUTC().toISO(),
+          locale,
+          title: safeString(notifications?.good_time_reminder?.title) ||
+            "Good window in 10 minutes",
+          body: safeString(notifications?.good_time_reminder?.body) ||
+            "Get ready — a supportive window opens soon.",
+          deep_link: "muhurtha://today",
+          payload: { date: day.date, window: goodFirst, minutes_before: 10 },
+          updated_at: new Date().toISOString(),
+        });
+      }
       rows.push({
         profile_id: profile.id,
         birth_input_id: bi.id,
@@ -1552,9 +1570,27 @@ async function persistNotificationSchedule(
     }
     const cautionFirst = day.caution[0];
     if (cautionFirst) {
-      const start = DateTime.fromISO(`${day.date}T${cautionFirst.start}`, {
-        zone: profile.current_timezone ?? "Asia/Kolkata",
-      });
+      const zone = profile.current_timezone ?? "Asia/Kolkata";
+      const start = DateTime.fromISO(`${day.date}T${cautionFirst.start}`, { zone });
+      const reminder = start.minus({ minutes: 10 });
+      if (reminder > DateTime.now().setZone(zone)) {
+        rows.push({
+          profile_id: profile.id,
+          birth_input_id: bi.id,
+          pack_id: pack.id,
+          notification_key: `caution-reminder:${day.date}:${cautionFirst.start}`,
+          notification_type: "caution_time_reminder",
+          scheduled_at: reminder.toUTC().toISO(),
+          locale,
+          title: safeString(notifications?.caution_time_reminder?.title) ||
+            "Caution window in 10 minutes",
+          body: safeString(notifications?.caution_time_reminder?.body) ||
+            "Plan to go lighter — a caution interval opens soon.",
+          deep_link: "muhurtha://today",
+          payload: { date: day.date, window: cautionFirst, minutes_before: 10 },
+          updated_at: new Date().toISOString(),
+        });
+      }
       rows.push({
         profile_id: profile.id,
         birth_input_id: bi.id,
@@ -2475,9 +2511,13 @@ function buildAccessPayload(access: SubscriptionAccess) {
 function notificationAllowed(tier: AccessTier, notificationType: string): boolean {
   if (tier === "pro") return true;
   if (tier === "plus") {
-    return ["today_ready", "good_time_start", "caution_start"].includes(
-      notificationType,
-    );
+    return [
+      "today_ready",
+      "good_time_start",
+      "good_time_reminder",
+      "caution_start",
+      "caution_time_reminder",
+    ].includes(notificationType);
   }
   return notificationType === "today_ready";
 }

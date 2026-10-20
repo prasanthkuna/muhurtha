@@ -58,9 +58,9 @@ test.describe.serial("Production signed-in tabs", () => {
     });
     await page.getByRole("button", { name: "Career interview" }).click();
     await page.getByRole("button", { name: "Run purpose check" }).click();
-    await expect(
-      page.getByText(/Result|Traditional|Panchanga|Settings|Supportive|location/i).first(),
-    ).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("purpose-result").or(page.getByText(/Settings|location/i)).first()).toBeVisible({
+      timeout: 60_000,
+    });
   });
 
   test("06 ask", async ({ page }) => {

@@ -2,20 +2,24 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { PrimaryButton } from "@/components/editorial/primary-button";
+import { PurposeResultCard } from "@/components/timing/purpose-result-card";
 import { useAppData } from "@/context/app-data-context";
+import { parsePurposeCheck, type PurposeCheckResult } from "@/lib/engine-parsers";
 import { normalizePurposeType, PURPOSE_OPTIONS } from "@/lib/purpose-types";
 
 function TimingInner() {
   const params = useSearchParams();
   const initial = normalizePurposeType(params.get("purpose"));
   const [purpose, setPurpose] = useState(initial);
-  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [result, setResult] = useState<PurposeCheckResult | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const autoRan = useRef(false);
   const { views, loading, error, pack } = useAppData();
 
   useEffect(() => {
@@ -23,19 +27,11 @@ function TimingInner() {
     if (p) setPurpose(p);
   }, [params]);
 
-  if (loading) return <LoadingState message="Loading timing…" />;
-  if (error || !views) {
-    return <PageHeader title="Timing" subtitle={error ?? "Unavailable"} />;
-  }
-
-  const timingPlan = (pack?.content?.timing_plan ?? {}) as Record<string, Record<string, string>>;
-  const week = views.horizon("week");
-  const month = views.horizon("month");
-
   async function runCheck() {
     if (!purpose) return;
     setBusy(true);
     setResult(null);
+    setErrorMsg(null);
 
     try {
       const res = await fetch("/api/engine", {
@@ -57,18 +53,29 @@ function TimingInner() {
         }
         throw new Error(msg);
       }
-      setResult(json);
+      setResult(parsePurposeCheck(json));
     } catch (e) {
-      setResult({
-        summary: e instanceof Error ? e.message : "Check failed",
-        verdict: "unknown",
-      });
+      setErrorMsg(e instanceof Error ? e.message : "Check failed");
     } finally {
       setBusy(false);
     }
   }
 
-  const plan = result?.plan as Record<string, unknown> | undefined;
+  useEffect(() => {
+    if (autoRan.current || !purpose || loading || !views) return;
+    autoRan.current = true;
+    void runCheck();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when purpose from URL is ready
+  }, [purpose, loading, views]);
+
+  if (loading) return <LoadingState message="Loading timing…" />;
+  if (error || !views) {
+    return <PageHeader title="Timing" subtitle={error ?? "Unavailable"} />;
+  }
+
+  const timingPlan = (pack?.content?.timing_plan ?? {}) as Record<string, Record<string, string>>;
+  const week = views.horizon("week");
+  const month = views.horizon("month");
 
   return (
     <div className="space-y-6" data-testid="timing-loaded">
@@ -83,7 +90,11 @@ function TimingInner() {
           <button
             key={p.id}
             type="button"
-            onClick={() => setPurpose(p.id)}
+            onClick={() => {
+              setPurpose(p.id);
+              setResult(null);
+              setErrorMsg(null);
+            }}
             className={`rounded-full px-3 py-2 text-xs font-medium transition-colors sm:text-sm ${
               purpose === p.id
                 ? "bg-gold-wash text-gold-text"
@@ -102,33 +113,20 @@ function TimingInner() {
         {busy ? "Checking…" : "Run purpose check"}
       </PrimaryButton>
 
-      {result ? (
+      {errorMsg ? (
         <ProseBlock>
-          <p className="text-xs uppercase tracking-wide text-gold-text">Result</p>
-          <p className="mt-2 text-lg text-ink">
-            {result.headline?.toString() ??
-              result.summary?.toString() ??
-              "See details below."}
-          </p>
-          {result.summary && result.headline ? (
-            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{String(result.summary)}</p>
-          ) : null}
-          {plan?.focus ? (
-            <p className="mt-3 text-sm text-ink-secondary">
-              <span className="font-medium text-ink">Focus: </span>
-              {String(plan.focus)}
-            </p>
-          ) : null}
-          {result.verdict ? (
-            <p className="mt-2 text-xs text-ink-tertiary">Status: {String(result.verdict)}</p>
-          ) : null}
-          {result.summary?.toString().includes("Settings") ? (
+          <p className="text-sm text-warning-ink">{errorMsg}</p>
+          {errorMsg.includes("Settings") ? (
             <Link href="/settings" className="mt-3 inline-block text-sm text-gold-text">
               Open Settings →
             </Link>
           ) : null}
         </ProseBlock>
-      ) : (
+      ) : null}
+
+      {result ? <PurposeResultCard result={result} /> : null}
+
+      {!result && !errorMsg && !busy ? (
         <ProseBlock>
           <p className="text-sm text-ink-secondary">
             <strong className="text-ink">This week:</strong>{" "}
@@ -139,7 +137,7 @@ function TimingInner() {
             {month.headline || timingPlan.month?.headline || "Cleanup month."}
           </p>
         </ProseBlock>
-      )}
+      ) : null}
     </div>
   );
 }

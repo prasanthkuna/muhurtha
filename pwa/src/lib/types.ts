@@ -36,6 +36,14 @@ export type AskMessage = {
   id: string;
   role: "user" | "assistant";
   text: string;
+  meta?: {
+    directAnswer: string;
+    bestTime: string;
+    cautionTime: string;
+    betterOption: string;
+    actionLine: string;
+    simpleWhy?: string;
+  };
 };
 
 export type NatalLuckColour = {

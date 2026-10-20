@@ -1,51 +1,56 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/editorial/page-header";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { useAppData } from "@/context/app-data-context";
 import { accountDeletionMailto, LegalUrls } from "@/lib/legal-urls";
 import { clearPackCache } from "@/lib/pack-cache";
+import { loadBirthProfileSummary, type BirthProfileSummary } from "@/lib/profile-bundle";
 import { createClient } from "@/lib/supabase/client";
+import {
+  notificationsEnabled,
+  requestNotificationPermission,
+  setNotificationsEnabled,
+  syncTimingNotifications,
+} from "@/lib/timing-notifications";
 
 function SettingsLink({
   href,
   label,
-  external,
 }: {
   href: string;
   label: string;
-  external?: boolean;
 }) {
-  const className =
-    "flex min-h-11 items-center justify-between rounded-xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition-colors hover:border-gold-accent/40";
-  if (external) {
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
-        {label}
-        <span className="text-ink-tertiary" aria-hidden>
-          ↗
-        </span>
-      </a>
-    );
-  }
   return (
-    <Link href={href} className={className}>
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex min-h-11 items-center justify-between rounded-xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition-colors hover:border-gold-accent/40"
+    >
       {label}
-    </Link>
+      <span className="text-ink-tertiary" aria-hidden>
+        ↗
+      </span>
+    </a>
   );
 }
 
 export default function SettingsPage() {
-  const { pack, isPro, refresh, today } = useAppData();
+  const { isPro, refresh, today } = useAppData();
   const [email, setEmail] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
+  const [birth, setBirth] = useState<BirthProfileSummary | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
   const [currentCity, setCurrentCity] = useState<string>("");
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationMsg, setLocationMsg] = useState<string | null>(null);
+  const [alertsOn, setAlertsOn] = useState(false);
+  const [alertsMsg, setAlertsMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    setAlertsOn(notificationsEnabled());
     void (async () => {
       const supabase = createClient();
       if (!supabase) return;
@@ -53,12 +58,12 @@ export default function SettingsPage() {
       setEmail(auth.user?.email ?? null);
       setPhone(auth.user?.phone ?? null);
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("current_city, current_lat, current_lng")
-        .eq("user_id", auth.user?.id ?? "")
-        .maybeSingle();
-      if (profile?.current_city) setCurrentCity(profile.current_city);
+      const summary = await loadBirthProfileSummary();
+      if (summary) {
+        setBirth(summary);
+        setProfileId(summary.profileId);
+        setCurrentCity(summary.currentCity ?? "");
+      }
     })();
   }, []);
 
@@ -72,6 +77,11 @@ export default function SettingsPage() {
   async function hardRefresh() {
     clearPackCache();
     await refresh();
+    const summary = await loadBirthProfileSummary();
+    if (summary) {
+      setBirth(summary);
+      setCurrentCity(summary.currentCity ?? "");
+    }
   }
 
   async function detectLocation() {
@@ -97,12 +107,12 @@ export default function SettingsPage() {
         .update({
           current_lat: lat,
           current_lng: lng,
-          current_city: currentCity.trim() || pack?.locationLabel || "Current location",
+          current_city: currentCity.trim() || birth?.currentCity || "Current location",
         })
         .eq("user_id", auth.user.id);
       if (upErr) throw upErr;
 
-      setLocationMsg("Location saved. Refreshing today’s windows…");
+      setLocationMsg("Location saved.");
       clearPackCache();
       await refresh();
     } catch (e) {
@@ -112,12 +122,31 @@ export default function SettingsPage() {
     }
   }
 
+  async function toggleAlerts() {
+    setAlertsMsg(null);
+    if (alertsOn) {
+      setNotificationsEnabled(false);
+      setAlertsOn(false);
+      setAlertsMsg("Timing alerts turned off.");
+      return;
+    }
+    const ok = await requestNotificationPermission();
+    if (!ok) {
+      setAlertsMsg("Allow notifications in your browser to get daily and window reminders.");
+      return;
+    }
+    setNotificationsEnabled(true);
+    setAlertsOn(true);
+    await syncTimingNotifications(today);
+    setAlertsMsg("Alerts on — daily card plus good and caution windows (10 minutes before).");
+  }
+
   return (
     <div className="space-y-6" data-testid="settings-loaded">
       <PageHeader
         eyebrow="Profile"
         title="Settings"
-        subtitle="Account, location for timings, legal links, and cache."
+        subtitle="Birth details, location for timings, alerts, and legal."
       />
 
       <dl className="space-y-3 rounded-2xl border border-line bg-paper px-4 py-4 text-sm">
@@ -127,7 +156,23 @@ export default function SettingsPage() {
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-ink-tertiary">Display name</dt>
-          <dd className="text-right font-medium text-ink">{pack?.displayName || "—"}</dd>
+          <dd className="text-right font-medium text-ink">{birth?.displayName ?? "—"}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-ink-tertiary">Date of birth</dt>
+          <dd className="text-right font-medium text-ink">{birth?.dateOfBirth ?? "—"}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-ink-tertiary">Birth place</dt>
+          <dd className="text-right font-medium text-ink">{birth?.birthPlace ?? "—"}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-ink-tertiary">Birth time</dt>
+          <dd className="text-right font-medium text-ink">{birth?.timeLabel ?? "—"}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-ink-tertiary">Janma nakshatra</dt>
+          <dd className="text-right font-medium text-ink">{birth?.janmaNakshatra ?? "—"}</dd>
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-ink-tertiary">Plan</dt>
@@ -138,16 +183,21 @@ export default function SettingsPage() {
           <dd className="text-right font-medium text-ink">
             {today?.locationVerified
               ? today.locationLabel || "Verified"
-              : pack?.locationLabel || "Not set"}
+              : birth?.currentCity || "Not set"}
           </dd>
         </div>
       </dl>
 
+      {!birth?.dateOfBirth && profileId === null ? (
+        <p className="text-sm text-ink-secondary">
+          Birth profile not found. Complete onboarding on web or the Android app, then refresh.
+        </p>
+      ) : null}
+
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gold-text">Current city (for Timing)</h2>
         <p className="text-sm text-ink-secondary">
-          Purpose checks and today’s clock windows need latitude and longitude. Use detect, or edit
-          birth profile in the Android app for full profile tune.
+          Purpose checks and today&apos;s clock windows need latitude and longitude.
         </p>
         <input
           value={currentCity}
@@ -161,18 +211,23 @@ export default function SettingsPage() {
         {locationMsg ? <p className="text-sm text-ink-secondary">{locationMsg}</p> : null}
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-gold-text">Reading</h2>
-        <SettingsLink href="/decode" label="Decode — identity & domains" />
-        <SettingsLink href="/life" label="Life map chapters" />
-        <SettingsLink href="/onboarding" label="Birth profile (onboarding)" />
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-gold-text">Timing alerts</h2>
+        <p className="text-sm text-ink-secondary">
+          One daily reminder when your card is ready, plus good and caution windows — including 10
+          minutes before each window starts. Works while this device allows notifications.
+        </p>
+        <PrimaryButton type="button" onClick={() => void toggleAlerts()} className="w-full">
+          {alertsOn ? "Turn off timing alerts" : "Turn on timing alerts"}
+        </PrimaryButton>
+        {alertsMsg ? <p className="text-sm text-ink-secondary">{alertsMsg}</p> : null}
       </section>
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-gold-text">Legal & support</h2>
-        <SettingsLink href={LegalUrls.privacy} label="Privacy policy" external />
-        <SettingsLink href={LegalUrls.terms} label="Terms of use" external />
-        <SettingsLink href={LegalUrls.deleteAccount} label="Delete account (web)" external />
+        <SettingsLink href={LegalUrls.privacy} label="Privacy policy" />
+        <SettingsLink href={LegalUrls.terms} label="Terms of use" />
+        <SettingsLink href={LegalUrls.deleteAccount} label="Delete account (web)" />
         <a
           href={accountDeletionMailto(phone ?? undefined)}
           className="flex min-h-11 items-center rounded-xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink"
@@ -189,7 +244,7 @@ export default function SettingsPage() {
 
       <div className="space-y-3">
         <PrimaryButton type="button" onClick={() => void hardRefresh()} className="w-full">
-          Refresh reading cache
+          Refresh reading
         </PrimaryButton>
         <button
           type="button"

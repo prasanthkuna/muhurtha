@@ -29,7 +29,7 @@ function HorizonCard({
 }
 
 export default function TodayPage() {
-  const { views, today, loading, error, pack, fromCache } = useAppData();
+  const { views, today, loading, error, pack } = useAppData();
   const [outlookOpen, setOutlookOpen] = useState(false);
 
   const date = today?.date || pack?.date || "";
@@ -64,10 +64,6 @@ export default function TodayPage() {
   return (
     <div className="space-y-6" data-testid="today-loaded">
       <PageHeader eyebrow={date || "Today"} title={cardTitle} subtitle={mainAdvice} />
-
-      {fromCache ? (
-        <p className="text-xs text-ink-tertiary">Showing cached reading — refreshing in background.</p>
-      ) : null}
 
       {views.packMeta.todayCount > 0 && views.packMeta.todayCount < 25 ? (
         <p className="rounded-xl bg-warning-wash px-4 py-3 text-sm text-warning-ink">
