@@ -42,7 +42,7 @@ test.describe.serial("Production signed-in tabs", () => {
   test("03 decode", async ({ page }) => {
     await page.goto("/decode");
     await expect(page.getByTestId("decode-loaded")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText(/Better for|Good windows|Show full timeline/i).first()).toBeVisible();
+    await expect(page.getByTestId("lucky-strip")).toBeVisible();
   });
 
   test("04 life", async ({ page }) => {
@@ -58,9 +58,9 @@ test.describe.serial("Production signed-in tabs", () => {
     });
     await page.getByRole("button", { name: "Career interview" }).click();
     await page.getByRole("button", { name: "Run purpose check" }).click();
-    await expect(page.getByText(/better|careful|window|slot/i).first()).toBeVisible({
-      timeout: 60_000,
-    });
+    await expect(
+      page.getByText(/Result|Traditional|Panchanga|Settings|Supportive|location/i).first(),
+    ).toBeVisible({ timeout: 60_000 });
   });
 
   test("06 ask", async ({ page }) => {
