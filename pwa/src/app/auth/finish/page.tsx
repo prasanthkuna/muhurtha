@@ -26,6 +26,12 @@ export default function AuthFinishPage() {
 
       const next = params.get("next") ?? "/today";
 
+      // Magic links may return PKCE ?code= — server exchange lives on /auth/callback.
+      if (params.get("code") && typeof window !== "undefined") {
+        router.replace(`/auth/callback${window.location.search}`);
+        return;
+      }
+
       try {
         if (typeof window !== "undefined" && window.location.hash) {
           const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
