@@ -577,6 +577,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
         metadata['android_app_hash'] = _androidAppHash;
 
+        metadata['otp_sms_format'] = 'retriever';
+
       }
 
 

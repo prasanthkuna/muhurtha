@@ -409,7 +409,9 @@ The sign-in screen (`PhoneAuthScreen`) uses **`otp_autofill`** (SMS User Consent
 3. Set secrets: `SEND_SMS_HOOK_SECRET`, `TWILIO_*`, and optionally `ANDROID_SMS_APP_HASH` (release keystore hash differs from debug).
 4. Disable built-in Twilio SMS in the hook path so only the hook sends messages.
 
-The app also passes `android_app_hash` in `signInWithOtp` user metadata when available.
+The app also passes `android_app_hash` and `otp_sms_format: retriever` in `signInWithOtp` user metadata when available.
+
+**PWA (Chrome Android / iOS):** `pwa/src/app/auth` uses WebOTP + Contact Picker, sends `web_otp_host` + `otp_sms_format: webotp`. The same `send-sms` hook appends `@host #code` for WebOTP when format is `webotp` (see `buildSmsBody` in `supabase/functions/send-sms/index.ts`). Set secret `WEBOTP_HOSTS` for production hostnames.
 
 **Test OTP on emulator:**
 

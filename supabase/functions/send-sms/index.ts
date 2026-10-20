@@ -10,13 +10,51 @@ const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
 const fromNumber = Deno.env.get("TWILIO_PHONE_NUMBER") ?? "";
 const fallbackHash = Deno.env.get("ANDROID_SMS_APP_HASH") ?? "";
 
-function resolveAppHash(user: HookPayload["user"]): string {
-  const meta = user.user_metadata ?? {};
+function userMeta(user: HookPayload["user"]): Record<string, unknown> {
+  return user.user_metadata ?? {};
+}
+
+function resolveWebOtpHost(user: HookPayload["user"]): string {
+  const meta = userMeta(user);
+  const fromMeta = meta.web_otp_host;
+  if (typeof fromMeta === "string" && fromMeta.trim().length > 0) {
+    return fromMeta.trim();
+  }
+  const fromEnv = Deno.env.get("WEBOTP_HOSTS")?.split(",")[0]?.trim();
+  return fromEnv ?? "";
+}
+
+function resolveAppHash(user: HookPayload["user"], webHost: string): string {
+  const meta = userMeta(user);
   const fromMeta = meta.android_app_hash;
   if (typeof fromMeta === "string" && fromMeta.trim().length > 0) {
     return fromMeta.trim();
   }
+  // Do not apply env fallback hash when this sign-in is for WebOTP (PWA).
+  const format = meta.otp_sms_format;
+  if (format === "webotp" || webHost.length > 0) {
+    return "";
+  }
   return fallbackHash.trim();
+}
+
+function buildSmsBody(
+  otp: string,
+  hash: string,
+  webHost: string,
+  smsFormat: string,
+): string {
+  const useWeb =
+    smsFormat === "webotp" ||
+    (webHost.length > 0 && smsFormat !== "retriever" && hash.length === 0);
+  if (useWeb && webHost.length > 0) {
+    return `Your Muhurtha code is ${otp}\n@${webHost} #${otp}`;
+  }
+  // Native Android SMS Retriever (Flutter): hash must be last line, <140 bytes.
+  if (hash.length > 0) {
+    return `<#> Your Muhurtha code is ${otp}\n${hash}`;
+  }
+  return `Your Muhurtha code is ${otp}`;
 }
 
 async function sendTwilioSms(to: string, body: string): Promise<Response> {
@@ -81,13 +119,13 @@ Deno.serve(async (req) => {
 
   try {
     const { user, sms } = wh.verify(payload, headers) as HookPayload;
-    const hash = resolveAppHash(user);
+    const webHost = resolveWebOtpHost(user);
+    const hash = resolveAppHash(user, webHost);
+    const meta = userMeta(user);
+    const smsFormat =
+      typeof meta.otp_sms_format === "string" ? meta.otp_sms_format : "";
     const otp = sms.otp;
-
-    // SMS Retriever requires < 140 bytes and the 11-char hash on its own line.
-    const body = hash.length > 0
-      ? `<#> Your Muhurtha code is ${otp}\n${hash}`
-      : `Your Muhurtha code is ${otp}`;
+    const body = buildSmsBody(otp, hash, webHost, smsFormat);
 
     return await sendTwilioSms(user.phone, body);
   } catch (error) {

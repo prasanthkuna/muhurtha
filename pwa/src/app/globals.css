@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --canvas: #f8f5ee;
+  --paper: #fffcf6;
+  --ink: #242019;
+  --ink-secondary: #5e574e;
+  --ink-tertiary: #6b6256;
+  --gold-text: #77541f;
+  --gold-accent: #a67b35;
+  --gold-button: #c59b4f;
+  --gold-wash: #f3e8d2;
+  --line: #e8e0d3;
+  --success-ink: #285d46;
+  --success-wash: #e4f0e7;
+  --warning-ink: #88551b;
+  --warning-wash: #fcedd8;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-tertiary: var(--ink-tertiary);
+  --color-gold-text: var(--gold-text);
+  --color-gold-accent: var(--gold-accent);
+  --color-gold-button: var(--gold-button);
+  --color-gold-wash: var(--gold-wash);
+  --color-line: var(--line);
+  --color-success-ink: var(--success-ink);
+  --color-success-wash: var(--success-wash);
+  --color-warning-ink: var(--warning-ink);
+  --color-warning-wash: var(--warning-wash);
+  --font-serif: var(--font-fraunces);
+  --font-sans: var(--font-instrument);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@view-transition {
+  navigation: auto;
+}
+
+html {
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-instrument), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+  min-height: 100dvh;
+}
+
+/* Mobile: comfortable tap targets without breaking compact nav labels */
+@media (pointer: coarse) {
+  button,
+  a[role="button"],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+}
+
+.font-serif {
+  font-family: var(--font-fraunces), Georgia, serif;
+}
