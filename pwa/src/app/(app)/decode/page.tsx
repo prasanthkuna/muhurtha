@@ -68,9 +68,14 @@ export default function DecodePage() {
         </section>
       ) : null}
 
-      <div className="flex flex-wrap gap-3 pt-2">
-        <PrimaryButton href="/life">Open life map</PrimaryButton>
-        <Link href="/today" className="text-sm font-medium text-gold-text underline-offset-4 hover:underline">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pt-2">
+        <PrimaryButton href="/life" className="shrink-0">
+          Open life map
+        </PrimaryButton>
+        <Link
+          href="/today"
+          className="inline-flex min-h-11 items-center text-sm font-medium text-gold-text underline-offset-4 hover:underline"
+        >
           Today’s focus →
         </Link>
       </div>

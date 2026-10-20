@@ -1,27 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { useAppData } from "@/context/app-data-context";
-
-const PURPOSES = [
-  { id: "career", label: "Career move" },
-  { id: "money", label: "Money decision" },
-  { id: "relationship", label: "Relationship talk" },
-  { id: "family", label: "Family matter" },
-] as const;
+import { normalizePurposeType, PURPOSE_OPTIONS } from "@/lib/purpose-types";
 
 function TimingInner() {
   const params = useSearchParams();
-  const initial = params.get("purpose") ?? "";
+  const initial = normalizePurposeType(params.get("purpose"));
   const [purpose, setPurpose] = useState(initial);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState(false);
   const { views, loading, error, pack } = useAppData();
+
+  useEffect(() => {
+    const p = normalizePurposeType(params.get("purpose"));
+    if (p) setPurpose(p);
+  }, [params]);
 
   if (loading) return <LoadingState message="Loading timing…" />;
   if (error || !views) {
@@ -29,6 +29,8 @@ function TimingInner() {
   }
 
   const timingPlan = (pack?.content?.timing_plan ?? {}) as Record<string, Record<string, string>>;
+  const week = views.horizon("week");
+  const month = views.horizon("month");
 
   async function runCheck() {
     if (!purpose) return;
@@ -45,7 +47,16 @@ function TimingInner() {
         }),
       });
       const json = (await res.json()) as Record<string, unknown>;
-      if (!res.ok) throw new Error(json.error?.toString());
+      if (!res.ok) {
+        const code = json.error_code?.toString() ?? "";
+        const msg = json.error?.toString() ?? "Check failed";
+        if (code === "location_required") {
+          throw new Error(
+            "Save your current city in Settings (use Detect location) so we can compute local Panchanga windows.",
+          );
+        }
+        throw new Error(msg);
+      }
       setResult(json);
     } catch (e) {
       setResult({
@@ -57,21 +68,23 @@ function TimingInner() {
     }
   }
 
+  const plan = result?.plan as Record<string, unknown> | undefined;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="timing-loaded">
       <PageHeader
         eyebrow="Purpose timing"
         title="Is today aligned?"
-        subtitle="Pick one purpose — we evaluate windows from your chart and pack, not generic quotes."
+        subtitle="Traditional Panchanga comparison for one purpose — not an outcome guarantee."
       />
 
       <div className="flex flex-wrap gap-2">
-        {PURPOSES.map((p) => (
+        {PURPOSE_OPTIONS.map((p) => (
           <button
             key={p.id}
             type="button"
             onClick={() => setPurpose(p.id)}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+            className={`rounded-full px-3 py-2 text-xs font-medium transition-colors sm:text-sm ${
               purpose === p.id
                 ? "bg-gold-wash text-gold-text"
                 : "border border-line bg-paper text-ink-secondary"
@@ -93,23 +106,37 @@ function TimingInner() {
         <ProseBlock>
           <p className="text-xs uppercase tracking-wide text-gold-text">Result</p>
           <p className="mt-2 text-lg text-ink">
-            {result.summary?.toString() ??
-              result.headline?.toString() ??
-              "See details in response."}
+            {result.headline?.toString() ??
+              result.summary?.toString() ??
+              "See details below."}
           </p>
+          {result.summary && result.headline ? (
+            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{String(result.summary)}</p>
+          ) : null}
+          {plan?.focus ? (
+            <p className="mt-3 text-sm text-ink-secondary">
+              <span className="font-medium text-ink">Focus: </span>
+              {String(plan.focus)}
+            </p>
+          ) : null}
           {result.verdict ? (
-            <p className="mt-2 text-sm text-ink-tertiary">Verdict: {String(result.verdict)}</p>
+            <p className="mt-2 text-xs text-ink-tertiary">Status: {String(result.verdict)}</p>
+          ) : null}
+          {result.summary?.toString().includes("Settings") ? (
+            <Link href="/settings" className="mt-3 inline-block text-sm text-gold-text">
+              Open Settings →
+            </Link>
           ) : null}
         </ProseBlock>
       ) : (
         <ProseBlock>
           <p className="text-sm text-ink-secondary">
             <strong className="text-ink">This week:</strong>{" "}
-            {timingPlan.week?.headline ?? "Finish before you fantasise."}
+            {week.headline || timingPlan.week?.headline || "Finish before you fantasise."}
           </p>
           <p className="mt-3 text-sm text-ink-secondary">
             <strong className="text-ink">This month:</strong>{" "}
-            {timingPlan.month?.headline ?? "Cleanup month."}
+            {month.headline || timingPlan.month?.headline || "Cleanup month."}
           </p>
         </ProseBlock>
       )}

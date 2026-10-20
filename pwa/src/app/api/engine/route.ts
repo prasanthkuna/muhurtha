@@ -37,6 +37,13 @@ export async function POST(req: Request) {
     return NextResponse.json(data);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Engine error";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const code =
+      e && typeof e === "object" && "code" in e
+        ? String((e as { code?: string }).code)
+        : undefined;
+    return NextResponse.json(
+      { error: message, ...(code ? { error_code: code } : {}) },
+      { status: code === "location_required" ? 422 : 400 },
+    );
   }
 }

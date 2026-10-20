@@ -148,6 +148,58 @@ export class BirthPackViews {
     );
   }
 
+  playbookFor(date: string) {
+    const playbook = this.content.playbook;
+    if (playbook && typeof playbook === "object") {
+      const day = (playbook as Record<string, unknown>)[date];
+      if (day && typeof day === "object") return day as Record<string, unknown>;
+    }
+    const card = this.todayCard(date);
+    if (card) return card;
+    const guidance = this.content.today_guidance;
+    if (guidance && typeof guidance === "object") {
+      return guidance as Record<string, unknown>;
+    }
+    return null;
+  }
+
+  horizon(scope: "week" | "month" | "year") {
+    const horizons = this.content.horizons as Record<string, unknown> | undefined;
+    const timing = this.content.timing_plan as Record<string, unknown> | undefined;
+    const fromHorizons = horizons?.[scope];
+    const fromTiming = timing?.[scope];
+    const parsed = this.parseHorizon(fromHorizons ?? fromTiming);
+    if (parsed.headline || parsed.body) return parsed;
+
+    const cardsKey = scope === "week" ? "weekly_cards" : scope === "month" ? "monthly_cards" : "yearly_cards";
+    const cards = this.content[cardsKey];
+    if (Array.isArray(cards) && cards[0] && typeof cards[0] === "object") {
+      return this.horizonFromCard(cards[0] as Record<string, unknown>);
+    }
+    return { headline: "", body: "", caution: "" };
+  }
+
+  private parseHorizon(raw: unknown) {
+    if (!raw || typeof raw !== "object") {
+      return { headline: "", body: "", caution: "" };
+    }
+    const h = raw as Record<string, unknown>;
+    return {
+      headline: h.headline?.toString() ?? h.title?.toString() ?? "",
+      body: h.body?.toString() ?? h.summary?.toString() ?? "",
+      caution: h.caution?.toString() ?? "",
+    };
+  }
+
+  private horizonFromCard(card: Record<string, unknown>) {
+    const careful = card.be_careful;
+    return {
+      headline: card.title?.toString() ?? card.key?.toString() ?? "",
+      body: card.body?.toString() ?? "",
+      caution: Array.isArray(careful) ? careful.map(String).join("\n") : "",
+    };
+  }
+
   askSuggestions(): string[] {
     const raw = this.content.ask_templates;
     if (!Array.isArray(raw)) return [];

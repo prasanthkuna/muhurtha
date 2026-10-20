@@ -24,7 +24,9 @@ export async function invokeEngine(
   const data = (await res.json()) as Record<string, unknown>;
   if (!res.ok || data.error) {
     const code = data.error_code?.toString() ?? `http_${res.status}`;
-    throw new Error(data.error?.toString() ?? code);
+    const err = new Error(data.error?.toString() ?? code) as Error & { code?: string };
+    err.code = code;
+    throw err;
   }
   return data;
 }

@@ -17,7 +17,7 @@ test.describe.serial("Production smoke (content + tabs)", () => {
     const page = await ctx.newPage();
     await page.goto(MAGIC!, { waitUntil: "domcontentloaded", timeout: 120_000 });
     await expect(page.getByTestId("today-loaded")).toBeVisible({ timeout: 90_000 });
-    await expect(page.getByTestId("lucky-strip")).toBeVisible();
+    await expect(page.getByText(/Better for|Good windows|Show full timeline/i).first()).toBeVisible();
     await ctx.storageState({ path: AUTH_FILE });
     await ctx.close();
   });
@@ -42,7 +42,7 @@ test.describe.serial("Production signed-in tabs", () => {
   test("03 decode", async ({ page }) => {
     await page.goto("/decode");
     await expect(page.getByTestId("decode-loaded")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByTestId("lucky-strip")).toBeVisible();
+    await expect(page.getByText(/Better for|Good windows|Show full timeline/i).first()).toBeVisible();
   });
 
   test("04 life", async ({ page }) => {
@@ -53,10 +53,10 @@ test.describe.serial("Production signed-in tabs", () => {
 
   test("05 timing", async ({ page }) => {
     await page.goto("/timing");
-    await expect(page.getByRole("button", { name: "Career move" })).toBeVisible({
+    await expect(page.getByRole("button", { name: "Career interview" })).toBeVisible({
       timeout: 60_000,
     });
-    await page.getByRole("button", { name: "Career move" }).click();
+    await page.getByRole("button", { name: "Career interview" }).click();
     await page.getByRole("button", { name: "Run purpose check" }).click();
     await expect(page.getByText(/better|careful|window|slot/i).first()).toBeVisible({
       timeout: 60_000,
