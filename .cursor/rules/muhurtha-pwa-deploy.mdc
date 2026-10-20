@@ -1,0 +1,25 @@
+---
+description: Muhurtha PWA + Supabase deploy workflow and i18n/chart-profile conventions
+alwaysApply: true
+---
+
+# Muhurtha release workflow
+
+When shipping user-facing PWA or engine changes:
+
+1. **PWA (Vercel)** — changes under `pwa/` deploy from `main` via GitHub → Vercel. After meaningful fixes, commit, push `main`, and confirm production is Ready at `https://pwa-lyart-phi.vercel.app`.
+
+2. **Backend (Supabase Edge)** — deploy when `supabase/functions/muhurtha-api/**` (or other edge functions) change:
+   ```powershell
+   cd c:\Users\PrashanthKuna\muhurtha
+   supabase functions deploy muhurtha-api
+   ```
+   Tell the user if only PWA changed (no BE deploy needed) or both were deployed.
+
+3. **Locale** — supported: `en`, `te`, `hi`. Persist on `profiles.language_code`. All engine calls must pass `locale` (see `useEngineBody()` in `pwa/src/context/app-data-context.tsx`). UI strings use `useLocale().t('dotted.key')` in `pwa/src/lib/messages.ts`. Changing language must `clearPackCache()` and `refresh()` app data.
+
+4. **Chart profiles (partner/friend)** — use engine actions `chart_profile_list`, `chart_profile_save`, `chart_profile_delete`, and `chart_initialize` after save. Active chart: `chart_profile_id` on engine body + `localStorage` key `muh_active_chart_profile_v1`. Switching chart clears pack cache and reloads.
+
+5. **Do not** surface “cache” in user-facing UI; use “Refresh reading” instead.
+
+6. **Windows** — use PowerShell for local commands.
