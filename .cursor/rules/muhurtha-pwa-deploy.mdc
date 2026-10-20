@@ -22,4 +22,6 @@ When shipping user-facing PWA or engine changes:
 
 5. **Do not** surface “cache” in user-facing UI; use “Refresh reading” instead.
 
-6. **Windows** — use PowerShell for local commands.
+6. **Celestial UI** — zodiac + tab icons live in `pwa/src/design-system/celestial/` (`SignMedallion`, `CelestialHeaderCard`, `rashi.ts`, `nav-icons.tsx`). See `docs/pwa-celestial-design-system.md`. Never duplicate rashi glyphs in feature pages.
+
+7. **Windows** — use PowerShell for local commands.

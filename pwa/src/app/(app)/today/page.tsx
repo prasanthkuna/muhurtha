@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { CelestialHeaderCard } from "@/components/celestial/celestial-header-card";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
@@ -62,10 +63,22 @@ export default function TodayPage() {
   const week = views.horizon("week");
   const month = views.horizon("month");
   const year = views.horizon("year");
+  const luck = views.natalLuck;
 
   return (
     <div className="space-y-6" data-testid="today-loaded">
-      <PageHeader eyebrow={date || "Today"} title={cardTitle} subtitle={mainAdvice} />
+      {luck?.moonSignLabel || luck?.moonSymbol ? (
+        <CelestialHeaderCard
+          heroLabel={date || t("nav.today")}
+          heroTitle={cardTitle}
+          moonSignKey={luck.moonSignKey}
+          moonSymbol={luck.moonSymbol}
+          moonSignLabel={luck.moonSignLabel}
+          heroSubline={mainAdvice}
+        />
+      ) : (
+        <PageHeader eyebrow={date || "Today"} title={cardTitle} subtitle={mainAdvice} />
+      )}
 
       {views.packMeta.todayCount > 0 && views.packMeta.todayCount < 25 ? (
         <p className="rounded-xl bg-warning-wash px-4 py-3 text-sm text-warning-ink">

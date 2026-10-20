@@ -64,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   "center" in tab && tab.center && active && "font-semibold",
                 )}
               >
-                <span className="flex h-[22px] items-center justify-center">
+                <span className="flex h-6 w-6 items-center justify-center">
                   <Icon active={active} className={active ? "text-gold-accent" : undefined} />
                 </span>
                 <span>{t(tab.key)}</span>

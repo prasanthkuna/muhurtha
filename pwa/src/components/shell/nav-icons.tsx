@@ -1,83 +1,111 @@
 import { cn } from "@/components/ui/cn";
+import { ICON } from "@/design-system/icon-sizes";
 
 type IconProps = { className?: string; active?: boolean };
 
-const iconBox = "h-[22px] w-[22px] shrink-0";
+function stroke(active?: boolean) {
+  return active ? ICON.tabStrokeActive : ICON.tabStroke;
+}
 
+/** Editorial tab icons — Material-style outlines, gold fill when active. */
 export function NavIconDecode({ className, active }: IconProps) {
+  const s = stroke(active);
   return (
-    <svg
-      className={cn(iconBox, className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={active ? 2 : 1.6}
-      aria-hidden
-    >
-      <path d="M12 3l7 4v10l-7 4-7-4V7l7-4z" />
-      <path d="M12 7v10M5 7l7 4 7-4" />
+    <svg className={cn("h-6 w-6 shrink-0", className)} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M6 4h12a1 1 0 0 1 1 1v15a1 1 0 0 1-1.45.89L12 18.5l-5.55 2.39A1 1 0 0 1 5 20V5a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeWidth={s}
+        strokeLinejoin="round"
+        fill={active ? "currentColor" : "none"}
+        fillOpacity={active ? 0.12 : 0}
+      />
+      <path d="M8 7h8M8 10.5h6" stroke="currentColor" strokeWidth={s} strokeLinecap="round" />
     </svg>
   );
 }
 
 export function NavIconLife({ className, active }: IconProps) {
+  const s = stroke(active);
   return (
-    <svg
-      className={cn(iconBox, className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={active ? 2 : 1.6}
-      aria-hidden
-    >
-      <path d="M4 19V5M20 19V9M12 19V3M4 19h16" strokeLinecap="round" />
+    <svg className={cn("h-6 w-6 shrink-0", className)} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M3 18h18M6 18V8l4-3 4 5 5-4v12"
+        stroke="currentColor"
+        strokeWidth={s}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="17" cy="7" r="1.5" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={s} />
     </svg>
   );
 }
 
 export function NavIconToday({ className, active }: IconProps) {
+  const s = stroke(active);
   return (
-    <svg
-      className={cn(iconBox, className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={active ? 2 : 1.6}
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="4" fill={active ? "currentColor" : "none"} />
-      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    <svg className={cn("h-6 w-6 shrink-0", className)} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle
+        cx="12"
+        cy="12"
+        r="4.25"
+        fill={active ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth={s}
+      />
+      <path
+        d="M12 2.5v2.2M12 19.3v2.2M4.5 4.5l1.55 1.55M17.95 17.95l1.55 1.55M2.5 12h2.2M19.3 12h2.2M4.5 19.5l1.55-1.55M17.95 6.05l1.55-1.55"
+        stroke="currentColor"
+        strokeWidth={s}
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
 
 export function NavIconTiming({ className, active }: IconProps) {
+  const s = stroke(active);
   return (
-    <svg
-      className={cn(iconBox, className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={active ? 2 : 1.6}
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" strokeLinecap="round" />
+    <svg className={cn("h-6 w-6 shrink-0", className)} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth={s} />
+      <path
+        d="M12 7.5v4.5l3 2"
+        stroke="currentColor"
+        strokeWidth={s}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {active ? (
+        <circle cx="12" cy="12" r="1.25" fill="currentColor" />
+      ) : null}
     </svg>
   );
 }
 
 export function NavIconAsk({ className, active }: IconProps) {
+  const s = stroke(active);
   return (
-    <svg
-      className={cn(iconBox, className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={active ? 2 : 1.6}
-      aria-hidden
-    >
-      <path d="M4 5h16v10H8l-4 4V5z" strokeLinejoin="round" />
+    <svg className={cn("h-6 w-6 shrink-0", className)} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5 4h14a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4 3.5V5a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeWidth={s}
+        strokeLinejoin="round"
+        fill={active ? "currentColor" : "none"}
+        fillOpacity={active ? 0.1 : 0}
+      />
+      <path
+        d="M8 8.5h8M8 12h5.5"
+        stroke="currentColor"
+        strokeWidth={s}
+        strokeLinecap="round"
+      />
+      <path
+        d="M15.5 15.5l2.5 2.5"
+        stroke="currentColor"
+        strokeWidth={s}
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -85,11 +113,11 @@ export function NavIconAsk({ className, active }: IconProps) {
 export function NavIconSettings({ className }: { className?: string }) {
   return (
     <svg
-      className={cn(iconBox, className)}
+      className={cn("h-[22px] w-[22px] shrink-0", className)}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.6}
+      strokeWidth={ICON.tabStroke}
       aria-hidden
     >
       <path

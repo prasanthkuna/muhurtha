@@ -78,3 +78,34 @@ body {
 .font-serif {
   font-family: var(--font-fraunces), Georgia, serif;
 }
+
+/* Celestial sign medallion — subtle scintillate (respects reduced motion above) */
+@keyframes sign-shimmer {
+  0%,
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+  50% {
+    filter: brightness(1.08);
+    transform: scale(1.02);
+  }
+}
+
+@keyframes sign-glyph-glow {
+  0%,
+  100% {
+    text-shadow: 0 0 12px rgba(166, 123, 53, 0.25);
+  }
+  50% {
+    text-shadow: 0 0 22px rgba(198, 155, 79, 0.55), 0 0 8px rgba(255, 255, 255, 0.4);
+  }
+}
+
+.sign-medallion-shimmer {
+  animation: sign-shimmer 4.5s ease-in-out infinite;
+}
+
+.sign-medallion-glyph {
+  animation: sign-glyph-glow 4.5s ease-in-out infinite;
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CelestialHeaderCard } from "@/components/celestial/celestial-header-card";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
@@ -26,13 +27,25 @@ export default function DecodePage() {
 
   return (
     <div className="space-y-6" data-testid="decode-loaded">
-      <PageHeader
-        eyebrow="Janma reading"
-        title={views.displayHook}
-        subtitle={views.identitySummary}
-      />
+      {luck?.moonSignLabel || luck?.moonSymbol ? (
+        <CelestialHeaderCard
+          heroLabel="Janma reading"
+          heroTitle={views.displayHook}
+          moonSignKey={luck.moonSignKey}
+          moonSymbol={luck.moonSymbol}
+          moonSignLabel={luck.moonSignLabel}
+          heroSubline={views.identitySummary}
+          explainer="Your moon sign shapes how daily timing and luck read for you — not a generic horoscope."
+        />
+      ) : (
+        <PageHeader
+          eyebrow="Janma reading"
+          title={views.displayHook}
+          subtitle={views.identitySummary}
+        />
+      )}
 
-      {luck ? <LuckyStrip luck={luck} /> : null}
+      {luck ? <LuckyStrip luck={luck} compact /> : null}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gold-text">Strengths</h2>

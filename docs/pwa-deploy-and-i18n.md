@@ -22,6 +22,10 @@ After shipping, confirm Vercel production **Ready** and edge function version in
 - Active chart: pass `chart_profile_id` on engine calls; persist id in `muh_active_chart_profile_v1`.
 - Switching chart clears pack cache and reloads readings for that person.
 
+## Celestial UI (icons + zodiac)
+
+See [pwa-celestial-design-system.md](./pwa-celestial-design-system.md). Import from `@/design-system/celestial`.
+
 ## Cursor rule
 
 Copy of agent guidance lives at `.cursor/rules/muhurtha-pwa-deploy.mdc` (local; may be gitignored). This doc is the tracked equivalent.
