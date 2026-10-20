@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
@@ -20,7 +20,6 @@ function TimingInner() {
   const [result, setResult] = useState<PurposeCheckResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const autoRan = useRef(false);
   const { t } = useLocale();
   const engineBody = useEngineBody();
   const { views, loading, error, pack } = useAppData();
@@ -30,7 +29,7 @@ function TimingInner() {
     if (p) setPurpose(p);
   }, [params]);
 
-  async function runCheck() {
+  const runCheck = useCallback(async () => {
     if (!purpose) return;
     setBusy(true);
     setResult(null);
@@ -47,9 +46,7 @@ function TimingInner() {
         const code = json.error_code?.toString() ?? "";
         const msg = json.error?.toString() ?? "Check failed";
         if (code === "location_required") {
-          throw new Error(
-            "Save your current city in Settings (use Detect location) so we can compute local Panchanga windows.",
-          );
+          throw new Error(t("timing.locationRequired"));
         }
         throw new Error(msg);
       }
@@ -59,14 +56,12 @@ function TimingInner() {
     } finally {
       setBusy(false);
     }
-  }
+  }, [purpose, engineBody, t]);
 
   useEffect(() => {
-    if (autoRan.current || !purpose || loading || !views) return;
-    autoRan.current = true;
+    if (!purpose || loading || !views) return;
     void runCheck();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when purpose from URL is ready
-  }, [purpose, loading, views]);
+  }, [purpose, loading, views, runCheck]);
 
   if (loading) return <LoadingState message={t("timing.loading")} />;
   if (error || !views) {
@@ -82,8 +77,10 @@ function TimingInner() {
       <PageHeader
         eyebrow={t("timing.eyebrow")}
         title={t("timing.title")}
-        subtitle={t("timing.subtitle")}
+        subtitle={t("timing.subtitleLong")}
       />
+
+      <ProseBlock className="text-sm text-ink-secondary">{t("timing.howDifferent")}</ProseBlock>
 
       <div className="flex flex-wrap gap-2">
         {PURPOSE_OPTIONS.map((p) => (
@@ -116,25 +113,25 @@ function TimingInner() {
       {errorMsg ? (
         <ProseBlock>
           <p className="text-sm text-warning-ink">{errorMsg}</p>
-          {errorMsg.includes("Settings") ? (
+          {errorMsg.includes("Settings") || errorMsg.includes("location") ? (
             <Link href="/settings" className="mt-3 inline-block text-sm text-gold-text">
-              Open Settings →
+              {t("common.settings")} →
             </Link>
           ) : null}
         </ProseBlock>
       ) : null}
 
-      {result ? <PurposeResultCard result={result} /> : null}
+      {result && purpose ? <PurposeResultCard result={result} purposeId={purpose} /> : null}
 
       {!result && !errorMsg && !busy ? (
         <ProseBlock>
           <p className="text-sm text-ink-secondary">
             <strong className="text-ink">{t("timing.week")}:</strong>{" "}
-            {week.headline || timingPlan.week?.headline || "Finish before you fantasise."}
+            {week.headline || timingPlan.week?.headline || "—"}
           </p>
           <p className="mt-3 text-sm text-ink-secondary">
             <strong className="text-ink">{t("timing.month")}:</strong>{" "}
-            {month.headline || timingPlan.month?.headline || "Cleanup month."}
+            {month.headline || timingPlan.month?.headline || "—"}
           </p>
         </ProseBlock>
       ) : null}

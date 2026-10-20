@@ -1,3 +1,5 @@
+import type { AskAnswerResult } from "@/lib/engine-parsers";
+
 export type BirthPackPayload = {
   date: string;
   locale: string;
@@ -36,14 +38,7 @@ export type AskMessage = {
   id: string;
   role: "user" | "assistant";
   text: string;
-  meta?: {
-    directAnswer: string;
-    bestTime: string;
-    cautionTime: string;
-    betterOption: string;
-    actionLine: string;
-    simpleWhy?: string;
-  };
+  meta?: AskAnswerResult;
 };
 
 export type NatalLuckColour = {

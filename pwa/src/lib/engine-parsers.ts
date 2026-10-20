@@ -17,6 +17,9 @@ export type PurposeCheckResult = {
   cautionFactors: string[];
   limitations: string[];
   factors: { name?: string; value?: string }[];
+  personalSignals: string[];
+  domainLenses: string[];
+  shareHook?: string;
   targetDate?: string;
   locationLabel?: string;
   timezone?: string;
@@ -30,6 +33,9 @@ export type AskAnswerResult = {
   betterOption: string;
   actionLine: string;
   simpleWhy?: string;
+  shareHook?: string;
+  goodWindows: TimingWindow[];
+  cautionWindows: TimingWindow[];
   freeRemainingToday?: number;
 };
 
@@ -84,6 +90,9 @@ export function parsePurposeCheck(json: Record<string, unknown>): PurposeCheckRe
     cautionFactors: strList("cautionFactors"),
     limitations: strList("limitations"),
     factors,
+    personalSignals: strList("personalSignals"),
+    domainLenses: strList("domainLenses"),
+    shareHook: json.shareHook?.toString(),
     targetDate: json.targetDate?.toString(),
     locationLabel: json.locationLabel?.toString(),
     timezone: json.timezone?.toString(),
@@ -103,6 +112,9 @@ export function parseAskAnswer(json: Record<string, unknown>): AskAnswerResult {
     betterOption: json.betterOption?.toString() ?? "",
     actionLine: json.actionLine?.toString() ?? "",
     simpleWhy: json.simpleWhy?.toString(),
+    shareHook: json.shareHook?.toString(),
+    goodWindows: windows(json.goodWindows),
+    cautionWindows: windows(json.cautionWindows),
     freeRemainingToday:
       typeof access.freeRemainingToday === "number"
         ? access.freeRemainingToday

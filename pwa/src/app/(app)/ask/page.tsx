@@ -2,57 +2,14 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
+import { AskAnswerCard } from "@/components/ask/ask-answer-card";
 import { PageHeader } from "@/components/editorial/page-header";
-import { LoadingState } from "@/components/editorial/loading-state";
 import { ProseBlock } from "@/components/editorial/prose-block";
+import { LoadingState } from "@/components/editorial/loading-state";
 import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
-import { formatAskMessage, parseAskAnswer } from "@/lib/engine-parsers";
+import { parseAskAnswer } from "@/lib/engine-parsers";
 import type { AskMessage } from "@/lib/types";
-
-function AskAnswerCard({
-  directAnswer,
-  bestTime,
-  cautionTime,
-  betterOption,
-  actionLine,
-  simpleWhy,
-}: {
-  directAnswer: string;
-  bestTime: string;
-  cautionTime: string;
-  betterOption: string;
-  actionLine: string;
-  simpleWhy?: string;
-}) {
-  return (
-    <div data-testid="ask-answer" className="mr-4">
-    <ProseBlock>
-      <p className="text-[15px] leading-relaxed text-ink">{directAnswer}</p>
-      {bestTime ? (
-        <p className="mt-3 text-sm text-ink-secondary">
-          <span className="font-medium text-ink">Best time: </span>
-          {bestTime}
-        </p>
-      ) : null}
-      {cautionTime ? (
-        <p className="mt-2 text-sm text-ink-secondary">
-          <span className="font-medium text-ink">Go lighter: </span>
-          {cautionTime}
-        </p>
-      ) : null}
-      {betterOption ? (
-        <p className="mt-2 text-sm text-ink-secondary">
-          <span className="font-medium text-ink">Better option: </span>
-          {betterOption}
-        </p>
-      ) : null}
-      {actionLine ? <p className="mt-2 text-sm text-ink-secondary">{actionLine}</p> : null}
-      {simpleWhy ? <p className="mt-2 text-xs text-ink-tertiary">{simpleWhy}</p> : null}
-    </ProseBlock>
-    </div>
-  );
-}
 
 function AskInner() {
   const params = useSearchParams();
@@ -112,13 +69,12 @@ function AskInner() {
       }
       const parsed = parseAskAnswer(json);
       if (parsed.sessionId) setSessionId(parsed.sessionId);
-      const answer = formatAskMessage(parsed);
       setMessages((m) => [
         ...m,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: answer,
+          text: parsed.directAnswer,
           meta: parsed,
         },
       ]);
@@ -132,8 +88,10 @@ function AskInner() {
       <PageHeader
         eyebrow={t("ask.eyebrow")}
         title={t("ask.title")}
-        subtitle={t("ask.subtitle")}
+        subtitle={t("ask.subtitleLong")}
       />
+
+      <ProseBlock className="mb-4 text-sm text-ink-secondary">{t("ask.howDifferent")}</ProseBlock>
 
       {currentChapter?.title ? (
         <div className="mb-4 rounded-2xl border border-line bg-gold-wash/40 px-4 py-3">
@@ -154,17 +112,22 @@ function AskInner() {
       ) : null}
 
       {messages.length === 0 && suggestions.length > 0 ? (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => void send(s)}
-              className="rounded-full border border-line bg-paper px-3 py-2 text-left text-xs text-ink-secondary hover:border-gold-accent/50"
-            >
-              {s}
-            </button>
-          ))}
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-semibold uppercase text-ink-tertiary">
+            {t("ask.suggested")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => void send(s)}
+                className="rounded-full border border-line bg-paper px-3 py-2 text-left text-xs text-ink-secondary hover:border-gold-accent/50"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -178,15 +141,7 @@ function AskInner() {
               {m.text}
             </div>
           ) : m.meta ? (
-            <AskAnswerCard
-              key={m.id}
-              directAnswer={m.meta.directAnswer}
-              bestTime={m.meta.bestTime}
-              cautionTime={m.meta.cautionTime}
-              betterOption={m.meta.betterOption}
-              actionLine={m.meta.actionLine}
-              simpleWhy={m.meta.simpleWhy}
-            />
+            <AskAnswerCard key={m.id} result={m.meta} />
           ) : (
             <div
               key={m.id}
@@ -226,7 +181,7 @@ function AskInner() {
 
 export default function AskPage() {
   return (
-    <Suspense fallback={<LoadingState message="Loading Ask…" />}>
+    <Suspense fallback={<LoadingState message="Loading…" />}>
       <AskInner />
     </Suspense>
   );

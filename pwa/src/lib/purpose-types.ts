@@ -17,6 +17,10 @@ export const PURPOSE_OPTIONS = [
 export type PurposeType = (typeof PURPOSE_OPTIONS)[number]["id"];
 
 /** Legacy query params from Today CTA */
+export function purposeLabel(id: string): string {
+  return PURPOSE_OPTIONS.find((p) => p.id === id)?.label ?? id.replaceAll("_", " ");
+}
+
 export function normalizePurposeType(raw: string | null | undefined): PurposeType | "" {
   if (!raw) return "";
   const map: Record<string, PurposeType> = {

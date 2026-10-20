@@ -70,12 +70,22 @@ function mapRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function clock12(raw: string): string {
+  const m = raw.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return raw;
+  let h = Number(m[1]);
+  const min = m[2];
+  const ap = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${min} ${ap}`;
+}
+
 function formatAskWindow(
   window: Window,
   caution = false,
 ): string {
   const label = caution && window.label ? ` (${window.label})` : "";
-  return `${window.start} - ${window.end}${label}`;
+  return `${clock12(window.start)} – ${clock12(window.end)}${label}`;
 }
 
 export function askFallbackCopy(
@@ -417,6 +427,7 @@ export function resolveAskFromPack(
   const template = best && best.score > 0
     ? best.template
     : ranked[0]?.template;
+  const strongMatch = Boolean(best && best.score >= 12);
 
   const commonAnswer = matchCommonAnswer(question, content);
   const slice = packSlice(content);
@@ -426,13 +437,18 @@ export function resolveAskFromPack(
   }
 
   const direct = commonAnswer ||
+    (strongMatch ? template?.directAnswer : "") ||
     template?.directAnswer ||
     slice.compactSummary ||
     timing.direct_answer;
 
+  const bestTime = strongMatch && template?.bestFor
+    ? `${timing.best_time}${timing.best_time ? " — " : ""}${template.bestFor}`
+    : timing.best_time;
+
   return {
     direct_answer: direct,
-    best_time: timing.best_time,
+    best_time: bestTime,
     caution_time: template?.caution
       ? `${locale === "te" ? "జాగ్రత్త: " : locale === "hi" ? "सावधानी: " : "Watch: "}${template.caution}`
       : timing.caution_time,
@@ -440,7 +456,7 @@ export function resolveAskFromPack(
     simple_why: template?.bestFor
       ? `${locale === "te" ? "ఎందుకంటే: " : locale === "hi" ? "क्यों: " : "Why: "}${template.bestFor}`
       : timing.simple_why,
-    action_line: template?.actionLine || timing.action_line,
+    action_line: (strongMatch && template?.actionLine) || template?.actionLine || timing.action_line,
     share_hook: template?.shareLine || slice.shareHook || timing.share_hook,
   };
 }

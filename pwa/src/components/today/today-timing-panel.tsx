@@ -1,103 +1,119 @@
 "use client";
 
 import { useState } from "react";
-import { formatWindowClock } from "@/lib/format-time";
+import { WindowPillRow, WindowTimePill } from "@/components/editorial/window-time-pill";
+import { useLocale } from "@/context/locale-context";
+import { formatWindowRange } from "@/lib/format-time";
 import type { TimingWindow } from "@/lib/today-types";
-
-function WindowRail({
-  title,
-  tone,
-  windows,
-}: {
-  title: string;
-  tone: "good" | "caution";
-  windows: TimingWindow[];
-}) {
-  if (windows.length === 0) return null;
-  const bg = tone === "good" ? "bg-success-wash" : "bg-warning-wash";
-  const ink = tone === "good" ? "text-success-ink" : "text-warning-ink";
-
-  return (
-    <div className={`rounded-2xl ${bg} px-4 py-4`}>
-      <p className={`text-xs font-semibold uppercase ${ink}`}>{title}</p>
-      <ul className="mt-3 space-y-3">
-        {windows.slice(0, 4).map((w, i) => (
-          <li key={`${w.start}-${i}`} className="text-sm text-ink-secondary">
-            <span className="font-medium text-ink">
-              {formatWindowClock(w.start)} – {formatWindowClock(w.end)}
-            </span>
-            {w.label ? <span className="text-ink-tertiary"> · {w.label}</span> : null}
-            {w.whyItWorks ? (
-              <p className="mt-1 text-xs leading-relaxed text-ink-tertiary">{w.whyItWorks}</p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 export function TodayTimingPanel({
   goodWindows,
   cautionWindows,
   betterFor,
   beCareful,
-  goodTitle = "Good windows",
-  cautionTitle = "Caution windows",
 }: {
   goodWindows: TimingWindow[];
   cautionWindows: TimingWindow[];
   betterFor: string[];
   beCareful: string[];
-  goodTitle?: string;
-  cautionTitle?: string;
 }) {
+  const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
-  const preview = goodWindows[0];
+  const nextGood = goodWindows[0];
+  const nextCaution = cautionWindows[0];
 
   return (
-    <section className="space-y-3">
-      {preview ? (
-        <p className="text-sm font-semibold text-ink">
-          {goodTitle}: {formatWindowClock(preview.start)}–{formatWindowClock(preview.end)}
-          {preview.label ? ` (${preview.label})` : ""}
+    <section className="space-y-4 rounded-2xl border border-line bg-paper px-4 py-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">
+          {t("today.clockTitle")}
         </p>
+        <p className="mt-1 text-sm text-ink-secondary">{t("today.clockHint")}</p>
+      </div>
+
+      {nextGood || nextCaution ? (
+        <div className="space-y-3">
+          {nextGood ? (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-success-ink">{t("today.nextGood")}</p>
+              <WindowTimePill window={nextGood} tone="good" />
+              {nextGood.whyItWorks ? (
+                <p className="mt-2 text-xs leading-relaxed text-ink-tertiary">{nextGood.whyItWorks}</p>
+              ) : null}
+            </div>
+          ) : null}
+          {nextCaution ? (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-warning-ink">{t("today.nextCaution")}</p>
+              <WindowTimePill window={nextCaution} tone="caution" />
+            </div>
+          ) : null}
+        </div>
       ) : (
-        <p className="text-sm text-ink-secondary">
-          Set your current city in Settings to unlock clock-time good and caution windows.
-        </p>
+        <p className="text-sm text-ink-secondary">{t("today.clockMissing")}</p>
       )}
 
       {(betterFor.length > 0 || beCareful.length > 0) && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 border-t border-line pt-3 sm:grid-cols-2">
           {betterFor.length > 0 ? (
             <div>
-              <p className="text-xs font-semibold uppercase text-success-ink">Better for</p>
-              <p className="mt-1 text-sm text-ink-secondary">{betterFor.slice(0, 3).join(" · ")}</p>
+              <p className="text-xs font-semibold uppercase text-success-ink">{t("today.betterFor")}</p>
+              <ul className="mt-1.5 list-inside list-disc text-sm text-ink-secondary">
+                {betterFor.slice(0, 3).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             </div>
           ) : null}
           {beCareful.length > 0 ? (
             <div>
-              <p className="text-xs font-semibold uppercase text-warning-ink">Be careful</p>
-              <p className="mt-1 text-sm text-ink-secondary">{beCareful.slice(0, 3).join(" · ")}</p>
+              <p className="text-xs font-semibold uppercase text-warning-ink">{t("today.beCareful")}</p>
+              <ul className="mt-1.5 list-inside list-disc text-sm text-ink-secondary">
+                {beCareful.slice(0, 3).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             </div>
           ) : null}
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="text-sm font-medium text-gold-text underline-offset-4 hover:underline"
-      >
-        {expanded ? "Hide full timeline" : "Show full timeline"}
-      </button>
+      {(goodWindows.length > 1 || cautionWindows.length > 0) && (
+        <>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="text-sm font-medium text-gold-text underline-offset-4 hover:underline"
+          >
+            {expanded ? t("today.hideTimeline") : t("today.showTimeline")}
+          </button>
+          {expanded ? (
+            <div className="space-y-4">
+              {goodWindows.length > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase text-success-ink">
+                    {t("today.allGood")}
+                  </p>
+                  <WindowPillRow windows={goodWindows} tone="good" limit={6} />
+                </div>
+              ) : null}
+              {cautionWindows.length > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase text-warning-ink">
+                    {t("today.allCaution")}
+                  </p>
+                  <WindowPillRow windows={cautionWindows} tone="caution" limit={6} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      )}
 
-      {expanded ? (
-        <div className="space-y-3">
-          <WindowRail title={goodTitle} tone="good" windows={goodWindows} />
-          <WindowRail title={cautionTitle} tone="caution" windows={cautionWindows} />
-        </div>
+      {nextGood && !expanded ? (
+        <p className="text-xs text-ink-tertiary">
+          {t("today.generalPanchanga")}: {formatWindowRange(nextGood.start, nextGood.end)}
+        </p>
       ) : null}
     </section>
   );
