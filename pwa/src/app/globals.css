@@ -108,4 +108,6 @@ body {
 
 .sign-medallion-glyph {
   animation: sign-glyph-glow 4.5s ease-in-out infinite;
+  /* ♈–♓ and ☉☽☿ render reliably across platforms */
+  font-family: var(--font-symbols), "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2", sans-serif;
 }

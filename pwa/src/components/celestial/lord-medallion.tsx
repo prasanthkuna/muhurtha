@@ -1,5 +1,6 @@
 import { cn } from "@/components/ui/cn";
-import { GrahaGlyph, normalizeGraha, type GrahaKey } from "@/components/celestial/lord-glyphs";
+import { GrahaGlyph } from "@/components/celestial/lord-glyphs";
+import { normalizeGraha, type GrahaKey } from "@/design-system/graha";
 
 export const GRAHA_THEME: Record<GrahaKey, { rim: string; glow: string; core: string; ink: string }> = {
   Sun: { rim: "#e09030", glow: "rgba(224,144,48,0.45)", core: "#fff8ed", ink: "#9a5a12" },
@@ -48,7 +49,7 @@ export function GrahaMedallion({
     >
       <GrahaGlyph
         graha={graha}
-        className={cn("sign-medallion-glyph", size === "sm" ? "h-[50%] w-[50%]" : "h-[52%] w-[52%]")}
+        className={cn(size === "sm" ? "text-xl" : size === "md" ? "text-3xl" : "text-5xl")}
         style={{ color: theme.ink }}
       />
     </div>

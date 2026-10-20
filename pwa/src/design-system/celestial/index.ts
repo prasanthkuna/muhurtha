@@ -13,7 +13,8 @@ export {
 export { ICON } from "../icon-sizes";
 export { SignMedallion } from "@/components/celestial/sign-medallion";
 export { RashiGlyph } from "@/components/celestial/rashi-glyphs";
-export { GrahaGlyph, normalizeGraha } from "@/components/celestial/lord-glyphs";
+export { GRAHA_SYMBOL, grahaSymbol, normalizeGraha, type GrahaKey } from "../graha";
+export { GrahaGlyph } from "@/components/celestial/lord-glyphs";
 export { GrahaMedallion } from "@/components/celestial/lord-medallion";
 export { ChapterHeroCard } from "@/components/celestial/chapter-hero-card";
 export { CelestialHeaderCard } from "@/components/celestial/celestial-header-card";

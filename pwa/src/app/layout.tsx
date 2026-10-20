@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Instrument_Sans } from "next/font/google";
+import { Fraunces, Instrument_Sans, Noto_Sans_Symbols_2 } from "next/font/google";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -10,6 +10,13 @@ const fraunces = Fraunces({
 
 const instrument = Instrument_Sans({
   variable: "--font-instrument",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const symbols = Noto_Sans_Symbols_2({
+  variable: "--font-symbols",
+  weight: "400",
   subsets: ["latin"],
   display: "swap",
 });
@@ -37,7 +44,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${fraunces.variable} ${instrument.variable} antialiased`}>
+      <body className={`${fraunces.variable} ${instrument.variable} ${symbols.variable} antialiased`}>
         {children}
       </body>
     </html>
