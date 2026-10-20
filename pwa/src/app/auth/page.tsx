@@ -27,6 +27,12 @@ export default function AuthPage() {
     void (async () => {
       const supabase = createClient();
       if (!supabase) return;
+
+      if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+        router.replace(`/auth/callback?next=${encodeURIComponent(nextPath)}${window.location.hash}`);
+        return;
+      }
+
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
       const dest = await resolveInitialAppPath(supabase, nextPath);

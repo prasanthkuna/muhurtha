@@ -34,7 +34,17 @@ In **Authentication → Providers → Google**, enable **Automatic linking** (sa
 
 First Google sign-in with `prasanthkuna@gmail.com` should attach a `google` identity to the existing user — not create a duplicate. Confirm under **Authentication → Users** (one user, providers: phone + google).
 
-## 5. Verify (Chrome DevTools)
+## 5. Push config (after Google Cloud credentials exist)
+
+```powershell
+.\scripts\setup-pwa-google-auth.ps1 `
+  -GoogleClientId "YOUR_CLIENT_ID.apps.googleusercontent.com" `
+  -GoogleClientSecret "YOUR_CLIENT_SECRET"
+```
+
+This runs `supabase config push` with `GOOGLE_OAUTH_*` env vars (see `supabase/config.toml`).
+
+## 6. Verify (Chrome DevTools)
 
 1. Open https://pwa-lyart-phi.vercel.app/welcome
 2. **Continue with Google** → Google account picker → allow.

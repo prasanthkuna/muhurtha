@@ -21,7 +21,19 @@ port = 54323
 
 [auth]
 enabled = true
-site_url = "http://127.0.0.1:3000"
+site_url = "https://pwa-lyart-phi.vercel.app"
+additional_redirect_urls = [
+  "https://pwa-lyart-phi.vercel.app/**",
+  "http://localhost:3000/**",
+  "http://127.0.0.1:3000/**",
+]
+
+# Enable via: .\scripts\setup-pwa-google-auth.ps1 -GoogleClientId "..." -GoogleClientSecret "..."
+[auth.external.google]
+enabled = false
+client_id = "env(GOOGLE_OAUTH_CLIENT_ID)"
+secret = "env(GOOGLE_OAUTH_CLIENT_SECRET)"
+skip_nonce_check = false
 
 [auth.email]
 enable_signup = true
