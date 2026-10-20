@@ -45,7 +45,7 @@ export default function DecodePage() {
         />
       )}
 
-      {luck ? <LuckyStrip luck={luck} compact /> : null}
+      {luck ? <LuckyStrip luck={luck} compact showMedallion={false} /> : null}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gold-text">Strengths</h2>
