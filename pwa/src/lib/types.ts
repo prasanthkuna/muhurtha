@@ -37,3 +37,18 @@ export type AskMessage = {
   role: "user" | "assistant";
   text: string;
 };
+
+export type NatalLuckColour = {
+  key: string;
+  label: string;
+  hex: string;
+};
+
+export type NatalLuckInfo = {
+  moonSignKey: string;
+  moonSignLabel: string;
+  moonSymbol: string;
+  luckyNumbers: string[];
+  luckyDays: string[];
+  luckyColours: NatalLuckColour[];
+};

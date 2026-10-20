@@ -5,17 +5,19 @@ import { useMemo } from "react";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
+import { LuckyStrip } from "@/components/editorial/lucky-strip";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { useAppData } from "@/context/app-data-context";
 
 export default function TodayPage() {
-  const { views, loading, error, pack } = useAppData();
-  const date = pack?.date ?? "2026-10-20";
+  const { views, loading, error, pack, fromCache } = useAppData();
+  const date = pack?.date ?? new Date().toISOString().slice(0, 10);
 
   const card = useMemo(() => views?.todayCard(date), [views, date]);
   const guidance = (pack?.content?.today_guidance ?? {}) as Record<string, unknown>;
+  const luck = views?.natalLuck;
 
-  if (loading) return <LoadingState message="Preparing today…" />;
+  if (loading && !pack) return <LoadingState message="Preparing today…" />;
   if (error || !views) {
     return <PageHeader title="Today" subtitle={error ?? "Unavailable"} />;
   }
@@ -34,11 +36,17 @@ export default function TodayPage() {
         subtitle={oneLine.toString()}
       />
 
+      {fromCache ? (
+        <p className="text-xs text-ink-tertiary">Showing cached reading — refreshing in background.</p>
+      ) : null}
+
       {meta.todayCount > 0 && meta.todayCount < 25 ? (
         <p className="rounded-xl bg-warning-wash px-4 py-3 text-sm text-warning-ink">
           Daily cards {meta.todayCount} of ~25 for this locale — regenerate pack for full coverage.
         </p>
       ) : null}
+
+      {luck ? <LuckyStrip luck={luck} compact /> : null}
 
       <ProseBlock>
         <p className="text-ink">{card?.body?.toString() ?? guidance.main_advice?.toString()}</p>

@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { BirthPackViews, normalizePackResponse } from "@/lib/birth-pack-views";
+import { clearPackCache, readPackCache, writePackCache } from "@/lib/pack-cache";
 import { createClient } from "@/lib/supabase/client";
 import type { BirthPackPayload } from "@/lib/types";
 
@@ -19,19 +20,23 @@ type AppDataContextValue = {
   loading: boolean;
   error: string | null;
   isPro: boolean;
+  fromCache: boolean;
   refresh: () => Promise<void>;
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const [pack, setPack] = useState<BirthPackPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [pack, setPack] = useState<BirthPackPayload | null>(() => readPackCache());
+  const [loading, setLoading] = useState(!readPackCache());
   const [error, setError] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(!!readPackCache());
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       const supabase = createClient();
@@ -45,6 +50,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!sessionData.session) {
         setError("Sign in to load your reading.");
         setPack(null);
+        clearPackCache();
         return;
       }
 
@@ -55,17 +61,28 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       });
       const json = (await res.json()) as Record<string, unknown>;
       if (!res.ok) throw new Error(json.error?.toString() ?? "Failed to load pack");
-      setPack(normalizePackResponse(json));
+      const normalized = normalizePackResponse(json);
+      setPack(normalized);
+      writePackCache(normalized);
+      setFromCache(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Load failed");
-      setPack(null);
+      if (!readPackCache()) {
+        setError(e instanceof Error ? e.message : "Load failed");
+        setPack(null);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    const cached = readPackCache();
+    if (cached) {
+      setPack(cached);
+      setFromCache(true);
+      setLoading(false);
+    }
+    void load({ silent: !!cached });
     const supabase = createClient();
     if (!supabase) return;
     const {
@@ -84,9 +101,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       isPro: pack?.access?.isPro === true,
-      refresh: load,
+      fromCache,
+      refresh: () => load(),
     };
-  }, [pack, loading, error, load]);
+  }, [pack, loading, error, fromCache, load]);
 
   return (
     <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>

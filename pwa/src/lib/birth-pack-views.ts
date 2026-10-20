@@ -1,5 +1,10 @@
 import { chapterIdFrom } from "./chapter-id";
-import type { BirthPackPayload, ChapterView, PackMeta } from "./types";
+import type {
+  BirthPackPayload,
+  ChapterView,
+  NatalLuckInfo,
+  PackMeta,
+} from "./types";
 
 function tenseBySort(
   facts: Record<string, unknown>[],
@@ -60,6 +65,36 @@ export class BirthPackViews {
     const identity = this.content.user_identity as Record<string, unknown> | undefined;
     const raw = (me?.watchouts ?? identity?.watchouts) as unknown;
     return Array.isArray(raw) ? raw.map(String) : [];
+  }
+
+  get natalLuck(): NatalLuckInfo | null {
+    const person = this.content.person as Record<string, unknown> | undefined;
+    const raw =
+      this.content.natal_luck ??
+      person?.natal_luck ??
+      (this.content.me_profile as Record<string, unknown> | undefined)?.natal_luck;
+    if (!raw || typeof raw !== "object") return null;
+    const j = raw as Record<string, unknown>;
+    const coloursRaw = j.lucky_colours ?? j.luckyColours;
+    const colours = Array.isArray(coloursRaw)
+      ? coloursRaw
+          .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+          .map((c) => ({
+            key: c.key?.toString() ?? "",
+            label: c.label?.toString() ?? "",
+            hex: c.hex?.toString() ?? "#6B7280",
+          }))
+      : [];
+    const nums = j.lucky_numbers ?? j.luckyNumbers;
+    const days = j.lucky_days ?? j.luckyDays;
+    return {
+      moonSignKey: j.moon_sign_key?.toString() ?? "",
+      moonSignLabel: j.moon_sign_label?.toString() ?? "",
+      moonSymbol: j.moon_symbol?.toString() ?? "☽",
+      luckyNumbers: Array.isArray(nums) ? nums.map(String) : [],
+      luckyDays: Array.isArray(days) ? days.map(String) : [],
+      luckyColours: colours,
+    };
   }
 
   chapters(): ChapterView[] {

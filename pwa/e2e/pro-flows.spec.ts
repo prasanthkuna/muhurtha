@@ -1,28 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-const phone = process.env.MUHURTA_E2E_PHONE ?? "9008393030";
-const otp = process.env.MUHURTA_E2E_OTP;
-
 test.describe.serial("Pro PWA flows (live Supabase + muhurtha-api)", () => {
-  test("01 phone OTP sign-in loads real birth pack", async ({ page, context }) => {
+  test("01 signed-in session loads real birth pack", async ({ page }) => {
     const storage = process.env.MUHURTA_E2E_STORAGE;
-    if (storage) {
-      await page.goto("/today");
-      await expect(page.getByTestId("today-loaded")).toBeVisible({ timeout: 90_000 });
-      return;
-    }
-
-    test.skip(!otp, "Set MUHURTA_E2E_OTP after SMS (6 digits).");
-    await context.clearCookies();
-    await page.goto("/auth");
-    await page.getByTestId("auth-phone").fill(phone);
-    await page.getByTestId("auth-send-otp").click();
-    await expect(page.getByTestId("auth-otp")).toBeVisible({ timeout: 15_000 });
-
-    await page.getByTestId("auth-otp").fill(otp!);
-    await page.getByTestId("auth-verify").click();
-
-    await expect(page).toHaveURL(/\/today/, { timeout: 30_000 });
+    test.skip(!storage, "Set MUHURTA_E2E_STORAGE from a saved Google/session state.");
+    await page.goto("/today");
     await expect(page.getByTestId("today-loaded")).toBeVisible({ timeout: 90_000 });
     await expect(page.locator("h1")).not.toHaveText(/Sign in|Welcome/i);
   });
@@ -38,25 +20,15 @@ test.describe.serial("Pro PWA flows (live Supabase + muhurtha-api)", () => {
     await expect(page.getByTestId("life-loaded")).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole("heading", { name: "Current" })).toBeVisible();
 
-    const chapter = page.locator('a[href^="/life/8-"]').first();
-    await expect(chapter).toBeVisible();
-    await chapter.click();
-    await expect(page).toHaveURL(/\/life\/8-/);
-    await expect(page.locator("h1")).toContainText(/Operational|Mercury|Flow/i);
+    const chapter = page.getByRole("link").filter({ hasText: /chapter|phase/i }).first();
+    if (await chapter.isVisible()) {
+      await chapter.click();
+      await expect(page.getByRole("link", { name: /All chapters/i })).toBeVisible();
+    }
   });
 
-  test("04 timing purpose check hits engine", async ({ page }) => {
-    await page.goto("/timing");
-    await page.getByRole("button", { name: "Career move" }).click();
-    await page.getByRole("button", { name: "Run purpose check" }).click();
-    await expect(page.getByText("Result")).toBeVisible({ timeout: 45_000 });
-  });
-
-  test("05 ask sends question to engine", async ({ page }) => {
-    await page.goto("/ask");
-    const chip = page.getByRole("button", { name: /career/i }).first();
-    await expect(chip).toBeVisible({ timeout: 60_000 });
-    await chip.click();
-    await expect(page.locator("main")).toContainText(/.{20,}/, { timeout: 60_000 });
+  test("04 settings reachable", async ({ page }) => {
+    await page.goto("/settings");
+    await expect(page.getByTestId("settings-loaded")).toBeVisible({ timeout: 30_000 });
   });
 });

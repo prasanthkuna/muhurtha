@@ -33,15 +33,14 @@ copy .env.local.example .env.local
 bun run dev
 ```
 
-## OTP autofill (PWA ≈ native)
+## Auth (Supabase)
 
-| Feature | Native app | PWA |
-|---------|------------|-----|
-| Read code from SMS | SMS User Consent + Retriever | **WebOTP** (Chrome Android) + `autocomplete="one-time-code"` (iOS) |
-| Pick phone | SIM / hint picker | **Contact Picker** (Chrome Android) + `tel-national` autofill |
-| Verify | Auto at 6 digits | Same |
+PWA uses **Google OAuth** (`signInWithOAuth`) with callback `/auth/callback`. Enable **Google** under Supabase → Authentication → Providers and add redirect URLs:
 
-The auth screen sends `web_otp_host` and `otp_sms_format: webotp` in `signInWithOtp` metadata. Deploy `supabase/functions/send-sms` and set **`WEBOTP_HOSTS`** (e.g. `localhost:3000,your-domain.com`) as a fallback. SMS must include `@your-host #123456` for WebOTP; without the hook, users can still type the code manually.
+- `https://pwa-lyart-phi.vercel.app/auth/callback`
+- `http://localhost:3000/auth/callback`
+
+After sign-in, routing matches the Flutter app: **Today** if birth data exists, otherwise **/onboarding** (Play Store handoff). Apple Sign-In button is shown as “Soon”.
 
 ## E2E (Playwright, mobile Chromium)
 

@@ -1,7 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-const APP_PREFIXES = ["/decode", "/today", "/life", "/timing", "/ask"];
+const APP_PREFIXES = [
+  "/decode",
+  "/today",
+  "/life",
+  "/timing",
+  "/ask",
+  "/settings",
+  "/onboarding",
+];
 
 function isAppRoute(pathname: string) {
   return APP_PREFIXES.some(

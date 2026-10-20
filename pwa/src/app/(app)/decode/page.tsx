@@ -4,13 +4,14 @@ import Link from "next/link";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
+import { LuckyStrip } from "@/components/editorial/lucky-strip";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { useAppData } from "@/context/app-data-context";
 
 export default function DecodePage() {
   const { views, loading, error, pack } = useAppData();
 
-  if (loading) return <LoadingState message="Opening your reading…" />;
+  if (loading && !pack) return <LoadingState message="Opening your reading…" />;
   if (error || !views || !pack) {
     return (
       <div className="space-y-4">
@@ -21,6 +22,7 @@ export default function DecodePage() {
   }
 
   const domains = views.domainReports();
+  const luck = views.natalLuck;
 
   return (
     <div className="space-y-6" data-testid="decode-loaded">
@@ -29,9 +31,8 @@ export default function DecodePage() {
         title={views.displayHook}
         subtitle={views.identitySummary}
       />
-      <ProseBlock>
-        <p className="text-ink">{views.identitySummary}</p>
-      </ProseBlock>
+
+      {luck ? <LuckyStrip luck={luck} /> : null}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gold-text">Strengths</h2>
