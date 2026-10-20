@@ -1,11 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import {
+  BirthDetailsFields,
+  type BirthDetailsValues,
+} from "@/components/birth/birth-details-fields";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
-import { NAKSHATRAS } from "@/lib/nakshatras";
-import { TIME_BUCKETS } from "@/lib/chart-profiles";
+import { resolveBirthInputMode } from "@/lib/onboarding/engine-resolution";
+
+const emptyPartner: BirthDetailsValues = {
+  displayName: "",
+  dateOfBirth: "",
+  birthPlace: null,
+  currentPlace: null,
+  timeMode: "bucket",
+  timeBucket: "morning",
+  exactTime: "",
+  janmaNakshatra: "",
+};
 
 export function ChartProfilesSection() {
   const { t } = useLocale();
@@ -18,34 +32,48 @@ export function ChartProfilesSection() {
   } = useAppData();
 
   const [open, setOpen] = useState(false);
-  const [label, setLabel] = useState("");
-  const [dob, setDob] = useState("");
-  const [place, setPlace] = useState("");
-  const [bucket, setBucket] = useState("morning");
-  const [nakshatra, setNakshatra] = useState("");
+  const [values, setValues] = useState<BirthDetailsValues>(emptyPartner);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function onSave() {
-    if (!label.trim() || !dob || !place.trim() || !bucket) {
+    if (!values.displayName.trim() || !values.dateOfBirth || !values.birthPlace) {
       setMsg(t("chart.incomplete"));
       return;
     }
+    if (values.timeMode === "exact" && !values.exactTime) {
+      setMsg(t("onboarding.exactRequired"));
+      return;
+    }
+
     setBusy(true);
     setMsg(null);
     try {
-      await saveChartProfile({
-        label: label.trim(),
-        dateOfBirth: dob,
-        birthPlace: place.trim(),
+      const exactDb =
+        values.timeMode === "exact" && values.exactTime
+          ? `${values.exactTime.split(":")[0].padStart(2, "0")}:${values.exactTime.split(":")[1].padStart(2, "0")}:00`
+          : null;
+      const bucket = values.timeMode === "bucket" ? values.timeBucket : null;
+      const birthInputMode = resolveBirthInputMode({
+        exactBirthTime: exactDb,
         timeBucket: bucket,
-        janmaNakshatra: nakshatra || undefined,
+        janmaNakshatra: values.janmaNakshatra || null,
+      });
+
+      await saveChartProfile({
+        label: values.displayName.trim(),
+        dateOfBirth: values.dateOfBirth,
+        birthPlace: values.birthPlace.label,
+        birthLat: values.birthPlace.lat,
+        birthLng: values.birthPlace.lng,
+        birthTimezone: values.birthPlace.timezone,
+        birthInputMode,
+        timeBucket: bucket,
+        exactBirthTime: exactDb,
+        janmaNakshatra: values.janmaNakshatra || undefined,
       });
       setOpen(false);
-      setLabel("");
-      setDob("");
-      setPlace("");
-      setNakshatra("");
+      setValues(emptyPartner);
     } catch (e) {
       const text = e instanceof Error ? e.message : t("chart.incomplete");
       setMsg(text.includes("limit") ? t("chart.limit") : text);
@@ -115,47 +143,13 @@ export function ChartProfilesSection() {
       ) : (
         <div className="space-y-3 rounded-2xl border border-line bg-paper p-4">
           <p className="text-sm font-semibold text-ink">{t("chart.addTitle")}</p>
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder={t("chart.name")}
-            className="w-full rounded-xl border border-line px-3 py-2 text-sm"
+          <BirthDetailsFields
+            values={values}
+            onChange={(p) => setValues((v) => ({ ...v, ...p }))}
+            nameLabel={t("chart.name")}
+            showCurrentPlace={false}
+            syncBirthFromCurrent={false}
           />
-          <input
-            type="date"
-            value={dob}
-            onChange={(e) => setDob(e.target.value)}
-            className="w-full rounded-xl border border-line px-3 py-2 text-sm"
-          />
-          <input
-            value={place}
-            onChange={(e) => setPlace(e.target.value)}
-            placeholder={t("chart.place")}
-            className="w-full rounded-xl border border-line px-3 py-2 text-sm"
-          />
-          <select
-            value={bucket}
-            onChange={(e) => setBucket(e.target.value)}
-            className="w-full rounded-xl border border-line px-3 py-2 text-sm"
-          >
-            {TIME_BUCKETS.map((b) => (
-              <option key={b.value} value={b.value}>
-                {t(b.key)}
-              </option>
-            ))}
-          </select>
-          <select
-            value={nakshatra}
-            onChange={(e) => setNakshatra(e.target.value)}
-            className="w-full rounded-xl border border-line px-3 py-2 text-sm"
-          >
-            <option value="">{t("chart.nakshatra")}</option>
-            {NAKSHATRAS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
           <div className="flex gap-2">
             <PrimaryButton type="button" className="flex-1" onClick={() => void onSave()}>
               {busy ? t("chart.saving") : t("chart.addButton")}

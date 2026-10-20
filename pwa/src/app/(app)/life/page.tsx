@@ -82,11 +82,7 @@ export default function LifeIndexPage() {
 
   return (
     <div className="space-y-8" data-testid="life-loaded">
-      <PageHeader
-        eyebrow="Life atlas"
-        title="Chapters through time"
-        subtitle="Tap a period — full chapter on its own page. No accordion clutter."
-      />
+      <PageHeader eyebrow="Life atlas" title="Chapters through time" />
       {currentChapter ? <ChapterHeroCard chapter={currentChapter} /> : null}
       <SpineSection label="Past" chapters={past} isPro={isPro} />
       {currentChapter ? null : (

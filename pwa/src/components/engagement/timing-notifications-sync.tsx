@@ -7,13 +7,13 @@ import { notificationsEnabled, syncTimingNotifications } from "@/lib/timing-noti
 
 /** Schedules browser notifications for today-ready and good/caution windows when enabled. */
 export function TimingNotificationsSync() {
-  const { today } = useAppData();
+  const { today, profileTimezone } = useAppData();
   const { locale } = useLocale();
 
   useEffect(() => {
     if (!notificationsEnabled()) return;
-    void syncTimingNotifications(today, locale);
-  }, [today, locale]);
+    void syncTimingNotifications(today, locale, profileTimezone);
+  }, [today, locale, profileTimezone]);
 
   return null;
 }

@@ -68,7 +68,6 @@ export function AskAnswerCard({ result }: { result: AskAnswerResult }) {
         </div>
       ) : null}
 
-      <p className="px-1 text-xs text-ink-tertiary">{t("ask.disclaimer")}</p>
     </div>
   );
 }

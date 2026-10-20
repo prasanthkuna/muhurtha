@@ -35,7 +35,6 @@ export default function DecodePage() {
           moonSymbol={luck.moonSymbol}
           moonSignLabel={luck.moonSignLabel}
           heroSubline={views.identitySummary}
-          explainer="Your moon sign shapes how daily timing and luck read for you — not a generic horoscope."
         />
       ) : (
         <PageHeader

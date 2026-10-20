@@ -91,7 +91,6 @@ export function PurposeResultCard({
           </p>
         ) : null}
 
-        <p className="mt-4 text-xs text-ink-tertiary">{t("timing.disclaimer")}</p>
       </ProseBlock>
 
       {result.factors.length > 0 ? (

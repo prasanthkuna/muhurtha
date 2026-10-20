@@ -13,7 +13,13 @@ import { useLocale } from "@/context/locale-context";
 import { BirthPackViews, normalizePackResponse } from "@/lib/birth-pack-views";
 import { parseChartProfileList, type ChartProfileSummary } from "@/lib/chart-profiles";
 import { CHART_PROFILE_STORAGE_KEY } from "@/lib/locale";
-import { clearPackCache, readPackCache, writePackCache } from "@/lib/pack-cache";
+import {
+  clearEngineCache,
+  readCachedPack,
+  readCachedToday,
+  writeCachedPack,
+  writeCachedToday,
+} from "@/lib/engine-cache";
 import { createClient } from "@/lib/supabase/client";
 import type { TodayPayload } from "@/lib/today-types";
 import { parseTodayPayload } from "@/lib/today-types";
@@ -36,10 +42,16 @@ type AppDataContextValue = {
     label: string;
     dateOfBirth: string;
     birthPlace: string;
-    timeBucket: string;
+    birthLat?: number;
+    birthLng?: number;
+    birthTimezone?: string;
+    timeBucket?: string | null;
+    exactBirthTime?: string | null;
+    birthInputMode: string;
     janmaNakshatra?: string;
   }) => Promise<void>;
   deleteChartProfile: (id: string) => Promise<void>;
+  profileTimezone: string;
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -64,9 +76,10 @@ function engineExtras(
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const { locale, localeReady } = useLocale();
-  const [pack, setPack] = useState<BirthPackPayload | null>(() => readPackCache());
+  const [pack, setPack] = useState<BirthPackPayload | null>(null);
   const [today, setToday] = useState<TodayPayload | null>(null);
-  const [loading, setLoading] = useState(!readPackCache());
+  const [loading, setLoading] = useState(true);
+  const [profileTimezone, setProfileTimezone] = useState("Asia/Kolkata");
   const [error, setError] = useState<string | null>(null);
   const [activeChartProfileId, setActiveChartProfileId] = useState<string | null>(() =>
     readActiveChartId(),
@@ -89,7 +102,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [locale]);
 
   const load = useCallback(
-    async (opts?: { silent?: boolean }) => {
+    async (opts?: { silent?: boolean; force?: boolean }) => {
       if (!opts?.silent) {
         setLoading(true);
         setError(null);
@@ -107,44 +120,79 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (!sessionData.session) {
           setError("Sign in to load your reading.");
           setPack(null);
-          clearPackCache();
+          clearEngineCache();
           return;
         }
 
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("current_timezone")
+          .eq("user_id", sessionData.session.user.id)
+          .maybeSingle();
+        const tz = prof?.current_timezone?.toString() || "Asia/Kolkata";
+        setProfileTimezone(tz);
+
         const chartId = readActiveChartId();
         const date = new Date().toISOString().slice(0, 10);
-        const [packRes, todayRes] = await Promise.all([
-          fetch("/api/engine", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(
-              engineExtras(locale, chartId, { action: "birth_pack_get" }),
-            ),
-          }),
-          fetch("/api/engine", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(
-              engineExtras(locale, chartId, { action: "today_get", date }),
-            ),
-          }),
-        ]);
-        const json = (await packRes.json()) as Record<string, unknown>;
-        if (!packRes.ok) throw new Error(json.error?.toString() ?? "Failed to load pack");
-        const normalized = normalizePackResponse(json);
-        setPack(normalized);
-        writePackCache(normalized);
 
-        const todayJson = (await todayRes.json()) as Record<string, unknown>;
-        if (todayRes.ok) {
-          setToday(parseTodayPayload(todayJson));
-        } else {
-          setToday(null);
+        if (!opts?.force) {
+          const cachedPack = readCachedPack(locale, chartId);
+          const cachedToday = readCachedToday(locale, chartId, date);
+          if (cachedPack) setPack(cachedPack);
+          if (cachedToday) setToday(cachedToday);
+          if (cachedPack && cachedToday) {
+            void reloadChartProfiles();
+            return;
+          }
+        }
+
+        const needPack = opts?.force || !readCachedPack(locale, chartId);
+        const needToday = opts?.force || !readCachedToday(locale, chartId, date);
+
+        const [packRes, todayRes] = await Promise.all([
+          needPack
+            ? fetch("/api/engine", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(
+                  engineExtras(locale, chartId, { action: "birth_pack_get" }),
+                ),
+              })
+            : Promise.resolve(null),
+          needToday
+            ? fetch("/api/engine", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(
+                  engineExtras(locale, chartId, { action: "today_get", date }),
+                ),
+              })
+            : Promise.resolve(null),
+        ]);
+
+        if (packRes) {
+          const json = (await packRes.json()) as Record<string, unknown>;
+          if (!packRes.ok) throw new Error(json.error?.toString() ?? "Failed to load pack");
+          const normalized = normalizePackResponse(json);
+          setPack(normalized);
+          writeCachedPack(locale, chartId, normalized);
+        }
+
+        if (todayRes) {
+          const todayJson = (await todayRes.json()) as Record<string, unknown>;
+          if (todayRes.ok) {
+            const parsed = parseTodayPayload(todayJson);
+            setToday(parsed);
+            writeCachedToday(locale, chartId, parsed);
+          } else {
+            setToday(null);
+          }
         }
 
         void reloadChartProfiles();
       } catch (e) {
-        if (!readPackCache()) {
+        const chartId = readActiveChartId();
+        if (!readCachedPack(locale, chartId)) {
           setError(e instanceof Error ? e.message : "Load failed");
           setPack(null);
         }
@@ -161,20 +209,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setActiveChartLabel(label ?? null);
       if (id) localStorage.setItem(CHART_PROFILE_STORAGE_KEY, id);
       else localStorage.removeItem(CHART_PROFILE_STORAGE_KEY);
-      clearPackCache();
-      await load();
+      clearEngineCache();
+      await load({ force: true });
     },
     [load],
   );
 
   useEffect(() => {
     if (!localeReady) return;
-    const cached = readPackCache();
-    if (cached) {
-      setPack(cached);
-      setLoading(false);
-    }
-    void load({ silent: !!cached });
+    void load({ silent: false });
     const supabase = createClient();
     if (!supabase) return;
     const {
@@ -199,7 +242,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       label: string;
       dateOfBirth: string;
       birthPlace: string;
-      timeBucket: string;
+      birthLat?: number;
+      birthLng?: number;
+      birthTimezone?: string;
+      timeBucket?: string | null;
+      exactBirthTime?: string | null;
+      birthInputMode: string;
       janmaNakshatra?: string;
     }) => {
       const res = await fetch("/api/engine", {
@@ -211,8 +259,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             label: input.label,
             date_of_birth: input.dateOfBirth,
             birth_place: input.birthPlace,
-            birth_input_mode: input.janmaNakshatra ? "time_bucket_plus_nakshatra" : "time_bucket",
+            birth_lat: input.birthLat,
+            birth_lng: input.birthLng,
+            birth_timezone: input.birthTimezone,
+            birth_input_mode: input.birthInputMode,
             time_bucket: input.timeBucket,
+            exact_birth_time: input.exactBirthTime,
             ...(input.janmaNakshatra ? { janma_nakshatra: input.janmaNakshatra } : {}),
           }),
         ),
@@ -273,9 +325,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       error,
       isPro: pack?.access?.isPro === true,
       refresh: async () => {
-        clearPackCache();
-        await load();
+        clearEngineCache();
+        await load({ force: true });
       },
+      profileTimezone,
       activeChartProfileId,
       activeChartLabel,
       chartProfiles,
@@ -297,6 +350,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     reloadChartProfiles,
     saveChartProfile,
     deleteChartProfile,
+    profileTimezone,
   ]);
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

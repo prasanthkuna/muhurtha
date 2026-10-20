@@ -4,7 +4,6 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { AskAnswerCard } from "@/components/ask/ask-answer-card";
 import { PageHeader } from "@/components/editorial/page-header";
-import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
@@ -88,10 +87,8 @@ function AskInner() {
       <PageHeader
         eyebrow={t("ask.eyebrow")}
         title={t("ask.title")}
-        subtitle={t("ask.subtitleLong")}
+        subtitle={t("ask.subtitle")}
       />
-
-      <ProseBlock className="mb-4 text-sm text-ink-secondary">{t("ask.howDifferent")}</ProseBlock>
 
       {currentChapter?.title ? (
         <div className="mb-4 rounded-2xl border border-line bg-gold-wash/40 px-4 py-3">

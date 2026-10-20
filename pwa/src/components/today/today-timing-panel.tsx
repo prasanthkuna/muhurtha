@@ -28,7 +28,6 @@ export function TodayTimingPanel({
         <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">
           {t("today.clockTitle")}
         </p>
-        <p className="mt-1 text-sm text-ink-secondary">{t("today.clockHint")}</p>
       </div>
 
       {nextGood || nextCaution ? (

@@ -1,8 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppLocale } from "@/lib/locale";
+import type { ResolvedPlace } from "@/lib/location/resolved-place";
 import { resolveBirthInputMode } from "@/lib/onboarding/engine-resolution";
-
-type ResolvedPlace = { lat: number; lng: number; timezone: string };
 
 export async function ensureSignedInProfile(supabase: SupabaseClient): Promise<string> {
   const {
@@ -32,16 +31,12 @@ export async function ensureSignedInProfile(supabase: SupabaseClient): Promise<s
 export type OnboardingFormInput = {
   displayName: string;
   dateOfBirth: string;
-  birthPlace: string;
-  currentCity: string;
+  birthPlace: ResolvedPlace;
+  currentPlace: ResolvedPlace;
   languageCode: AppLocale;
   timeBucket: string | null;
   exactBirthTime: string | null;
   janmaNakshatra: string | null;
-  currentLat?: number | null;
-  currentLng?: number | null;
-  currentTimezone?: string | null;
-  locationDetected?: boolean;
 };
 
 function formatExactTimeForDb(hhmm: string): string {
@@ -54,38 +49,28 @@ export async function saveOnboardingDraft(
   input: OnboardingFormInput,
 ): Promise<{ profileId: string; birthInputId: string }> {
   const profileId = await ensureSignedInProfile(supabase);
-
-  const city = input.currentCity.trim();
-  const resolvedCityViaEdge = city ? await resolvePlaceViaSupabase(supabase, city) : null;
-
-  const useDetected =
-    input.locationDetected && input.currentLat != null && input.currentLng != null;
-  const currentLat = useDetected ? input.currentLat : resolvedCityViaEdge?.lat;
-  const currentLng = useDetected ? input.currentLng : resolvedCityViaEdge?.lng;
-  const currentTimezone = useDetected ? input.currentTimezone : resolvedCityViaEdge?.timezone;
-
-  const locationMeta: Record<string, unknown> = {
-    detected: useDetected,
-    resolved: currentLat != null && currentLng != null,
-  };
-  if (currentLat != null) locationMeta.current_lat = currentLat;
-  if (currentLng != null) locationMeta.current_lng = currentLng;
-  if (currentTimezone) locationMeta.timezone = currentTimezone;
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
+
+  const locationMeta = {
+    detected: true,
+    resolved: true,
+    current_lat: input.currentPlace.lat,
+    current_lng: input.currentPlace.lng,
+    timezone: input.currentPlace.timezone,
+  };
 
   const { error: profileErr } = await supabase.from("profiles").upsert(
     {
       id: profileId,
       user_id: user.id,
       display_name: input.displayName.trim(),
-      current_city: city || null,
-      current_lat: currentLat ?? null,
-      current_lng: currentLng ?? null,
-      current_timezone: currentTimezone ?? null,
+      current_city: input.currentPlace.label,
+      current_lat: input.currentPlace.lat,
+      current_lng: input.currentPlace.lng,
+      current_timezone: input.currentPlace.timezone,
       language_code: input.languageCode,
       location_meta: locationMeta,
       updated_at: new Date().toISOString(),
@@ -94,7 +79,6 @@ export async function saveOnboardingDraft(
   );
   if (profileErr) throw profileErr;
 
-  const resolvedBirth = await resolvePlaceViaSupabase(supabase, input.birthPlace.trim());
   const exactDb = input.exactBirthTime ? formatExactTimeForDb(input.exactBirthTime) : null;
   const bucketForDb =
     input.exactBirthTime || !input.timeBucket || input.timeBucket === "exact"
@@ -104,7 +88,10 @@ export async function saveOnboardingDraft(
   const birthPayload: Record<string, unknown> = {
     profile_id: profileId,
     date_of_birth: input.dateOfBirth,
-    birth_place: input.birthPlace.trim(),
+    birth_place: input.birthPlace.label,
+    birth_lat: input.birthPlace.lat,
+    birth_lng: input.birthPlace.lng,
+    birth_timezone: input.birthPlace.timezone,
     birth_input_mode: resolveBirthInputMode({
       exactBirthTime: exactDb,
       timeBucket: bucketForDb,
@@ -115,11 +102,6 @@ export async function saveOnboardingDraft(
     janma_nakshatra: input.janmaNakshatra?.trim() || null,
     updated_at: new Date().toISOString(),
   };
-  if (resolvedBirth) {
-    birthPayload.birth_lat = resolvedBirth.lat;
-    birthPayload.birth_lng = resolvedBirth.lng;
-    birthPayload.birth_timezone = resolvedBirth.timezone;
-  }
 
   const { data: existingBirth } = await supabase
     .from("birth_inputs")
@@ -148,28 +130,6 @@ export async function saveOnboardingDraft(
   return { profileId, birthInputId };
 }
 
-async function resolvePlaceViaSupabase(
-  supabase: SupabaseClient,
-  place: string,
-): Promise<ResolvedPlace | null> {
-  const trimmed = place.trim();
-  if (!trimmed) return null;
-  try {
-    const { data, error } = await supabase.functions.invoke("muhurtha-api", {
-      body: { action: "birth_place_resolve", place: trimmed },
-    });
-    if (error || !data || typeof data !== "object") return null;
-    const map = data as Record<string, unknown>;
-    const lat = Number(map.lat);
-    const lng = Number(map.lng);
-    const timezone = map.timezone?.toString();
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !timezone) return null;
-    return { lat, lng, timezone };
-  } catch {
-    return null;
-  }
-}
-
 export async function initializeChartAfterOnboarding(
   birthInputId: string,
   locale: AppLocale,
@@ -191,4 +151,32 @@ export async function initializeChartAfterOnboarding(
       throw new Error(json.error?.toString() ?? "Could not start your reading");
     }
   }
+}
+
+export async function saveProfileCurrentPlace(
+  supabase: SupabaseClient,
+  place: ResolvedPlace,
+): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in");
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      current_city: place.label,
+      current_lat: place.lat,
+      current_lng: place.lng,
+      current_timezone: place.timezone,
+      location_meta: {
+        detected: true,
+        resolved: true,
+        current_lat: place.lat,
+        current_lng: place.lng,
+        timezone: place.timezone,
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id);
+  if (error) throw error;
 }

@@ -74,13 +74,7 @@ function TimingInner() {
 
   return (
     <div className="space-y-6" data-testid="timing-loaded">
-      <PageHeader
-        eyebrow={t("timing.eyebrow")}
-        title={t("timing.title")}
-        subtitle={t("timing.subtitleLong")}
-      />
-
-      <ProseBlock className="text-sm text-ink-secondary">{t("timing.howDifferent")}</ProseBlock>
+      <PageHeader eyebrow={t("timing.eyebrow")} title={t("timing.title")} subtitle={t("timing.subtitle")} />
 
       <div className="flex flex-wrap gap-2">
         {PURPOSE_OPTIONS.map((p) => (

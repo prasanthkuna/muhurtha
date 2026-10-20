@@ -1,34 +1,15 @@
 import type { BirthPackPayload } from "./types";
+import { clearEngineCache } from "./engine-cache";
 
-const KEY = "muhurtha_birth_pack_v1";
-const TTL_MS = 20 * 60 * 1000;
-
-type Cached = { savedAt: number; pack: BirthPackPayload };
-
+/** @deprecated use engine-cache; kept for call sites */
 export function readPackCache(): BirthPackPayload | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Cached;
-    if (Date.now() - parsed.savedAt > TTL_MS) return null;
-    return parsed.pack;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
-export function writePackCache(pack: BirthPackPayload) {
-  if (typeof window === "undefined") return;
-  try {
-    const payload: Cached = { savedAt: Date.now(), pack };
-    localStorage.setItem(KEY, JSON.stringify(payload));
-  } catch {
-    /* quota */
-  }
+export function writePackCache(_: BirthPackPayload) {
+  /* handled by engine-cache in app-data-context */
 }
 
 export function clearPackCache() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(KEY);
+  clearEngineCache();
 }

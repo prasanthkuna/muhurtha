@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChartProfilesSection } from "@/components/settings/chart-profiles-section";
 import { PageHeader } from "@/components/editorial/page-header";
@@ -8,7 +9,10 @@ import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { accountDeletionMailto, LegalUrls } from "@/lib/legal-urls";
 import { APP_LOCALES, localeLabel, type AppLocale } from "@/lib/locale";
-import { clearPackCache } from "@/lib/pack-cache";
+import { LocationPicker } from "@/components/location/location-picker";
+import { clearEngineCache } from "@/lib/engine-cache";
+import type { ResolvedPlace } from "@/lib/location/resolved-place";
+import { saveProfileCurrentPlace } from "@/lib/onboarding/save-onboarding";
 import { loadBirthProfileSummary, type BirthProfileSummary } from "@/lib/profile-bundle";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -36,13 +40,12 @@ function SettingsLink({ href, label }: { href: string; label: string }) {
 
 export default function SettingsPage() {
   const { t, locale, setLocale } = useLocale();
-  const { isPro, refresh, today } = useAppData();
+  const { isPro, refresh, today, profileTimezone } = useAppData();
   const [email, setEmail] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
   const [birth, setBirth] = useState<BirthProfileSummary | null>(null);
   const [profileMissing, setProfileMissing] = useState(false);
-  const [currentCity, setCurrentCity] = useState<string>("");
-  const [locationBusy, setLocationBusy] = useState(false);
+  const [currentPlace, setCurrentPlace] = useState<ResolvedPlace | null>(null);
   const [locationMsg, setLocationMsg] = useState<string | null>(null);
   const [alertsOn, setAlertsOn] = useState(false);
   const [alertsMsg, setAlertsMsg] = useState<string | null>(null);
@@ -61,7 +64,14 @@ export default function SettingsPage() {
       if (summary) {
         setBirth(summary);
         setProfileMissing(!summary.dateOfBirth);
-        setCurrentCity(summary.currentCity ?? "");
+        if (summary.currentCity && summary.currentLat != null && summary.currentLng != null) {
+          setCurrentPlace({
+            label: summary.currentCity,
+            lat: summary.currentLat,
+            lng: summary.currentLng,
+            timezone: summary.timezone ?? "Asia/Kolkata",
+          });
+        }
       } else {
         setProfileMissing(true);
       }
@@ -69,20 +79,27 @@ export default function SettingsPage() {
   }, []);
 
   async function signOut() {
-    clearPackCache();
+    clearEngineCache();
     const supabase = createClient();
     if (supabase) await supabase.auth.signOut();
     window.location.assign("/welcome");
   }
 
   async function hardRefresh() {
-    clearPackCache();
+    clearEngineCache();
     await refresh();
     const summary = await loadBirthProfileSummary();
     if (summary) {
       setBirth(summary);
       setProfileMissing(!summary.dateOfBirth);
-      setCurrentCity(summary.currentCity ?? "");
+      if (summary.currentCity && summary.currentLat != null && summary.currentLng != null) {
+        setCurrentPlace({
+          label: summary.currentCity,
+          lat: summary.currentLat,
+          lng: summary.currentLng,
+          timezone: summary.timezone ?? "Asia/Kolkata",
+        });
+      }
     }
   }
 
@@ -91,49 +108,31 @@ export default function SettingsPage() {
     setLangBusy(true);
     try {
       await setLocale(next);
-      clearPackCache();
+      clearEngineCache();
       await refresh();
       if (notificationsEnabled()) {
-        await syncTimingNotifications(today, next);
+        await syncTimingNotifications(today, next, profileTimezone);
       }
     } finally {
       setLangBusy(false);
     }
   }
 
-  async function detectLocation() {
-    setLocationBusy(true);
+  async function onCurrentPlaceChange(place: ResolvedPlace) {
+    setCurrentPlace(place);
     setLocationMsg(null);
     try {
-      if (!navigator.geolocation) throw new Error("Geolocation is not available in this browser.");
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          timeout: 20_000,
-        });
-      });
       const supabase = createClient();
       if (!supabase) throw new Error("Not signed in.");
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) throw new Error("Not signed in.");
-
-      const { error: upErr } = await supabase
-        .from("profiles")
-        .update({
-          current_lat: pos.coords.latitude,
-          current_lng: pos.coords.longitude,
-          current_city: currentCity.trim() || birth?.currentCity || "Current location",
-        })
-        .eq("user_id", auth.user.id);
-      if (upErr) throw upErr;
-
-      setLocationMsg("OK");
-      clearPackCache();
+      await saveProfileCurrentPlace(supabase, place);
+      clearEngineCache();
       await refresh();
+      if (notificationsEnabled()) {
+        await syncTimingNotifications(today, locale, profileTimezone);
+      }
+      setLocationMsg(t("settings.locationSaved"));
     } catch (e) {
-      setLocationMsg(e instanceof Error ? e.message : "Could not detect location.");
-    } finally {
-      setLocationBusy(false);
+      setLocationMsg(e instanceof Error ? e.message : t("onboarding.geoFailed"));
     }
   }
 
@@ -151,7 +150,7 @@ export default function SettingsPage() {
     }
     setNotificationsEnabled(true);
     setAlertsOn(true);
-    await syncTimingNotifications(today, locale);
+    await syncTimingNotifications(today, locale, profileTimezone);
   }
 
   return (
@@ -228,17 +227,12 @@ export default function SettingsPage() {
       ) : null}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gold-text">{t("settings.cityTitle")}</h2>
-        <p className="text-sm text-ink-secondary">{t("settings.cityHint")}</p>
-        <input
-          value={currentCity}
-          onChange={(e) => setCurrentCity(e.target.value)}
-          placeholder={t("settings.cityPlaceholder")}
-          className="w-full rounded-xl border border-line bg-paper px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-gold-text/25"
+        <LocationPicker
+          label={t("settings.cityTitle")}
+          value={currentPlace}
+          onChange={(place) => void onCurrentPlaceChange(place)}
+          autoDetect={!currentPlace}
         />
-        <PrimaryButton type="button" onClick={() => void detectLocation()} className="w-full">
-          {locationBusy ? t("settings.detecting") : t("settings.detectLocation")}
-        </PrimaryButton>
         {locationMsg ? <p className="text-sm text-ink-secondary">{locationMsg}</p> : null}
       </section>
 
@@ -253,6 +247,15 @@ export default function SettingsPage() {
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-gold-text">{t("settings.legalTitle")}</h2>
+        <Link
+          href="/settings/disclaimer"
+          className="flex min-h-11 items-center justify-between rounded-xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition-colors hover:border-gold-accent/40"
+        >
+          {t("legal.disclaimerTitle")}
+          <span className="text-ink-tertiary" aria-hidden>
+            →
+          </span>
+        </Link>
         <SettingsLink href={LegalUrls.privacy} label={t("settings.privacy")} />
         <SettingsLink href={LegalUrls.terms} label={t("settings.terms")} />
         <SettingsLink href={LegalUrls.deleteAccount} label={t("settings.deleteWeb")} />

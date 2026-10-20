@@ -4,44 +4,39 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GrahaMedallion } from "@/components/celestial/lord-medallion";
 import { OrbitBackdrop } from "@/components/celestial/orbit-backdrop";
-import { MapPin } from "@/components/celestial/muh-icon";
+import {
+  BirthDetailsFields,
+  type BirthDetailsValues,
+} from "@/components/birth/birth-details-fields";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { useLocale } from "@/context/locale-context";
 import { APP_LOCALES, localeLabel, type AppLocale } from "@/lib/locale";
-import { TIME_BUCKETS } from "@/lib/chart-profiles";
-import { NAKSHATRAS } from "@/lib/nakshatras";
-import { clearPackCache } from "@/lib/pack-cache";
+import { clearEngineCache } from "@/lib/engine-cache";
 import {
   initializeChartAfterOnboarding,
   saveOnboardingDraft,
 } from "@/lib/onboarding/save-onboarding";
 import { createClient } from "@/lib/supabase/client";
 
-const inputClass =
-  "w-full rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink outline-none focus:ring-2 focus:ring-gold-text/25";
+const emptyValues: BirthDetailsValues = {
+  displayName: "",
+  dateOfBirth: "",
+  birthPlace: null,
+  currentPlace: null,
+  timeMode: "bucket",
+  timeBucket: "morning",
+  exactTime: "",
+  janmaNakshatra: "",
+};
 
 export function OnboardingScreen() {
   const router = useRouter();
   const { t, locale, setLocale, localeReady } = useLocale();
-
-  const [displayName, setDisplayName] = useState("");
-  const [dob, setDob] = useState("");
-  const [birthPlace, setBirthPlace] = useState("");
-  const [currentCity, setCurrentCity] = useState("");
-  const [timeMode, setTimeMode] = useState<"bucket" | "exact">("bucket");
-  const [timeBucket, setTimeBucket] = useState("morning");
-  const [exactTime, setExactTime] = useState("");
-  const [nakshatra, setNakshatra] = useState("");
+  const [values, setValues] = useState<BirthDetailsValues>(emptyValues);
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [locBusy, setLocBusy] = useState(false);
-  const [geo, setGeo] = useState<{
-    lat: number;
-    lng: number;
-    detected: boolean;
-  } | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -54,46 +49,27 @@ export function OnboardingScreen() {
         meta?.name?.toString() ||
         data.user?.email?.split("@")[0] ||
         "";
-      if (name && !displayName) setDisplayName(name);
+      if (name) setValues((v) => ({ ...v, displayName: name }));
     })();
-  }, [displayName]);
+  }, []);
 
-  async function detectLocation() {
-    setLocBusy(true);
-    setError(null);
-    try {
-      if (!navigator.geolocation) throw new Error(t("onboarding.geoUnavailable"));
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          timeout: 20_000,
-        });
-      });
-      setGeo({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        detected: true,
-      });
-      if (!currentCity.trim()) setCurrentCity(t("onboarding.currentLocation"));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("onboarding.geoFailed"));
-    } finally {
-      setLocBusy(false);
-    }
+  function patch(p: Partial<BirthDetailsValues>) {
+    setValues((v) => ({ ...v, ...p }));
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!displayName.trim() || !dob || !birthPlace.trim() || !currentCity.trim()) {
+    if (
+      !values.displayName.trim() ||
+      !values.dateOfBirth ||
+      !values.birthPlace ||
+      !values.currentPlace
+    ) {
       setError(t("onboarding.incomplete"));
       return;
     }
-    if (timeMode === "bucket" && !timeBucket) {
-      setError(t("onboarding.incomplete"));
-      return;
-    }
-    if (timeMode === "exact" && !exactTime) {
+    if (values.timeMode === "exact" && !values.exactTime) {
       setError(t("onboarding.exactRequired"));
       return;
     }
@@ -107,23 +83,20 @@ export function OnboardingScreen() {
     setBusy(true);
     try {
       const { birthInputId } = await saveOnboardingDraft(supabase, {
-        displayName: displayName.trim(),
-        dateOfBirth: dob,
-        birthPlace: birthPlace.trim(),
-        currentCity: currentCity.trim(),
+        displayName: values.displayName.trim(),
+        dateOfBirth: values.dateOfBirth,
+        birthPlace: values.birthPlace,
+        currentPlace: values.currentPlace,
         languageCode: locale,
-        timeBucket: timeMode === "bucket" ? timeBucket : null,
-        exactBirthTime: timeMode === "exact" ? exactTime : null,
-        janmaNakshatra: nakshatra.trim() || null,
-        currentLat: geo?.lat,
-        currentLng: geo?.lng,
-        locationDetected: geo?.detected ?? false,
+        timeBucket: values.timeMode === "bucket" ? values.timeBucket : null,
+        exactBirthTime: values.timeMode === "exact" ? values.exactTime : null,
+        janmaNakshatra: values.janmaNakshatra.trim() || null,
       });
 
       setBusy(false);
       setGenerating(true);
       await initializeChartAfterOnboarding(birthInputId, locale);
-      clearPackCache();
+      clearEngineCache();
       router.replace("/decode");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("onboarding.saveFailed"));
@@ -138,13 +111,8 @@ export function OnboardingScreen() {
     window.location.assign("/welcome");
   }
 
-  if (!localeReady) {
-    return <LoadingState message={t("common.loading")} />;
-  }
-
-  if (generating) {
-    return <LoadingState message={t("onboarding.generating")} />;
-  }
+  if (!localeReady) return <LoadingState message={t("common.loading")} />;
+  if (generating) return <LoadingState message={t("onboarding.generating")} />;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2.5rem,env(safe-area-inset-top))]">
@@ -159,120 +127,12 @@ export function OnboardingScreen() {
             <h1 className="mt-1 font-serif text-2xl font-bold leading-tight text-gold-text">
               {t("onboarding.title")}
             </h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-ink-secondary">{t("onboarding.subtitle")}</p>
           </div>
         </div>
       </section>
 
       <form onSubmit={(e) => void onSubmit(e)} className="mt-6 space-y-4" data-testid="onboarding-form">
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-ink-tertiary">{t("onboarding.name")}</span>
-          <input
-            className={inputClass}
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            autoComplete="name"
-          />
-        </label>
-
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-ink-tertiary">{t("onboarding.dob")}</span>
-          <input
-            type="date"
-            className={inputClass}
-            value={dob}
-            onChange={(e) => setDob(e.target.value)}
-            max={new Date().toISOString().slice(0, 10)}
-          />
-        </label>
-
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-ink-tertiary">{t("onboarding.birthPlace")}</span>
-          <input
-            className={inputClass}
-            value={birthPlace}
-            onChange={(e) => setBirthPlace(e.target.value)}
-            placeholder={t("onboarding.birthPlaceHint")}
-          />
-        </label>
-
-        <div className="space-y-1.5">
-          <span className="text-xs font-medium text-ink-tertiary">{t("onboarding.currentCity")}</span>
-          <input
-            className={inputClass}
-            value={currentCity}
-            onChange={(e) => {
-              setCurrentCity(e.target.value);
-              setGeo(null);
-            }}
-            placeholder={t("settings.cityPlaceholder")}
-          />
-          <button
-            type="button"
-            onClick={() => void detectLocation()}
-            disabled={locBusy}
-            className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-gold-text"
-          >
-            <MapPin className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-            {locBusy ? t("settings.detecting") : t("onboarding.detectLocation")}
-          </button>
-        </div>
-
-        <fieldset className="space-y-2">
-          <legend className="text-xs font-medium text-ink-tertiary">{t("onboarding.birthTime")}</legend>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setTimeMode("bucket")}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                timeMode === "bucket" ? "bg-gold-wash text-gold-text" : "border border-line bg-paper text-ink-secondary"
-              }`}
-            >
-              {t("onboarding.timeWindow")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimeMode("exact")}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                timeMode === "exact" ? "bg-gold-wash text-gold-text" : "border border-line bg-paper text-ink-secondary"
-              }`}
-            >
-              {t("onboarding.exactTime")}
-            </button>
-          </div>
-          {timeMode === "bucket" ? (
-            <select
-              className={inputClass}
-              value={timeBucket}
-              onChange={(e) => setTimeBucket(e.target.value)}
-            >
-              {TIME_BUCKETS.filter((b) => b.value !== "unknown").map((b) => (
-                <option key={b.value} value={b.value}>
-                  {t(b.key)}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type="time"
-              className={inputClass}
-              value={exactTime}
-              onChange={(e) => setExactTime(e.target.value)}
-            />
-          )}
-        </fieldset>
-
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-ink-tertiary">{t("onboarding.nakshatra")}</span>
-          <select className={inputClass} value={nakshatra} onChange={(e) => setNakshatra(e.target.value)}>
-            <option value="">{t("onboarding.nakshatraSkip")}</option>
-            {NAKSHATRAS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
+        <BirthDetailsFields values={values} onChange={patch} />
 
         <div className="space-y-1.5">
           <span className="text-xs font-medium text-ink-tertiary">{t("settings.languageTitle")}</span>
@@ -304,7 +164,11 @@ export function OnboardingScreen() {
           {busy ? t("onboarding.saving") : t("onboarding.submit")}
         </PrimaryButton>
 
-        <button type="button" onClick={() => void signOut()} className="w-full py-2 text-center text-sm text-ink-tertiary">
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="w-full py-2 text-center text-sm text-ink-tertiary"
+        >
           {t("common.signOut")}
         </button>
       </form>

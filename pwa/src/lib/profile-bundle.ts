@@ -9,6 +9,8 @@ export type BirthProfileSummary = {
   janmaNakshatra: string | null;
   currentCity: string | null;
   timezone: string | null;
+  currentLat: number | null;
+  currentLng: number | null;
 };
 
 function timeBucketLabel(bucket: string | null, exact: string | null): string | null {
@@ -35,7 +37,7 @@ export async function loadBirthProfileSummary(): Promise<BirthProfileSummary | n
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, display_name, current_city, current_timezone")
+    .select("id, display_name, current_city, current_timezone, current_lat, current_lng")
     .eq("user_id", auth.user.id)
     .maybeSingle();
 
@@ -63,5 +65,7 @@ export async function loadBirthProfileSummary(): Promise<BirthProfileSummary | n
     janmaNakshatra: birth?.janma_nakshatra?.toString() ?? null,
     currentCity: profile.current_city ?? null,
     timezone: profile.current_timezone ?? null,
+    currentLat: profile.current_lat != null ? Number(profile.current_lat) : null,
+    currentLng: profile.current_lng != null ? Number(profile.current_lng) : null,
   };
 }

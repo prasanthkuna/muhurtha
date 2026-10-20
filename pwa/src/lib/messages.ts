@@ -52,6 +52,8 @@ const en: MessageTree = {
     cityHint: "Purpose checks and today's clock windows need latitude and longitude.",
     cityPlaceholder: "City label (optional)",
     detectLocation: "Detect my location",
+    locationSaved: "Location updated.",
+    bornElsewhere: "Born somewhere else? Pick birth place.",
     detecting: "Detecting…",
     languageTitle: "Language",
     languageHint: "Pack content and daily cards reload in the language you choose.",
@@ -99,9 +101,7 @@ const en: MessageTree = {
     loading: "Loading timing…",
     eyebrow: "Purpose timing",
     title: "Is today aligned?",
-    subtitle: "Traditional Panchanga comparison for one purpose — not an outcome guarantee.",
-    subtitleLong: "Pick one activity — we compare today's Panchanga to that purpose, separate from your general Today card.",
-    howDifferent: "Unlike Today (your daily rhythm) or Ask (a plain-language answer), Timing scores tithi, nakshatra, and purpose rules for one job.",
+    subtitle: "Purpose-based timing for one activity.",
     run: "Run purpose check",
     checking: "Checking…",
     week: "This week",
@@ -119,9 +119,7 @@ const en: MessageTree = {
     loading: "Loading Ask…",
     eyebrow: "Ask",
     title: "One clear question",
-    subtitle: "Spacious answers grounded in your pack — not a junk drawer.",
-    subtitleLong: "Short answers from your pack templates plus today's live windows — not a generic horoscope chat.",
-    howDifferent: "Ask gives a direct sentence and next step. Timing scores one activity. Today shows the whole day's rhythm.",
+    subtitle: "Answers from your chart pack.",
     fromLife: "From your life map",
     askChapter: "Ask about this chapter →",
     suggested: "Start here",
@@ -169,6 +167,18 @@ const en: MessageTree = {
     geoUnavailable: "Location is not available in this browser.",
     geoFailed: "Could not detect location.",
     currentLocation: "Current location",
+  },
+  legal: {
+    disclaimerTitle: "How to read Muhūrta",
+    disclaimerIntro: "Scope of timing, Ask, and Decode — kept off daily screens on purpose.",
+    bodyTiming:
+      "Timing checks compare traditional Panchanga factors to one purpose. They are not outcome predictions or verified activity-specific Muhurta certificates. Consider real-world availability, preparation, and professional advice first.",
+    bodyAsk:
+      "Ask answers come from your chart pack templates and live windows. They are not medical, legal, or financial advice.",
+    bodyDecode:
+      "Decode and natal luck use your sidereal chart pack. They describe personal patterns, not a generic horoscope feed.",
+    bodyGeneral:
+      "General daylight windows on Today follow Panchanga rhythm for your city. Preliminary factors may appear in details; they are not individualized favourable-outcome guarantees.",
   },
 };
 
@@ -298,6 +308,16 @@ const te: MessageTree = {
     geoUnavailable: "Location అందుబాటులో లేదు.",
     geoFailed: "Location detect కాలేదు.",
     currentLocation: "ప్రస్తుత location",
+    bornElsewhere: "వేరే చోట పుట్టారా? birth place ఎంచుకోండి.",
+    locationSaved: "Location updated.",
+  },
+  legal: {
+    disclaimerTitle: "How to read Muhūrta",
+    disclaimerIntro: "Scope of timing, Ask, and Decode.",
+    bodyTiming: "Timing is traditional Panchanga comparison, not an outcome prediction.",
+    bodyAsk: "Ask is not medical, legal, or financial advice.",
+    bodyDecode: "Decode uses your chart pack, not a generic horoscope feed.",
+    bodyGeneral: "Today windows follow Panchanga for your city.",
   },
   bucket: {
     earlyMorning: "తెలుపు",
@@ -436,6 +456,16 @@ const hi: MessageTree = {
     geoUnavailable: "Location उपलब्ध नहीं।",
     geoFailed: "Location detect नहीं हुआ।",
     currentLocation: "वर्तमान location",
+    bornElsewhere: "कहीं और जन्म? जन्म स्थान चुनें.",
+    locationSaved: "Location updated.",
+  },
+  legal: {
+    disclaimerTitle: "How to read Muhūrta",
+    disclaimerIntro: "Scope of timing, Ask, and Decode.",
+    bodyTiming: "Timing is traditional Panchanga comparison, not an outcome prediction.",
+    bodyAsk: "Ask is not medical, legal, or financial advice.",
+    bodyDecode: "Decode uses your chart pack, not a generic horoscope feed.",
+    bodyGeneral: "Today windows follow Panchanga for your city.",
   },
   bucket: {
     earlyMorning: "बहुत सुबह",
