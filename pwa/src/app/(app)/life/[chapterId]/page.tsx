@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PageHeader } from "@/components/editorial/page-header";
+import { ChapterHeroCard } from "@/components/celestial/chapter-hero-card";
+import { ChevronLeft } from "@/components/celestial/muh-icon";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { PrimaryButton } from "@/components/editorial/primary-button";
+import { PageHeader } from "@/components/editorial/page-header";
 import { useAppData } from "@/context/app-data-context";
 
 export default function LifeChapterPage() {
@@ -29,14 +31,14 @@ export default function LifeChapterPage() {
 
   return (
     <article className="space-y-6">
-      <Link href="/life" className="text-sm text-gold-text">
-        ← All chapters
+      <Link
+        href="/life"
+        className="inline-flex items-center gap-1 text-sm font-medium text-gold-text transition-colors hover:text-gold-accent"
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={2} aria-hidden />
+        All chapters
       </Link>
-      <PageHeader
-        eyebrow={chapter.periodLabel}
-        title={chapter.title}
-        subtitle={chapter.highlight}
-      />
+      <ChapterHeroCard chapter={chapter} />
       <ProseBlock>
         <p className="whitespace-pre-wrap text-ink-secondary">{chapter.body}</p>
       </ProseBlock>

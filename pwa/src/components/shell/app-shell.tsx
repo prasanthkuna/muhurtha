@@ -6,11 +6,11 @@ import { PageTransition } from "@/components/motion/page-transition";
 import { ChartProfileBanner } from "@/components/shell/chart-profile-banner";
 import { cn } from "@/components/ui/cn";
 import { useLocale } from "@/context/locale-context";
+import { Settings } from "@/components/celestial/muh-icon";
 import {
   NavIconAsk,
   NavIconDecode,
   NavIconLife,
-  NavIconSettings,
   NavIconTiming,
   NavIconToday,
 } from "./nav-icons";
@@ -38,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className="flex h-10 w-10 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-paper hover:text-gold-text"
           aria-label={t("common.settings")}
         >
-          <NavIconSettings />
+          <Settings className="h-5 w-5" strokeWidth={1.75} aria-hidden />
         </Link>
       </header>
       <main className="flex-1 px-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2">

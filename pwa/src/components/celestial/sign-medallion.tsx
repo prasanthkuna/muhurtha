@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/components/ui/cn";
+import { RashiGlyph } from "@/components/celestial/rashi-glyphs";
 import { normalizeRashiKey, RASHI_SYMBOL, RASHI_THEME, type RashiKey } from "@/design-system/rashi";
 
 const SIZE_MAP = {
@@ -31,6 +32,7 @@ export function SignMedallion({
   const theme = RASHI_THEME[key];
   const glyph = symbol && symbol.length <= 2 ? symbol : RASHI_SYMBOL[key];
   const dim = SIZE_MAP[size];
+  const useSvgGlyph = size !== "sm";
 
   return (
     <div
@@ -51,12 +53,20 @@ export function SignMedallion({
           boxShadow: `0 8px 28px ${theme.glow}, inset 0 1px 0 rgba(255,255,255,0.85)`,
         }}
       >
-        <span
-          className={cn("sign-medallion-glyph leading-none font-bold select-none", dim.symbol)}
-          style={{ color: theme.symbol }}
-        >
-          {glyph}
-        </span>
+        {useSvgGlyph ? (
+          <RashiGlyph
+            signKey={key}
+            className={cn("sign-medallion-glyph h-[58%] w-[58%]")}
+            style={{ color: theme.symbol }}
+          />
+        ) : (
+          <span
+            className={cn("sign-medallion-glyph leading-none font-bold select-none", dim.symbol)}
+            style={{ color: theme.symbol }}
+          >
+            {glyph}
+          </span>
+        )}
         <span
           className="pointer-events-none absolute inset-0 rounded-full opacity-40"
           style={{

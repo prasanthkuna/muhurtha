@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { ChapterHeroCard } from "@/components/celestial/chapter-hero-card";
+import { GrahaMedallion } from "@/components/celestial/lord-medallion";
 import { PageHeader } from "@/components/editorial/page-header";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { useAppData } from "@/context/app-data-context";
@@ -29,25 +31,31 @@ function SpineSection({
             <li key={c.id} className="relative pb-4 last:pb-0">
               <span
                 className={cn(
-                  "absolute -left-[5px] top-2 h-2 w-2 rounded-full ring-2 ring-canvas",
+                  "absolute -left-[5px] top-5 h-2 w-2 rounded-full ring-2 ring-canvas",
                   c.tense === "current" ? "bg-gold-accent" : "bg-line",
                 )}
               />
               {locked ? (
-                <div className="rounded-xl border border-dashed border-line bg-paper/60 px-4 py-3 opacity-80">
-                  <p className="text-sm font-medium text-ink">{c.periodLabel}</p>
-                  <p className="text-xs text-ink-tertiary">Pro chapter — unlock in full app</p>
+                <div className="flex gap-3 rounded-xl border border-dashed border-line bg-paper/60 px-4 py-3 opacity-80">
+                  <GrahaMedallion lord={c.mahadashaLord} size="sm" />
+                  <div>
+                    <p className="text-sm font-medium text-ink">{c.periodLabel}</p>
+                    <p className="text-xs text-ink-tertiary">Pro chapter — unlock in full app</p>
+                  </div>
                 </div>
               ) : (
                 <Link
                   href={`/life/${c.id}`}
-                  className="block rounded-xl border border-line bg-paper px-4 py-3 transition-colors hover:border-gold-accent/40"
+                  className="flex gap-3 rounded-xl border border-line bg-paper px-4 py-3 transition-colors hover:border-gold-accent/40"
                 >
-                  <p className="text-xs text-ink-tertiary">{c.periodLabel}</p>
-                  <p className="font-serif text-lg text-ink">{c.title}</p>
-                  {c.tense === "current" ? (
-                    <p className="mt-1 text-xs font-medium text-gold-text">Now</p>
-                  ) : null}
+                  <GrahaMedallion lord={c.mahadashaLord} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-ink-tertiary">{c.periodLabel}</p>
+                    <p className="font-serif text-lg text-ink">{c.title}</p>
+                    {c.tense === "current" ? (
+                      <p className="mt-1 text-xs font-medium text-gold-text">Now</p>
+                    ) : null}
+                  </div>
                 </Link>
               )}
             </li>
@@ -70,6 +78,7 @@ export default function LifeIndexPage() {
   const past = chapters.filter((c) => c.tense === "past");
   const current = chapters.filter((c) => c.tense === "current");
   const future = chapters.filter((c) => c.tense === "future");
+  const currentChapter = current[0];
 
   return (
     <div className="space-y-8" data-testid="life-loaded">
@@ -78,8 +87,11 @@ export default function LifeIndexPage() {
         title="Chapters through time"
         subtitle="Tap a period — full chapter on its own page. No accordion clutter."
       />
+      {currentChapter ? <ChapterHeroCard chapter={currentChapter} /> : null}
       <SpineSection label="Past" chapters={past} isPro={isPro} />
-      <SpineSection label="Current" chapters={current} isPro={isPro} />
+      {currentChapter ? null : (
+        <SpineSection label="Current" chapters={current} isPro={isPro} />
+      )}
       <SpineSection label="Ahead" chapters={future} isPro={isPro} />
     </div>
   );
