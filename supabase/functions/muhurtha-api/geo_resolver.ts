@@ -84,6 +84,76 @@ function rowToResolution(place: string, top: NominatimRow | null): BirthPlaceRes
   };
 }
 
+type PhotonFeature = {
+  geometry?: { coordinates?: [number, number] };
+  properties?: {
+    name?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    countrycode?: string;
+  };
+};
+
+async function photonSearch(q: string, limit: number): Promise<BirthPlaceResolution[]> {
+  const url = new URL("https://photon.komoot.io/api/");
+  url.searchParams.set("q", q);
+  url.searchParams.set("limit", String(Math.min(10, Math.max(1, limit))));
+  url.searchParams.set("lang", "en");
+
+  const res = await fetch(url.toString(), {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    console.warn("Photon geocode failed", res.status);
+    return [];
+  }
+  const payload = await res.json() as { features?: PhotonFeature[] };
+  const features = Array.isArray(payload.features) ? payload.features : [];
+  const out: BirthPlaceResolution[] = [];
+  for (const f of features) {
+    const coords = f.geometry?.coordinates;
+    const lng = coords?.[0];
+    const lat = coords?.[1];
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const props = f.properties ?? {};
+    const cc = props.countrycode?.toUpperCase();
+    if (cc && cc !== "IN") continue;
+    const name = props.name?.trim() || props.city?.trim();
+    if (!name) continue;
+    const state = props.state?.trim();
+    const label = state ? `${name}, ${state}` : name;
+    let timezone = "Asia/Kolkata";
+    try {
+      timezone = tzLookup(lat!, lng!);
+    } catch {
+      timezone = "Asia/Kolkata";
+    }
+    out.push({
+      place: q,
+      resolvedLabel: label,
+      lat: lat!,
+      lng: lng!,
+      timezone,
+      source: "nominatim",
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function dedupeResolutions(rows: BirthPlaceResolution[]): BirthPlaceResolution[] {
+  const seen = new Set<string>();
+  const out: BirthPlaceResolution[] = [];
+  for (const r of rows) {
+    const key = `${r.lat.toFixed(3)},${r.lng.toFixed(3)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
+}
+
 async function nominatimSearch(q: string, limit: number): Promise<NominatimRow[]> {
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("q", q);
@@ -113,12 +183,18 @@ export async function searchBirthPlaces(
   if (place.length < 2) return [];
 
   const q = /\bindia\b/i.test(place) ? place : `${place}, India`;
-  const rows = await nominatimSearch(q, limit);
-  const mapped = rows
-    .map((row) => rowToResolution(place, row))
-    .filter((r): r is BirthPlaceResolution => r != null);
+  const [photonRows, nominatimRows] = await Promise.all([
+    photonSearch(q, limit),
+    nominatimSearch(q, limit).then((rows) =>
+      rows
+        .map((row) => rowToResolution(place, row))
+        .filter((r): r is BirthPlaceResolution => r != null)
+    ),
+  ]);
 
-  if (mapped.length > 0) return mapped;
+  const merged = dedupeResolutions([...photonRows, ...nominatimRows]).slice(0, limit);
+  if (merged.length > 0) return merged;
+
   const fallback = fallbackIndianCity(place);
   return fallback ? [fallback] : [];
 }
