@@ -4,7 +4,7 @@ import { ProseBlock } from "@/components/editorial/prose-block";
 import { WindowPillRow } from "@/components/editorial/window-time-pill";
 import { useLocale } from "@/context/locale-context";
 import type { PurposeCheckResult } from "@/lib/engine-parsers";
-import { purposeLabel } from "@/lib/purpose-types";
+import { localizedPurposeLabel } from "@/lib/purpose-labels";
 
 function FactorList({ title, items, tone }: { title: string; items: string[]; tone: "good" | "caution" }) {
   if (items.length === 0) return null;
@@ -28,8 +28,8 @@ export function PurposeResultCard({
   result: PurposeCheckResult;
   purposeId: string;
 }) {
-  const { t } = useLocale();
-  const label = purposeLabel(purposeId);
+  const { t, locale } = useLocale();
+  const label = localizedPurposeLabel(locale, purposeId);
   const statusLabel = result.status.replaceAll("_", " ");
 
   return (

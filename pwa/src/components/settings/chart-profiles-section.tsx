@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Plus, Trash2, Users } from "@/components/celestial/muh-icon";
 import {
   BirthDetailsFields,
   type BirthDetailsValues,
@@ -84,7 +85,10 @@ export function ChartProfilesSection() {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold text-gold-text">{t("chart.sectionTitle")}</h2>
+      <div className="flex items-center gap-2">
+        <Users className="h-4 w-4 text-gold-text" aria-hidden />
+        <h2 className="text-sm font-semibold text-gold-text">{t("chart.sectionTitle")}</h2>
+      </div>
       <p className="text-sm text-ink-secondary">{t("chart.sectionHint")}</p>
 
       <button
@@ -124,10 +128,11 @@ export function ChartProfilesSection() {
           </button>
           <button
             type="button"
-            className="rounded-lg px-2 py-1 text-xs text-warning-ink"
+            className="rounded-lg p-2 text-warning-ink hover:bg-warning-wash/40"
+            aria-label={t("common.delete")}
             onClick={() => void deleteChartProfile(p.id)}
           >
-            {t("common.delete")}
+            <Trash2 className="h-4 w-4" aria-hidden />
           </button>
         </div>
       ))}
@@ -137,9 +142,14 @@ export function ChartProfilesSection() {
       ) : null}
 
       {!open ? (
-        <PrimaryButton type="button" className="w-full" onClick={() => setOpen(true)}>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gold-accent/40 bg-gold-wash/20 py-3 text-sm font-medium text-gold-text hover:bg-gold-wash/40"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
           {t("chart.addTitle")}
-        </PrimaryButton>
+        </button>
       ) : (
         <div className="space-y-3 rounded-2xl border border-line bg-paper p-4">
           <p className="text-sm font-semibold text-ink">{t("chart.addTitle")}</p>

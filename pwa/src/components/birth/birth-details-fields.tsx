@@ -83,7 +83,7 @@ export function BirthDetailsFields({
           setBirthUnlinked(true);
           onChange({ birthPlace });
         }}
-        autoDetect={!showCurrentPlace}
+        autoDetect={false}
       />
 
       {showCurrentPlace && syncBirthFromCurrent && !birthUnlinked ? (

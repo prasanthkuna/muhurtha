@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { ChapterHeroCard } from "@/components/celestial/chapter-hero-card";
 import { GrahaMedallion } from "@/components/celestial/lord-medallion";
+import { ChevronRight } from "@/components/celestial/muh-icon";
 import { PageHeader } from "@/components/editorial/page-header";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { useAppData } from "@/context/app-data-context";
+import { useLocale } from "@/context/locale-context";
 import type { ChapterView } from "@/lib/types";
 import { cn } from "@/components/ui/cn";
 
@@ -13,10 +15,12 @@ function SpineSection({
   label,
   chapters,
   isPro,
+  t,
 }: {
   label: string;
   chapters: ChapterView[];
   isPro: boolean;
+  t: (key: string) => string;
 }) {
   if (!chapters.length) return null;
   return (
@@ -40,22 +44,23 @@ function SpineSection({
                   <GrahaMedallion lord={c.mahadashaLord} size="sm" />
                   <div>
                     <p className="text-sm font-medium text-ink">{c.periodLabel}</p>
-                    <p className="text-xs text-ink-tertiary">Pro chapter — unlock in full app</p>
+                    <p className="text-xs text-ink-tertiary">{t("life.proLocked")}</p>
                   </div>
                 </div>
               ) : (
                 <Link
                   href={`/life/${c.id}`}
-                  className="flex gap-3 rounded-xl border border-line bg-paper px-4 py-3 transition-colors hover:border-gold-accent/40"
+                  className="group flex gap-3 rounded-xl border border-line bg-paper px-4 py-3 transition-colors hover:border-gold-accent/40"
                 >
                   <GrahaMedallion lord={c.mahadashaLord} size="sm" />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-ink-tertiary">{c.periodLabel}</p>
                     <p className="font-serif text-lg text-ink">{c.title}</p>
                     {c.tense === "current" ? (
-                      <p className="mt-1 text-xs font-medium text-gold-text">Now</p>
+                      <p className="mt-1 text-xs font-medium text-gold-text">{t("life.now")}</p>
                     ) : null}
                   </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 self-center text-ink-tertiary opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
                 </Link>
               )}
             </li>
@@ -67,11 +72,12 @@ function SpineSection({
 }
 
 export default function LifeIndexPage() {
+  const { t } = useLocale();
   const { views, loading, error, isPro } = useAppData();
 
-  if (loading) return <LoadingState message="Loading life map…" />;
+  if (loading) return <LoadingState message={t("life.loading")} />;
   if (error || !views) {
-    return <PageHeader title="Life map" subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("life.title")} subtitle={error ?? "Unavailable"} />;
   }
 
   const chapters = views.chapters();
@@ -82,13 +88,20 @@ export default function LifeIndexPage() {
 
   return (
     <div className="space-y-8" data-testid="life-loaded">
-      <PageHeader eyebrow="Life atlas" title="Chapters through time" />
-      {currentChapter ? <ChapterHeroCard chapter={currentChapter} /> : null}
-      <SpineSection label="Past" chapters={past} isPro={isPro} />
+      <PageHeader eyebrow={t("life.atlasEyebrow")} title={t("life.atlasTitle")} />
+      {currentChapter ? (
+        <Link
+          href={`/life/${currentChapter.id}`}
+          className="block rounded-2xl transition-transform active:scale-[0.99]"
+        >
+          <ChapterHeroCard chapter={currentChapter} currentLabel={t("life.currentBadge")} />
+        </Link>
+      ) : null}
+      <SpineSection label={t("life.spinePast")} chapters={past} isPro={isPro} t={t} />
       {currentChapter ? null : (
-        <SpineSection label="Current" chapters={current} isPro={isPro} />
+        <SpineSection label={t("life.spineCurrent")} chapters={current} isPro={isPro} t={t} />
       )}
-      <SpineSection label="Ahead" chapters={future} isPro={isPro} />
+      <SpineSection label={t("life.spineAhead")} chapters={future} isPro={isPro} t={t} />
     </div>
   );
 }

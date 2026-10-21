@@ -1,10 +1,21 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  Bell,
+  BellOff,
+  Bookmark,
+  Languages,
+  LogOut,
+  RefreshCw,
+  ScrollText,
+  Share2,
+  Sparkles,
+  User,
+} from "@/components/celestial/muh-icon";
 import { ChartProfilesSection } from "@/components/settings/chart-profiles-section";
 import { PageHeader } from "@/components/editorial/page-header";
-import { PrimaryButton } from "@/components/editorial/primary-button";
+import { SettingsRow } from "@/components/editorial/settings-row";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { accountDeletionMailto, LegalUrls } from "@/lib/legal-urls";
@@ -22,19 +33,29 @@ import {
   syncTimingNotifications,
 } from "@/lib/timing-notifications";
 
-function SettingsLink({ href, label }: { href: string; label: string }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex min-h-11 items-center justify-between rounded-xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition-colors hover:border-gold-accent/40"
-    >
-      {label}
-      <span className="text-ink-tertiary" aria-hidden>
-        ↗
-      </span>
-    </a>
+    <section className="space-y-2">
+      <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">
+        {title}
+      </h2>
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4 border-b border-line/80 py-2.5 last:border-0">
+      <dt className="text-ink-tertiary">{label}</dt>
+      <dd className="max-w-[58%] text-right text-sm font-medium text-ink">{value}</dd>
+    </div>
   );
 }
 
@@ -50,6 +71,7 @@ export default function SettingsPage() {
   const [alertsOn, setAlertsOn] = useState(false);
   const [alertsMsg, setAlertsMsg] = useState<string | null>(null);
   const [langBusy, setLangBusy] = useState(false);
+  const [refreshBusy, setRefreshBusy] = useState(false);
 
   useEffect(() => {
     setAlertsOn(notificationsEnabled());
@@ -86,20 +108,17 @@ export default function SettingsPage() {
   }
 
   async function hardRefresh() {
-    clearEngineCache();
-    await refresh();
-    const summary = await loadBirthProfileSummary();
-    if (summary) {
-      setBirth(summary);
-      setProfileMissing(!summary.dateOfBirth);
-      if (summary.currentCity && summary.currentLat != null && summary.currentLng != null) {
-        setCurrentPlace({
-          label: summary.currentCity,
-          lat: summary.currentLat,
-          lng: summary.currentLng,
-          timezone: summary.timezone ?? "Asia/Kolkata",
-        });
+    setRefreshBusy(true);
+    try {
+      clearEngineCache();
+      await refresh();
+      const summary = await loadBirthProfileSummary();
+      if (summary) {
+        setBirth(summary);
+        setProfileMissing(!summary.dateOfBirth);
       }
+    } finally {
+      setRefreshBusy(false);
     }
   }
 
@@ -145,7 +164,7 @@ export default function SettingsPage() {
     }
     const ok = await requestNotificationPermission();
     if (!ok) {
-      setAlertsMsg("Permission required.");
+      setAlertsMsg(t("settings.permissionRequired"));
       return;
     }
     setNotificationsEnabled(true);
@@ -153,145 +172,169 @@ export default function SettingsPage() {
     await syncTimingNotifications(today, locale, profileTimezone);
   }
 
-  return (
-    <div className="space-y-6" data-testid="settings-loaded">
-      <PageHeader eyebrow="Profile" title={t("settings.title")} subtitle={t("settings.subtitle")} />
+  const displayName = birth?.displayName ?? email?.split("@")[0] ?? t("common.you");
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-gold-text">{t("settings.languageTitle")}</h2>
-        <p className="text-sm text-ink-secondary">{t("settings.languageHint")}</p>
-        <div className="flex flex-wrap gap-2">
+  return (
+    <div className="space-y-8 pb-4" data-testid="settings-loaded">
+      <PageHeader
+        eyebrow={t("settings.profileEyebrow")}
+        title={t("settings.title")}
+        subtitle={t("settings.subtitle")}
+      />
+
+      <div className="rounded-2xl border border-gold-accent/25 bg-gradient-to-br from-paper via-paper to-gold-wash/20 px-4 py-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gold-wash text-gold-text">
+            <User className="h-6 w-6" strokeWidth={1.5} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-serif text-xl text-ink">{displayName}</p>
+            <p className="truncate text-xs text-ink-tertiary">{email ?? phone ?? "—"}</p>
+          </div>
+          <span className="rounded-full bg-gold-wash px-2.5 py-1 text-xs font-semibold text-gold-text">
+            {isPro ? t("settings.planPro") : t("settings.planFree")}
+          </span>
+        </div>
+      </div>
+
+      <Section title={t("settings.languageTitle")}>
+        <p className="px-1 text-sm text-ink-secondary">{t("settings.languageHint")}</p>
+        <div className="flex flex-wrap gap-2 px-1">
           {APP_LOCALES.map((code) => (
             <button
               key={code}
               type="button"
               disabled={langBusy}
               onClick={() => void changeLanguage(code)}
-              className={`rounded-full px-4 py-2 text-sm font-medium ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-colors ${
                 locale === code
-                  ? "bg-gold-wash text-gold-text"
-                  : "border border-line bg-paper text-ink-secondary"
+                  ? "bg-gold-wash text-gold-text ring-1 ring-gold-accent/30"
+                  : "border border-line bg-paper text-ink-secondary hover:border-gold-accent/40"
               }`}
             >
+              <Languages className="h-3.5 w-3.5" aria-hidden />
               {localeLabel(code)}
             </button>
           ))}
         </div>
-      </section>
+      </Section>
 
       <ChartProfilesSection />
 
-      <dl className="space-y-3 rounded-2xl border border-line bg-paper px-4 py-4 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt className="text-ink-tertiary">{t("settings.signedIn")}</dt>
-          <dd className="text-right font-medium text-ink">{email ?? phone ?? "—"}</dd>
+      <Section title={t("settings.signedIn")}>
+        <div className="rounded-xl border border-line bg-paper px-4 py-1">
+          <dl>
+            <Fact label={t("settings.displayName")} value={birth?.displayName ?? "—"} />
+            <Fact label={t("settings.dob")} value={birth?.dateOfBirth ?? "—"} />
+            <Fact label={t("settings.birthPlace")} value={birth?.birthPlace ?? "—"} />
+            <Fact label={t("settings.birthTime")} value={birth?.timeLabel ?? "—"} />
+            <Fact label={t("settings.nakshatra")} value={birth?.janmaNakshatra ?? "—"} />
+            <Fact
+              label={t("settings.timingsLocation")}
+              value={
+                today?.locationVerified
+                  ? today.locationLabel || t("settings.verified")
+                  : birth?.currentCity || t("settings.notSet")
+              }
+            />
+          </dl>
         </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-ink-tertiary">{t("settings.displayName")}</dt>
-          <dd className="text-right font-medium text-ink">{birth?.displayName ?? "—"}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-ink-tertiary">{t("settings.dob")}</dt>
-          <dd className="text-right font-medium text-ink">{birth?.dateOfBirth ?? "—"}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-ink-tertiary">{t("settings.birthPlace")}</dt>
-          <dd className="text-right font-medium text-ink">{birth?.birthPlace ?? "—"}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-ink-tertiary">{t("settings.birthTime")}</dt>
-          <dd className="text-right font-medium text-ink">{birth?.timeLabel ?? "—"}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-ink-tertiary">{t("settings.nakshatra")}</dt>
-          <dd className="text-right font-medium text-ink">{birth?.janmaNakshatra ?? "—"}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-ink-tertiary">{t("settings.plan")}</dt>
-          <dd className="text-right font-medium text-ink">
-            {isPro ? t("settings.planPro") : t("settings.planFree")}
-          </dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-ink-tertiary">{t("settings.timingsLocation")}</dt>
-          <dd className="text-right font-medium text-ink">
-            {today?.locationVerified
-              ? today.locationLabel || t("settings.verified")
-              : birth?.currentCity || t("settings.notSet")}
-          </dd>
-        </div>
-      </dl>
+        {profileMissing ? (
+          <p className="px-1 text-sm text-ink-secondary">{t("settings.birthMissing")}</p>
+        ) : null}
+      </Section>
 
-      {profileMissing ? (
-        <p className="text-sm text-ink-secondary">{t("settings.birthMissing")}</p>
-      ) : null}
-
-      <section className="space-y-3">
+      <Section title={t("settings.cityTitle")}>
+        <p className="px-1 text-sm text-ink-secondary">{t("settings.cityHint")}</p>
         <LocationPicker
           label={t("settings.cityTitle")}
           value={currentPlace}
           onChange={(place) => void onCurrentPlaceChange(place)}
           autoDetect={!currentPlace}
         />
-        {locationMsg ? <p className="text-sm text-ink-secondary">{locationMsg}</p> : null}
-      </section>
+        {locationMsg ? <p className="px-1 text-sm text-success-ink">{locationMsg}</p> : null}
+      </Section>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gold-text">{t("settings.alertsTitle")}</h2>
-        <p className="text-sm text-ink-secondary">{t("settings.alertsHint")}</p>
-        <PrimaryButton type="button" onClick={() => void toggleAlerts()} className="w-full">
-          {alertsOn ? t("settings.alertsOn") : t("settings.alertsOff")}
-        </PrimaryButton>
-        {alertsMsg ? <p className="text-sm text-ink-secondary">{alertsMsg}</p> : null}
-      </section>
+      <Section title={t("settings.alertsTitle")}>
+        <p className="px-1 text-sm text-ink-secondary">{t("settings.alertsHint")}</p>
+        <SettingsRow
+          onClick={() => void toggleAlerts()}
+          icon={alertsOn ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+          title={alertsOn ? t("settings.alertsOn") : t("settings.alertsOff")}
+        />
+        {alertsMsg ? <p className="px-1 text-sm text-warning-ink">{alertsMsg}</p> : null}
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-gold-text">{t("settings.moreTitle")}</h2>
-        <SettingsLink href="/traditions" label={t("settings.traditions")} />
-        <SettingsLink href="/plans" label={t("settings.plans")} />
-        <SettingsLink href="/share" label={t("settings.share")} />
-      </section>
+      <Section title={t("settings.moreTitle")}>
+        <SettingsRow
+          href="/traditions"
+          icon={<Sparkles className="h-4 w-4" />}
+          title={t("settings.traditions")}
+        />
+        <SettingsRow
+          href="/plans"
+          icon={<Bookmark className="h-4 w-4" />}
+          title={t("settings.plans")}
+        />
+        <SettingsRow
+          href="/share"
+          icon={<Share2 className="h-4 w-4" />}
+          title={t("settings.share")}
+        />
+      </Section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-gold-text">{t("settings.legalTitle")}</h2>
-        <Link
+      <Section title={t("settings.legalTitle")}>
+        <SettingsRow
           href="/settings/disclaimer"
-          className="flex min-h-11 items-center justify-between rounded-xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition-colors hover:border-gold-accent/40"
-        >
-          {t("legal.disclaimerTitle")}
-          <span className="text-ink-tertiary" aria-hidden>
-            →
-          </span>
-        </Link>
-        <SettingsLink href={LegalUrls.privacy} label={t("settings.privacy")} />
-        <SettingsLink href={LegalUrls.terms} label={t("settings.terms")} />
-        <SettingsLink href={LegalUrls.deleteAccount} label={t("settings.deleteWeb")} />
-        <a
+          icon={<ScrollText className="h-4 w-4" />}
+          title={t("legal.disclaimerTitle")}
+        />
+        <SettingsRow
+          href={LegalUrls.privacy}
+          external
+          icon={<ScrollText className="h-4 w-4" />}
+          title={t("settings.privacy")}
+        />
+        <SettingsRow
+          href={LegalUrls.terms}
+          external
+          icon={<ScrollText className="h-4 w-4" />}
+          title={t("settings.terms")}
+        />
+        <SettingsRow
+          href={LegalUrls.deleteAccount}
+          external
+          title={t("settings.deleteWeb")}
+        />
+        <SettingsRow
           href={accountDeletionMailto(phone ?? undefined)}
-          className="flex min-h-11 items-center rounded-xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink"
-        >
-          {t("settings.deleteEmail")}
-        </a>
-        <a
-          href={`mailto:${LegalUrls.supportEmail}`}
-          className="flex min-h-11 items-center rounded-xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink"
-        >
-          {t("settings.support")}
-        </a>
-      </section>
+          external
+          title={t("settings.deleteEmail")}
+        />
+        <SettingsRow href={`mailto:${LegalUrls.supportEmail}`} external title={t("settings.support")} />
+      </Section>
 
-      <div className="space-y-3">
-        <PrimaryButton type="button" onClick={() => void hardRefresh()} className="w-full">
-          {t("common.refresh")}
-        </PrimaryButton>
-        <button
-          type="button"
+      <section className="space-y-2 border-t border-line pt-4">
+        <SettingsRow
+          onClick={() => void hardRefresh()}
+          icon={
+            refreshBusy ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )
+          }
+          title={t("common.refresh")}
+          trailing={null}
+        />
+        <SettingsRow
           onClick={() => void signOut()}
-          className="w-full rounded-full border border-line bg-paper py-3 text-sm font-semibold text-warning-ink"
-        >
-          {t("common.signOut")}
-        </button>
-      </div>
+          icon={<LogOut className="h-4 w-4" />}
+          title={t("common.signOut")}
+          trailing={null}
+          className="border-warning-ink/20 text-warning-ink hover:bg-warning-wash/30"
+        />
+      </section>
     </div>
   );
 }

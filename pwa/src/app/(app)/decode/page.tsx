@@ -1,23 +1,27 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronRight } from "@/components/celestial/muh-icon";
 import { CelestialHeaderCard } from "@/components/celestial/celestial-header-card";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { LuckyStrip } from "@/components/editorial/lucky-strip";
-import { PrimaryButton } from "@/components/editorial/primary-button";
 import { useAppData } from "@/context/app-data-context";
+import { useLocale } from "@/context/locale-context";
 
 export default function DecodePage() {
+  const { t } = useLocale();
   const { views, loading, error, pack } = useAppData();
 
-  if (loading && !pack) return <LoadingState message="Opening your reading…" />;
+  if (loading && !pack) return <LoadingState message={t("decode.opening")} />;
   if (error || !views || !pack) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Decode" subtitle={error ?? "No pack loaded."} />
-        <PrimaryButton href="/welcome">Back to welcome</PrimaryButton>
+        <PageHeader title={t("nav.decode")} subtitle={error ?? t("decode.unavailable")} />
+        <Link href="/welcome" className="text-sm font-medium text-gold-text underline-offset-2 hover:underline">
+          {t("decode.backWelcome")}
+        </Link>
       </div>
     );
   }
@@ -29,7 +33,7 @@ export default function DecodePage() {
     <div className="space-y-6" data-testid="decode-loaded">
       {luck?.moonSignLabel || luck?.moonSymbol ? (
         <CelestialHeaderCard
-          heroLabel="Janma reading"
+          heroLabel={t("decode.janmaLabel")}
           heroTitle={views.displayHook}
           moonSignKey={luck.moonSignKey}
           moonSymbol={luck.moonSymbol}
@@ -38,7 +42,7 @@ export default function DecodePage() {
         />
       ) : (
         <PageHeader
-          eyebrow="Janma reading"
+          eyebrow={t("decode.janmaLabel")}
           title={views.displayHook}
           subtitle={views.identitySummary}
         />
@@ -47,7 +51,7 @@ export default function DecodePage() {
       {luck ? <LuckyStrip luck={luck} compact showMedallion={false} /> : null}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gold-text">Strengths</h2>
+        <h2 className="text-sm font-semibold text-gold-text">{t("decode.strengths")}</h2>
         <ul className="space-y-2 text-[15px] text-ink-secondary">
           {views.strengths.map((s) => (
             <li key={s} className="border-l-2 border-gold-wash pl-3">
@@ -58,7 +62,7 @@ export default function DecodePage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gold-text">Watchouts</h2>
+        <h2 className="text-sm font-semibold text-gold-text">{t("decode.watchouts")}</h2>
         <ul className="space-y-2 text-[15px] text-ink-secondary">
           {views.watchouts.map((s) => (
             <li key={s} className="border-l-2 border-line pl-3">
@@ -70,7 +74,7 @@ export default function DecodePage() {
 
       {domains.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="font-serif text-xl text-ink">Life domains</h2>
+          <h2 className="font-serif text-xl text-ink">{t("decode.domains")}</h2>
           {domains.map((d) => (
             <ProseBlock key={d.key}>
               <p className="text-xs uppercase tracking-wide text-gold-text">{d.title}</p>
@@ -80,15 +84,20 @@ export default function DecodePage() {
         </section>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pt-2">
-        <PrimaryButton href="/life" className="shrink-0">
-          Open life map
-        </PrimaryButton>
+      <div className="flex flex-col gap-2 border-t border-line pt-4">
+        <Link
+          href="/life"
+          className="flex min-h-11 items-center justify-between rounded-xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink hover:border-gold-accent/40"
+        >
+          {t("decode.openLife")}
+          <ChevronRight className="h-4 w-4 text-gold-text" aria-hidden />
+        </Link>
         <Link
           href="/today"
-          className="inline-flex min-h-11 items-center text-sm font-medium text-gold-text underline-offset-4 hover:underline"
+          className="flex min-h-11 items-center justify-between rounded-xl px-1 py-2 text-sm font-medium text-gold-text underline-offset-2 hover:underline"
         >
-          Today’s focus →
+          {t("decode.openToday")}
+          <ChevronRight className="h-4 w-4" aria-hidden />
         </Link>
       </div>
     </div>

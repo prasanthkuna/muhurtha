@@ -12,7 +12,8 @@ import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { parsePurposeCheck, type PurposeCheckResult } from "@/lib/engine-parsers";
 import { todayInTimezone } from "@/lib/local-date";
-import { normalizePurposeType, purposeLabel, PURPOSE_OPTIONS } from "@/lib/purpose-types";
+import { localizedPurposeLabel, localizedPurposeOptions } from "@/lib/purpose-labels";
+import { normalizePurposeType } from "@/lib/purpose-types";
 import { savePlan } from "@/lib/saved-plans";
 
 type Mode = "check" | "find";
@@ -28,7 +29,8 @@ function TimingInner() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const purposeOptions = localizedPurposeOptions(locale);
   const engineBody = useEngineBody();
   const { views, loading, error, pack, profileTimezone } = useAppData();
 
@@ -90,7 +92,7 @@ function TimingInner() {
     const win = result.bestWindows[0];
     savePlan({
       purposeType: purpose,
-      purposeLabel: purposeLabel(purpose),
+      purposeLabel: localizedPurposeLabel(locale, purpose),
       eventDate: result.targetDate ?? targetDate,
       cityLabel: result.locationLabel ?? "",
       windowStart: win?.start,
@@ -141,7 +143,7 @@ function TimingInner() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {PURPOSE_OPTIONS.map((p) => (
+        {purposeOptions.map((p) => (
           <button
             key={p.id}
             type="button"

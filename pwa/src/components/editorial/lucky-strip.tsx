@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SignMedallion } from "@/components/celestial/sign-medallion";
+import { useLocale } from "@/context/locale-context";
 import type { NatalLuckInfo } from "@/lib/types";
 
 function Chip({ children, gold }: { children: ReactNode; gold?: boolean }) {
@@ -40,9 +41,9 @@ export function LuckyStrip({
 }: {
   luck: NatalLuckInfo;
   compact?: boolean;
-  /** Set false when the page hero already shows the moon medallion (e.g. Decode). */
   showMedallion?: boolean;
 }) {
+  const { t } = useLocale();
   const hasChips =
     luck.luckyNumbers.length > 0 || luck.luckyDays.length > 0 || luck.luckyColours.length > 0;
 
@@ -55,7 +56,7 @@ export function LuckyStrip({
   const chips = (
     <>
       {luck.luckyNumbers.length > 0 ? (
-        <LuckGroup label="Lucky numbers" compact={compact}>
+        <LuckGroup label={t("luck.numbers")} compact={compact}>
           {luck.luckyNumbers.map((n) => (
             <Chip key={n} gold>
               {n}
@@ -64,14 +65,14 @@ export function LuckyStrip({
         </LuckGroup>
       ) : null}
       {luck.luckyDays.length > 0 ? (
-        <LuckGroup label="Lucky days" compact={compact}>
+        <LuckGroup label={t("luck.days")} compact={compact}>
           {luck.luckyDays.map((d) => (
             <Chip key={d}>{d}</Chip>
           ))}
         </LuckGroup>
       ) : null}
       {luck.luckyColours.length > 0 ? (
-        <LuckGroup label="Lucky colours" compact={compact}>
+        <LuckGroup label={t("luck.colours")} compact={compact}>
           {luck.luckyColours.map((c) => (
             <span
               key={c.key || c.label}
@@ -97,8 +98,9 @@ export function LuckyStrip({
         data-testid="lucky-strip"
       >
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-text">
-          Your natal luck
+          {t("luck.title")}
         </h2>
+        <p className="mt-1 text-[10px] text-ink-tertiary">{t("luck.associationNote")}</p>
         <div className="mt-2 grid gap-3 sm:grid-cols-3">{chips}</div>
       </section>
     );
@@ -119,10 +121,13 @@ export function LuckyStrip({
           />
         ) : null}
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold text-gold-text">Your natal luck</h2>
+          <h2 className="text-sm font-semibold text-gold-text">{t("luck.title")}</h2>
           {medallionVisible && luck.moonSignLabel ? (
-            <p className="mt-0.5 text-xs text-ink-tertiary">Moon in {luck.moonSignLabel}</p>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              {t("luck.moonIn")} {luck.moonSignLabel}
+            </p>
           ) : null}
+          <p className="mt-1 text-[10px] text-ink-tertiary">{t("luck.associationNote")}</p>
           <div className={compact ? "mt-2 space-y-2" : "mt-3 space-y-3"}>{chips}</div>
         </div>
       </div>

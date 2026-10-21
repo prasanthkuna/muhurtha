@@ -64,17 +64,31 @@ function fallbackIndianCity(place: string): BirthPlaceResolution | null {
   };
 }
 
-export async function resolveBirthPlace(
-  placeRaw: string | null | undefined,
-): Promise<BirthPlaceResolution | null> {
-  const place = cleanPlace(placeRaw ?? "");
-  if (place.length < 2) return null;
+function rowToResolution(place: string, top: NominatimRow | null): BirthPlaceResolution | null {
+  const lat = Number(top?.lat);
+  const lng = Number(top?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  let timezone = "Asia/Kolkata";
+  try {
+    timezone = tzLookup(lat, lng);
+  } catch {
+    timezone = "Asia/Kolkata";
+  }
+  return {
+    place,
+    resolvedLabel: shortCityLabel(top) || top?.display_name?.trim() || place,
+    lat,
+    lng,
+    timezone,
+    source: "nominatim",
+  };
+}
 
-  const q = /\bindia\b/i.test(place) ? place : `${place}, India`;
+async function nominatimSearch(q: string, limit: number): Promise<NominatimRow[]> {
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("q", q);
   url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("limit", "1");
+  url.searchParams.set("limit", String(Math.min(10, Math.max(1, limit))));
   url.searchParams.set("addressdetails", "1");
 
   const res = await fetch(url, {
@@ -85,31 +99,42 @@ export async function resolveBirthPlace(
   });
   if (!res.ok) {
     console.warn("Birth place geocode failed", res.status, await res.text());
-    return fallbackIndianCity(place);
+    return [];
   }
   const rows = await res.json() as NominatimRow[];
-  const top = Array.isArray(rows) ? rows[0] : null;
-  const lat = Number(top?.lat);
-  const lng = Number(top?.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return fallbackIndianCity(place);
-  }
+  return Array.isArray(rows) ? rows : [];
+}
 
-  let timezone = "Asia/Kolkata";
-  try {
-    timezone = tzLookup(lat, lng);
-  } catch {
-    timezone = "Asia/Kolkata";
-  }
+export async function searchBirthPlaces(
+  placeRaw: string | null | undefined,
+  limit = 8,
+): Promise<BirthPlaceResolution[]> {
+  const place = cleanPlace(placeRaw ?? "");
+  if (place.length < 2) return [];
 
-  return {
-    place,
-    resolvedLabel: shortCityLabel(top) || top?.display_name?.trim() || place,
-    lat,
-    lng,
-    timezone,
-    source: "nominatim",
-  };
+  const q = /\bindia\b/i.test(place) ? place : `${place}, India`;
+  const rows = await nominatimSearch(q, limit);
+  const mapped = rows
+    .map((row) => rowToResolution(place, row))
+    .filter((r): r is BirthPlaceResolution => r != null);
+
+  if (mapped.length > 0) return mapped;
+  const fallback = fallbackIndianCity(place);
+  return fallback ? [fallback] : [];
+}
+
+export async function resolveBirthPlace(
+  placeRaw: string | null | undefined,
+): Promise<BirthPlaceResolution | null> {
+  const place = cleanPlace(placeRaw ?? "");
+  if (place.length < 2) return null;
+
+  const q = /\bindia\b/i.test(place) ? place : `${place}, India`;
+  const rows = await nominatimSearch(q, 1);
+  const top = rows[0] ?? null;
+  const resolved = rowToResolution(place, top);
+  if (resolved) return resolved;
+  return fallbackIndianCity(place);
 }
 
 function shortCityLabel(row: NominatimRow | NominatimReverseRow | null): string {

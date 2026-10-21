@@ -68,7 +68,7 @@ export default function LifeChapterPage() {
         {t("life.backIndex")}
       </Link>
 
-      <ChapterHeroCard chapter={chapter} />
+      <ChapterHeroCard chapter={chapter} currentLabel={t("life.currentBadge")} />
 
       {(chapter.periodStart || chapter.periodEnd) && (
         <p className="text-xs text-ink-tertiary">

@@ -3040,6 +3040,22 @@ async function _handleInternal(
     );
   }
 
+  if (action === "birth_place_search") {
+    const query = String(body.query ?? body.place ?? "").trim();
+    const limit = Math.min(10, Math.max(1, Number(body.limit) || 8));
+    const { searchBirthPlaces } = await import("./geo_resolver.ts");
+    const suggestions = await searchBirthPlaces(query, limit);
+    return {
+      suggestions: suggestions.map((s) => ({
+        label: s.resolvedLabel,
+        lat: s.lat,
+        lng: s.lng,
+        timezone: s.timezone,
+        place: s.place,
+      })),
+    };
+  }
+
   if (action === "birth_place_resolve") {
     const lat = Number(body.lat);
     const lng = Number(body.lng);

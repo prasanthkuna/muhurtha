@@ -2,7 +2,13 @@ import { OrbitBackdrop } from "@/components/celestial/orbit-backdrop";
 import { GrahaMedallion } from "@/components/celestial/lord-medallion";
 import type { ChapterView } from "@/lib/types";
 
-export function ChapterHeroCard({ chapter }: { chapter: ChapterView }) {
+export function ChapterHeroCard({
+  chapter,
+  currentLabel = "Current chapter",
+}: {
+  chapter: ChapterView;
+  currentLabel?: string;
+}) {
   const sub =
     chapter.mahadashaLord && chapter.antardashaLord
       ? `${chapter.mahadashaLord} · ${chapter.antardashaLord}`
@@ -24,7 +30,7 @@ export function ChapterHeroCard({ chapter }: { chapter: ChapterView }) {
           {sub ? <p className="mt-2 text-xs text-ink-tertiary">{sub}</p> : null}
           {chapter.tense === "current" ? (
             <span className="mt-2 inline-block rounded-full bg-gold-wash px-2.5 py-0.5 text-xs font-semibold text-gold-text">
-              Current chapter
+              {currentLabel}
             </span>
           ) : null}
         </div>
