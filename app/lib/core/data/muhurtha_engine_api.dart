@@ -977,11 +977,28 @@ class MuhurthaEngineApi {
       chartProfileId: chartProfileId,
       timeout: _birthPackTimeout,
       extra: {
+        'may_generate': true,
         if (date != null) 'date': date,
         if (locale != null) 'locale': locale,
       },
     );
     return BirthPackPayload.fromJson(m);
+  }
+
+  Future<Map<String, dynamic>> chartGenerate({
+    String? date,
+    String? locale,
+    String? chartProfileId,
+  }) async {
+    return _invoke(
+      'chart_generate',
+      chartProfileId: chartProfileId,
+      timeout: _birthPackTimeout,
+      extra: {
+        if (date != null) 'date': date,
+        if (locale != null) 'locale': locale,
+      },
+    );
   }
 
   Future<List<ChartProfileSummary>> chartProfileList() async {

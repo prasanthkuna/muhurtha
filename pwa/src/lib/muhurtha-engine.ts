@@ -37,6 +37,7 @@ export async function fetchBirthPack(
 ): Promise<BirthPackPayload> {
   const data = await invokeEngine(accessToken, {
     action: "birth_pack_get",
+    may_generate: false,
     locale,
   });
   return normalizePackResponse(data);

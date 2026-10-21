@@ -13,6 +13,7 @@ import { LoadingState } from "@/components/editorial/loading-state";
 import { useLocale } from "@/context/locale-context";
 import { APP_LOCALES, localeLabel, type AppLocale } from "@/lib/locale";
 import { clearEngineCache } from "@/lib/engine-cache";
+import { runChartGeneration } from "@/lib/onboarding/pack-generation";
 import {
   initializeChartAfterOnboarding,
   saveOnboardingDraft,
@@ -97,6 +98,7 @@ export function OnboardingScreen() {
       setGenerating(true);
       await initializeChartAfterOnboarding(birthInputId, locale);
       clearEngineCache();
+      await runChartGeneration(locale);
       router.replace("/decode");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("onboarding.saveFailed"));

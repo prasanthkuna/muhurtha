@@ -23,6 +23,14 @@ export type PurposeCheckResult = {
   targetDate?: string;
   locationLabel?: string;
   timezone?: string;
+  candidateDates: {
+    date: string;
+    status: string;
+    tithi: string;
+    nakshatra: string;
+    rank: number;
+  }[];
+  method?: string;
 };
 
 export type AskAnswerResult = {
@@ -96,6 +104,18 @@ export function parsePurposeCheck(json: Record<string, unknown>): PurposeCheckRe
     targetDate: json.targetDate?.toString(),
     locationLabel: json.locationLabel?.toString(),
     timezone: json.timezone?.toString(),
+    method: json.method?.toString(),
+    candidateDates: Array.isArray(json.candidateDates)
+      ? json.candidateDates
+          .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+          .map((c) => ({
+            date: c.date?.toString() ?? "",
+            status: c.status?.toString() ?? "",
+            tithi: c.tithi?.toString() ?? "",
+            nakshatra: c.nakshatra?.toString() ?? "",
+            rank: Number(c.rank) || 0,
+          }))
+      : [],
   };
 }
 

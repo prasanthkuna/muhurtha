@@ -246,6 +246,13 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-gold-text">{t("settings.moreTitle")}</h2>
+        <SettingsLink href="/traditions" label={t("settings.traditions")} />
+        <SettingsLink href="/plans" label={t("settings.plans")} />
+        <SettingsLink href="/share" label={t("settings.share")} />
+      </section>
+
+      <section className="space-y-2">
         <h2 className="text-sm font-semibold text-gold-text">{t("settings.legalTitle")}</h2>
         <Link
           href="/settings/disclaimer"

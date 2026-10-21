@@ -20,6 +20,7 @@ import {
   writeCachedPack,
   writeCachedToday,
 } from "@/lib/engine-cache";
+import { todayInTimezone } from "@/lib/local-date";
 import { createClient } from "@/lib/supabase/client";
 import type { TodayPayload } from "@/lib/today-types";
 import { parseTodayPayload } from "@/lib/today-types";
@@ -52,6 +53,7 @@ type AppDataContextValue = {
   }) => Promise<void>;
   deleteChartProfile: (id: string) => Promise<void>;
   profileTimezone: string;
+  userId: string | null;
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -80,6 +82,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [today, setToday] = useState<TodayPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileTimezone, setProfileTimezone] = useState("Asia/Kolkata");
+  const [userId, setUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeChartProfileId, setActiveChartProfileId] = useState<string | null>(() =>
     readActiveChartId(),
@@ -108,6 +111,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setError(null);
       }
 
+      let uid: string | null = null;
       try {
         const supabase = createClient();
         if (!supabase) {
@@ -117,7 +121,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
 
         const { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData.session) {
+        uid = sessionData.session?.user.id ?? null;
+        setUserId(uid);
+
+        if (!sessionData.session || !uid) {
           setError("Sign in to load your reading.");
           setPack(null);
           clearEngineCache();
@@ -127,17 +134,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const { data: prof } = await supabase
           .from("profiles")
           .select("current_timezone")
-          .eq("user_id", sessionData.session.user.id)
+          .eq("user_id", uid)
           .maybeSingle();
         const tz = prof?.current_timezone?.toString() || "Asia/Kolkata";
         setProfileTimezone(tz);
 
         const chartId = readActiveChartId();
-        const date = new Date().toISOString().slice(0, 10);
+        const date = todayInTimezone(tz);
 
         if (!opts?.force) {
-          const cachedPack = readCachedPack(locale, chartId);
-          const cachedToday = readCachedToday(locale, chartId, date);
+          const cachedPack = readCachedPack(uid, locale, chartId);
+          const cachedToday = readCachedToday(uid, locale, chartId, date);
           if (cachedPack) setPack(cachedPack);
           if (cachedToday) setToday(cachedToday);
           if (cachedPack && cachedToday) {
@@ -146,8 +153,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const needPack = opts?.force || !readCachedPack(locale, chartId);
-        const needToday = opts?.force || !readCachedToday(locale, chartId, date);
+        const needPack = opts?.force || !readCachedPack(uid, locale, chartId);
+        const needToday = opts?.force || !readCachedToday(uid, locale, chartId, date);
 
         const [packRes, todayRes] = await Promise.all([
           needPack
@@ -155,7 +162,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(
-                  engineExtras(locale, chartId, { action: "birth_pack_get" }),
+                  engineExtras(locale, chartId, {
+                    action: "birth_pack_get",
+                    may_generate: false,
+                  }),
                 ),
               })
             : Promise.resolve(null),
@@ -172,10 +182,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         if (packRes) {
           const json = (await packRes.json()) as Record<string, unknown>;
-          if (!packRes.ok) throw new Error(json.error?.toString() ?? "Failed to load pack");
-          const normalized = normalizePackResponse(json);
-          setPack(normalized);
-          writeCachedPack(locale, chartId, normalized);
+          if (!packRes.ok) {
+            const code = json.error_code?.toString() ?? "";
+            if (code === "birth_pack_not_ready") {
+              setError("Your reading is still preparing. Pull down to refresh in a moment.");
+            } else {
+              throw new Error(json.error?.toString() ?? "Failed to load pack");
+            }
+          } else {
+            const normalized = normalizePackResponse(json);
+            setPack(normalized);
+            writeCachedPack(uid, locale, chartId, normalized);
+          }
         }
 
         if (todayRes) {
@@ -183,7 +201,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           if (todayRes.ok) {
             const parsed = parseTodayPayload(todayJson);
             setToday(parsed);
-            writeCachedToday(locale, chartId, parsed);
+            writeCachedToday(uid, locale, chartId, parsed);
           } else {
             setToday(null);
           }
@@ -192,7 +210,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         void reloadChartProfiles();
       } catch (e) {
         const chartId = readActiveChartId();
-        if (!readCachedPack(locale, chartId)) {
+        if (!uid || !readCachedPack(uid, locale, chartId)) {
           setError(e instanceof Error ? e.message : "Load failed");
           setPack(null);
         }
@@ -329,6 +347,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         await load({ force: true });
       },
       profileTimezone,
+      userId,
       activeChartProfileId,
       activeChartLabel,
       chartProfiles,
@@ -343,6 +362,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     loading,
     error,
     load,
+    userId,
     activeChartProfileId,
     activeChartLabel,
     chartProfiles,
@@ -365,10 +385,16 @@ export function useAppData() {
 /** Engine POST body with locale + active chart profile. */
 export function useEngineBody() {
   const { locale } = useLocale();
-  const { activeChartProfileId } = useAppData();
+  const { activeChartProfileId, profileTimezone } = useAppData();
   return useCallback(
     (action: string, extra: Record<string, unknown> = {}) =>
-      engineExtras(locale, activeChartProfileId, { action, ...extra }),
-    [locale, activeChartProfileId],
+      engineExtras(locale, activeChartProfileId, {
+        action,
+        ...extra,
+        ...(action === "today_get" && !extra.date
+          ? { date: todayInTimezone(profileTimezone) }
+          : {}),
+      }),
+    [locale, activeChartProfileId, profileTimezone],
   );
 }

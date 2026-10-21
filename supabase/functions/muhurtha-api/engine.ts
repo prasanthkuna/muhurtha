@@ -540,12 +540,12 @@ function packRangeCard(
     ? asArray<PackRangeCard>(pack?.content.weekly_cards)
     : asArray<PackRangeCard>(pack?.content.monthly_cards);
   const key = scope === "weekly" ? weekCardKey(dateStr, tz) : monthCardKey(dateStr);
-  return cards.find((c) => safeString(c.key) === key) ?? cards[0] ?? null;
+  return cards.find((c) => safeString(c.key) === key) ?? null;
 }
 
 function packTodayCard(pack: BirthPackRow | null, dateStr: string): PackTodayCard | null {
   const cards = asArray<PackTodayCard>(pack?.content.today_cards);
-  return cards.find((c) => safeString(c.key) === dateStr) ?? cards[0] ?? null;
+  return cards.find((c) => safeString(c.key) === dateStr) ?? null;
 }
 
 function normalizeWindowCopy(
@@ -3321,11 +3321,35 @@ async function _handleInternal(
     return { deleted: true, id: chartProfileId };
   }
 
-  if (action === "birth_pack_get") {
-    // Sole entry point for birth-pack LLM generation (one call per locale, lock-protected).
+  if (action === "chart_generate") {
     const locale = requestLocale(body, profile);
     const tz = profile.current_timezone ?? "Asia/Kolkata";
     const dateStr = (body.date as string) ?? todayInTimezone(tz);
+    const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    if (!bi) {
+      throw new ActionError("birth_input_missing", "No birth input", 409);
+    }
+    const pack = await ensureBirthPack(adminSupabase, profile, bi, locale, dateStr);
+    const packStatus = pack?.status ?? "generating";
+    return {
+      ok: pack != null,
+      status: packStatus,
+      locale,
+      date: dateStr,
+      birthInputId: bi.id,
+      screensReady: pack
+        ? getPackScreensReady(pack.content as BirthIntelligencePackContent)
+        : [],
+      provider: pack?.provider ?? null,
+    };
+  }
+
+  if (action === "birth_pack_get") {
+    const locale = requestLocale(body, profile);
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
+    const dateStr = (body.date as string) ?? todayInTimezone(tz);
+    const mayGenerate = body.may_generate === true;
     const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
     const bi = await ensureBirthPlacePrecision(supabase, rawBi);
     if (!bi) {
@@ -3337,7 +3361,10 @@ async function _handleInternal(
       profile.display_name,
       body,
     );
-    const pack = await ensureBirthPack(adminSupabase, profile, bi, locale, dateStr);
+    let pack = await loadBirthPack(supabase, profile, bi, locale, dateStr);
+    if ((!pack || !isClientServablePack(pack)) && mayGenerate) {
+      pack = await ensureBirthPack(adminSupabase, profile, bi, locale, dateStr);
+    }
     if (!pack) {
       throw new ActionError(
         "birth_pack_not_ready",
@@ -4052,6 +4079,59 @@ async function _handleInternal(
     await saveNarrativeCache(supabase, profile.id, dateStr, locale, scope, result);
 
     return result;
+  }
+
+  if (action === "chat_session_list") {
+    const { data, error } = await supabase
+      .from("chat_sessions")
+      .select("id, title, updated_at, language_code")
+      .eq("profile_id", profile.id)
+      .order("updated_at", { ascending: false })
+      .limit(24);
+    if (error) throw error;
+    return {
+      sessions: (data ?? []).map((row) => ({
+        id: row.id,
+        title: row.title,
+        updatedAt: row.updated_at,
+        languageCode: row.language_code,
+      })),
+    };
+  }
+
+  if (action === "chat_session_load") {
+    const sessionId = String(body.session_id ?? "").trim();
+    if (!sessionId) {
+      throw new ActionError("missing_session_id", "session_id required", 400);
+    }
+    const { data: session, error: sessionError } = await supabase
+      .from("chat_sessions")
+      .select("id, title")
+      .eq("id", sessionId)
+      .eq("profile_id", profile.id)
+      .maybeSingle();
+    if (sessionError) throw sessionError;
+    if (!session) {
+      throw new ActionError("chat_session_not_found", "Chat session not found", 404);
+    }
+    const { data: messages, error: msgError } = await supabase
+      .from("chat_messages")
+      .select("id, role, content, created_at")
+      .eq("session_id", sessionId)
+      .eq("profile_id", profile.id)
+      .order("created_at", { ascending: true })
+      .limit(80);
+    if (msgError) throw msgError;
+    return {
+      sessionId: session.id,
+      title: session.title,
+      messages: (messages ?? []).map((m) => ({
+        id: m.id,
+        role: m.role,
+        text: m.content,
+        createdAt: m.created_at,
+      })),
+    };
   }
 
   if (action === "ask") {

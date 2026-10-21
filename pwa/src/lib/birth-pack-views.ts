@@ -112,9 +112,15 @@ export class BirthPackViews {
         const sortOrder = Number(p.sortOrder ?? -1);
         const periodLabel = p.periodLabel?.toString() ?? "";
         const tense = tenseBySort(factList, sortOrder);
+        const fact =
+          factList.find((f) => Number(f.sortOrder) === sortOrder) ??
+          factList[sortOrder] ??
+          null;
         const sentences = Array.isArray(p.sentences)
           ? p.sentences.map(String).join("\n\n")
           : p.highlight?.toString() ?? "";
+        const strList = (raw: unknown) =>
+          Array.isArray(raw) ? raw.map(String).filter(Boolean) : [];
         return {
           id: chapterIdFrom(sortOrder, periodLabel),
           sortOrder,
@@ -129,6 +135,13 @@ export class BirthPackViews {
           mahadashaLord: p.mahadashaLord?.toString() ?? "",
           antardashaLord: p.antardashaLord?.toString() ?? "",
           phasePulse: p.phasePulse?.toString() ?? "",
+          focusAreas: strList(p.focusAreas ?? fact?.focusAreas),
+          pressureThemes: strList(p.pressureThemes ?? fact?.pressureThemes),
+          domainLenses: strList(p.domainLenses ?? fact?.domainLenses),
+          transitionNote:
+            p.transitionNote?.toString() ?? fact?.transitionNote?.toString() ?? "",
+          periodStart: fact?.periodStart?.toString() ?? fact?.start?.toString(),
+          periodEnd: fact?.periodEnd?.toString() ?? fact?.end?.toString(),
         } satisfies ChapterView;
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);

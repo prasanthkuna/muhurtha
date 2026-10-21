@@ -20,7 +20,39 @@ function AskInner() {
   const [input, setInput] = useState(seed);
   const [busy, setBusy] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
+  const [sessions, setSessions] = useState<
+    { id: string; title: string; updatedAt: string }[]
+  >([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (loading || !views) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/engine", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(engineBody("chat_session_list")),
+        });
+        const json = (await res.json()) as Record<string, unknown>;
+        if (!res.ok) return;
+        const rows = json.sessions;
+        if (!Array.isArray(rows)) return;
+        setSessions(
+          rows
+            .filter((r): r is Record<string, unknown> => typeof r === "object" && r !== null)
+            .map((r) => ({
+              id: r.id?.toString() ?? "",
+              title: r.title?.toString() ?? "Chat",
+              updatedAt: r.updatedAt?.toString() ?? "",
+            }))
+            .filter((r) => r.id),
+        );
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [engineBody, loading, views, messages.length]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -89,6 +121,48 @@ function AskInner() {
         title={t("ask.title")}
         subtitle={t("ask.subtitle")}
       />
+
+      {sessions.length > 0 ? (
+        <div className="mb-4 space-y-2">
+          <p className="text-xs font-semibold uppercase text-ink-tertiary">{t("ask.priorChats")}</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {sessions.slice(0, 8).map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  void (async () => {
+                    const res = await fetch("/api/engine", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(engineBody("chat_session_load", { session_id: s.id })),
+                    });
+                    const json = (await res.json()) as Record<string, unknown>;
+                    if (!res.ok) return;
+                    setSessionId(s.id);
+                    const rows = json.messages;
+                    if (!Array.isArray(rows)) return;
+                    setMessages(
+                      rows
+                        .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null)
+                        .map((m) => ({
+                          id: m.id?.toString() ?? crypto.randomUUID(),
+                          role: (m.role?.toString() === "user" ? "user" : "assistant") as
+                            | "user"
+                            | "assistant",
+                          text: m.text?.toString() ?? "",
+                        })),
+                    );
+                  })();
+                }}
+                className="shrink-0 rounded-full border border-line bg-paper px-3 py-1.5 text-xs text-ink-secondary hover:border-gold-accent/50"
+              >
+                {s.title.slice(0, 42)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {currentChapter?.title ? (
         <div className="mb-4 rounded-2xl border border-line bg-gold-wash/40 px-4 py-3">

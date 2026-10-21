@@ -82,7 +82,7 @@ export default function TodayPage() {
 
       {views.packMeta.todayCount > 0 && views.packMeta.todayCount < 25 ? (
         <p className="rounded-xl bg-warning-wash px-4 py-3 text-sm text-warning-ink">
-          Daily cards {views.packMeta.todayCount} of ~25 for this locale — regenerate pack for full coverage.
+          Daily cards {views.packMeta.todayCount} of ~30 for this locale — use Refresh reading after your dossier finishes preparing.
         </p>
       ) : null}
 

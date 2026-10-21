@@ -32,6 +32,12 @@ export type ChapterView = {
   mahadashaLord: string;
   antardashaLord: string;
   phasePulse: string;
+  focusAreas: string[];
+  pressureThemes: string[];
+  domainLenses: string[];
+  transitionNote: string;
+  periodStart?: string;
+  periodEnd?: string;
 };
 
 export type AskMessage = {
