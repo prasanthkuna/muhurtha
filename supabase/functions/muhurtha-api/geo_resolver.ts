@@ -30,6 +30,34 @@ type NominatimReverseRow = {
   address?: NominatimRow["address"];
 };
 
+const GEO_TIMEOUT_MS = 4_000;
+const NOMINATIM_HEADERS = {
+  "User-Agent": "MuhurthaApp/1.1 (+https://pwa-lyart-phi.vercel.app; support@muhurta.app)",
+  "Accept-Language": "en",
+};
+
+/** fetch with a hard timeout so a slow geocoder never stalls the request. */
+async function fetchWithTimeout(
+  url: string | URL,
+  init: RequestInit = {},
+  timeoutMs = GEO_TIMEOUT_MS,
+): Promise<Response | null> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (e) {
+    console.warn("Geocoder request failed", String(url).split("?")[0], String(e));
+    return null;
+  }
+}
+
+function safeTimezone(lat: number, lng: number): string {
+  try {
+    return tzLookup(lat, lng);
+  } catch {
+    return "Asia/Kolkata";
+  }
+}
+
 function cleanPlace(place: string): string {
   return place.trim().replace(/\s+/g, " ");
 }
@@ -101,11 +129,11 @@ async function photonSearch(q: string, limit: number): Promise<BirthPlaceResolut
   url.searchParams.set("limit", String(Math.min(10, Math.max(1, limit))));
   url.searchParams.set("lang", "en");
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithTimeout(url, {
     headers: { Accept: "application/json" },
   });
-  if (!res.ok) {
-    console.warn("Photon geocode failed", res.status);
+  if (!res || !res.ok) {
+    console.warn("Photon geocode failed", res?.status);
     return [];
   }
   const payload = await res.json() as { features?: PhotonFeature[] };
@@ -161,17 +189,12 @@ async function nominatimSearch(q: string, limit: number): Promise<NominatimRow[]
   url.searchParams.set("limit", String(Math.min(10, Math.max(1, limit))));
   url.searchParams.set("addressdetails", "1");
 
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "MuhurthaApp/1.0 support@muhurta.app",
-      "Accept-Language": "en",
-    },
-  });
-  if (!res.ok) {
-    console.warn("Birth place geocode failed", res.status, await res.text());
+  const res = await fetchWithTimeout(url, { headers: NOMINATIM_HEADERS });
+  if (!res || !res.ok) {
+    console.warn("Birth place geocode failed", res?.status);
     return [];
   }
-  const rows = await res.json() as NominatimRow[];
+  const rows = await res.json().catch(() => []) as NominatimRow[];
   return Array.isArray(rows) ? rows : [];
 }
 
@@ -225,43 +248,96 @@ function shortCityLabel(row: NominatimRow | NominatimReverseRow | null): string 
   );
 }
 
-export async function resolveCoordinates(
-  lat: number,
-  lng: number,
-): Promise<BirthPlaceResolution | null> {
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+type PhotonReverse = { features?: PhotonFeature[] };
+type BigDataCloudReverse = {
+  city?: string;
+  locality?: string;
+  principalSubdivision?: string;
+};
 
+async function nominatimReverse(lat: number, lng: number): Promise<string> {
   const url = new URL("https://nominatim.openstreetmap.org/reverse");
   url.searchParams.set("lat", String(lat));
   url.searchParams.set("lon", String(lng));
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("addressdetails", "1");
-
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "MuhurthaApp/1.0 support@muhurta.app",
-      "Accept-Language": "en",
-    },
-  });
-  if (!res.ok) {
-    console.warn("Reverse geocode failed", res.status, await res.text());
-    return null;
+  url.searchParams.set("zoom", "10");
+  const res = await fetchWithTimeout(url, { headers: NOMINATIM_HEADERS });
+  if (!res || !res.ok) {
+    console.warn("Nominatim reverse failed", res?.status);
+    return "";
   }
-  const top = await res.json() as NominatimReverseRow;
-  let timezone = "Asia/Kolkata";
-  try {
-    timezone = tzLookup(lat, lng);
-  } catch {
-    timezone = "Asia/Kolkata";
-  }
+  const top = await res.json().catch(() => null) as NominatimReverseRow | null;
+  return shortCityLabel(top);
+}
 
-  const city = shortCityLabel(top) || top?.display_name?.trim() || "Current location";
+async function photonReverse(lat: number, lng: number): Promise<string> {
+  const url = new URL("https://photon.komoot.io/reverse");
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lng));
+  url.searchParams.set("lang", "en");
+  const res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } });
+  if (!res || !res.ok) {
+    console.warn("Photon reverse failed", res?.status);
+    return "";
+  }
+  const payload = await res.json().catch(() => null) as PhotonReverse | null;
+  const props = payload?.features?.[0]?.properties;
+  return props?.city?.trim() || props?.name?.trim() || "";
+}
+
+async function bigDataCloudReverse(lat: number, lng: number): Promise<string> {
+  const url = new URL("https://api.bigdatacloud.net/data/reverse-geocode-client");
+  url.searchParams.set("latitude", String(lat));
+  url.searchParams.set("longitude", String(lng));
+  url.searchParams.set("localityLanguage", "en");
+  const res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } });
+  if (!res || !res.ok) {
+    console.warn("BigDataCloud reverse failed", res?.status);
+    return "";
+  }
+  const payload = await res.json().catch(() => null) as BigDataCloudReverse | null;
+  return payload?.city?.trim() || payload?.locality?.trim() || "";
+}
+
+function nearestKnownCity(lat: number, lng: number): string {
+  let best = "";
+  let bestDist = Infinity;
+  for (const city of Object.values(IN_CITY_FALLBACKS)) {
+    const d = Math.hypot(city.lat - lat, city.lng - lng);
+    if (d < bestDist) {
+      bestDist = d;
+      best = city.label;
+    }
+  }
+  // ~0.35 degrees ≈ 35-40 km: close enough to call it "near <city>".
+  return bestDist <= 0.35 ? best : "";
+}
+
+/**
+ * Reverse geocode for "use my location". Coordinates + timezone are what timing needs,
+ * so a valid lat/lng never fails: providers are tried in order (each with a 4 s cap)
+ * and the label falls back to a nearby known city or the rounded coordinates.
+ */
+export async function resolveCoordinates(
+  lat: number,
+  lng: number,
+): Promise<BirthPlaceResolution | null> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+  let label = await nominatimReverse(lat, lng);
+  if (!label) label = await photonReverse(lat, lng);
+  if (!label) label = await bigDataCloudReverse(lat, lng);
+  if (!label) label = nearestKnownCity(lat, lng);
+  if (!label) label = `Near ${lat.toFixed(2)}, ${lng.toFixed(2)}`;
+
   return {
-    place: city,
-    resolvedLabel: city,
+    place: label,
+    resolvedLabel: label,
     lat,
     lng,
-    timezone,
+    timezone: safeTimezone(lat, lng),
     source: "nominatim",
   };
 }
