@@ -40,6 +40,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)",
+    // /api routes manage their own session (route handler getSession); static assets,
+    // the service worker and the offline page never need a session refresh.
+    "/((?!api/|_next/static|_next/image|favicon.ico|sw.js|offline.html|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest|ico|txt)$).*)",
   ],
 };

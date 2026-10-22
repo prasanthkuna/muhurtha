@@ -1,6 +1,9 @@
 import { normalizePackResponse } from "./birth-pack-views";
 import type { BirthPackPayload } from "./types";
 
+/** Supabase project region (Mumbai). Override with SUPABASE_FUNCTIONS_REGION if moved. */
+const ENGINE_REGION = process.env.SUPABASE_FUNCTIONS_REGION || "ap-south-1";
+
 export async function invokeEngine(
   accessToken: string | undefined,
   body: Record<string, unknown>,
@@ -17,8 +20,12 @@ export async function invokeEngine(
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken ?? key}`,
       apikey: key,
+      // Run the edge function next to the database (ap-south-1 / Mumbai). Without this the
+      // function executes near the caller and every PostgREST hop crosses continents.
+      "x-region": ENGINE_REGION,
     },
     body: JSON.stringify(body),
+    cache: "no-store",
   });
 
   const data = (await res.json()) as Record<string, unknown>;

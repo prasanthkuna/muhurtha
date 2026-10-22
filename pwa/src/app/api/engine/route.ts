@@ -2,25 +2,20 @@ import { NextResponse } from "next/server";
 import { invokeEngine } from "@/lib/muhurtha-engine";
 import { createClient } from "@/lib/supabase/server";
 
+export const preferredRegion = "bom1";
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   if (!supabase) {
     return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
   }
 
-  const body = (await req.json()) as Record<string, unknown>;
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
-  if (userError || !user) {
-    return NextResponse.json(
-      { error: "Sign in required", error_code: "auth_required" },
-      { status: 401 },
-    );
-  }
-
+  // getSession() reads (and if needed refreshes) the cookie session without an extra
+  // Auth round trip. The token is verified by the edge function itself (verify_jwt +
+  // auth.getUser), so a forged cookie can't get past the engine.
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -41,9 +36,16 @@ export async function POST(req: Request) {
       e && typeof e === "object" && "code" in e
         ? String((e as { code?: string }).code)
         : undefined;
-    return NextResponse.json(
-      { error: message, ...(code ? { error_code: code } : {}) },
-      { status: code === "location_required" ? 422 : 400 },
-    );
+    const status =
+      code === "location_required"
+        ? 422
+        : code === "unauthenticated" || code === "http_401"
+          ? 401
+          : code === "birth_pack_not_ready"
+            ? 503
+            : code === "free_ask_limit_reached"
+              ? 429
+              : 400;
+    return NextResponse.json({ error: message, ...(code ? { error_code: code } : {}) }, { status });
   }
 }

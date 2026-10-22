@@ -30,26 +30,32 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const [localeReady, setLocaleReady] = useState(false);
 
   useEffect(() => {
+    // A locale saved on this device is good enough to start loading immediately;
+    // the profile value is reconciled in the background instead of blocking every load
+    // behind an Auth + PostgREST round trip.
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (stored) setLocaleReady(true);
     void (async () => {
-      const supabase = createClient();
-      if (!supabase) {
+      try {
+        const supabase = createClient();
+        if (!supabase) return;
+        const { data } = await supabase.auth.getSession();
+        const uid = data.session?.user.id;
+        if (!uid) return;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("language_code")
+          .eq("user_id", uid)
+          .maybeSingle();
+        if (!profile?.language_code) return;
+        const fromProfile = normalizeLocale(profile.language_code.toString());
+        localStorage.setItem(LOCALE_STORAGE_KEY, fromProfile);
+        setLocaleState((prev) => (prev === fromProfile ? prev : fromProfile));
+      } catch {
+        /* keep device locale */
+      } finally {
         setLocaleReady(true);
-        return;
       }
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) {
-        setLocaleReady(true);
-        return;
-      }
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("language_code")
-        .eq("user_id", auth.user.id)
-        .maybeSingle();
-      const fromProfile = normalizeLocale(profile?.language_code?.toString());
-      setLocaleState(fromProfile);
-      localStorage.setItem(LOCALE_STORAGE_KEY, fromProfile);
-      setLocaleReady(true);
     })();
   }, []);
 
@@ -62,12 +68,13 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(LOCALE_STORAGE_KEY, next);
     const supabase = createClient();
     if (supabase) {
-      const { data: auth } = await supabase.auth.getUser();
-      if (auth.user) {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user.id;
+      if (uid) {
         await supabase
           .from("profiles")
           .update({ language_code: next, updated_at: new Date().toISOString() })
-          .eq("user_id", auth.user.id);
+          .eq("user_id", uid);
       }
     }
   }, []);

@@ -3,7 +3,8 @@ import type { TodayPayload } from "./today-types";
 
 const PACK_PREFIX = "muh_engine_pack_v3_";
 const TODAY_PREFIX = "muh_engine_today_v3_";
-const PACK_TTL_MS = 24 * 60 * 60 * 1000;
+// Last reading stays renderable offline for a week; it is revalidated hourly when online.
+const PACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type CachedPack = { savedAt: number; pack: BirthPackPayload };
 type CachedToday = { savedAt: number; today: TodayPayload };
@@ -14,6 +15,67 @@ function packKey(userId: string, locale: string, chartProfileId: string | null) 
 
 function todayKey(userId: string, locale: string, chartProfileId: string | null, date: string) {
   return `${TODAY_PREFIX}${userId}_${locale}_${chartProfileId ?? "self"}_${date}`;
+}
+
+const LAST_UID_KEY = "muh_last_uid_v1";
+const PROFILE_TZ_KEY = "muh_profile_tz_v1";
+/** Pack older than this is still rendered instantly but revalidated in the background. */
+export const PACK_REVALIDATE_MS = 60 * 60 * 1000;
+
+export function readLastUserId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(LAST_UID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeLastUserId(uid: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (uid) localStorage.setItem(LAST_UID_KEY, uid);
+    else localStorage.removeItem(LAST_UID_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readCachedTimezone(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(PROFILE_TZ_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedTimezone(tz: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PROFILE_TZ_KEY, tz);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Cached pack plus its age, for stale-while-revalidate. */
+export function readCachedPackEntry(
+  userId: string,
+  locale: string,
+  chartProfileId: string | null,
+): { pack: BirthPackPayload; ageMs: number } | null {
+  if (typeof window === "undefined" || !userId) return null;
+  try {
+    const raw = localStorage.getItem(packKey(userId, locale, chartProfileId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedPack;
+    const ageMs = Date.now() - parsed.savedAt;
+    if (ageMs > PACK_TTL_MS) return null;
+    return { pack: parsed.pack, ageMs };
+  } catch {
+    return null;
+  }
 }
 
 export function readCachedPack(
@@ -84,8 +146,16 @@ export function writeCachedToday(
   }
 }
 
-export function clearEngineCache() {
+export function clearEngineCache(opts?: { forgetUser?: boolean }) {
   if (typeof window === "undefined") return;
+  if (opts?.forgetUser) {
+    writeLastUserId(null);
+    try {
+      localStorage.removeItem(PROFILE_TZ_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
   for (const key of Object.keys(localStorage)) {
     if (key.startsWith(PACK_PREFIX) || key.startsWith(TODAY_PREFIX)) {
       localStorage.removeItem(key);

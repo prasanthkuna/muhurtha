@@ -5,7 +5,9 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -15,10 +17,15 @@ import { parseChartProfileList, type ChartProfileSummary } from "@/lib/chart-pro
 import { CHART_PROFILE_STORAGE_KEY } from "@/lib/locale";
 import {
   clearEngineCache,
-  readCachedPack,
+  PACK_REVALIDATE_MS,
+  readCachedPackEntry,
+  readCachedTimezone,
   readCachedToday,
+  readLastUserId,
   writeCachedPack,
+  writeCachedTimezone,
   writeCachedToday,
+  writeLastUserId,
 } from "@/lib/engine-cache";
 import { todayInTimezone } from "@/lib/local-date";
 import { createClient } from "@/lib/supabase/client";
@@ -58,6 +65,8 @@ type AppDataContextValue = {
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 function readActiveChartId(): string | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(CHART_PROFILE_STORAGE_KEY);
@@ -76,6 +85,31 @@ function engineExtras(
   };
 }
 
+function initialSnapshot(locale: string) {
+  // Instant render: hydrate from the last signed-in user's cached reading before any
+  // network call. The session check below replaces it if the user changed.
+  const uid = readLastUserId();
+  const tz = readCachedTimezone() || "Asia/Kolkata";
+  if (!uid) return { uid: null, tz, pack: null, today: null };
+  const chartId = readActiveChartId();
+  return {
+    uid,
+    tz,
+    pack: readCachedPackEntry(uid, locale, chartId)?.pack ?? null,
+    today: readCachedToday(uid, locale, chartId, todayInTimezone(tz)),
+  };
+}
+
+async function postEngine(body: Record<string, unknown>) {
+  const res = await fetch("/api/engine", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return { res, json };
+}
+
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const { locale, localeReady } = useLocale();
   const [pack, setPack] = useState<BirthPackPayload | null>(null);
@@ -84,20 +118,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [profileTimezone, setProfileTimezone] = useState("Asia/Kolkata");
   const [userId, setUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeChartProfileId, setActiveChartProfileId] = useState<string | null>(() =>
-    readActiveChartId(),
-  );
+  const [activeChartProfileId, setActiveChartProfileId] = useState<string | null>(null);
   const [activeChartLabel, setActiveChartLabel] = useState<string | null>(null);
   const [chartProfiles, setChartProfiles] = useState<ChartProfileSummary[]>([]);
+  const userIdRef = useRef<string | null>(null);
+  const inflight = useRef<{ key: string; promise: Promise<void> } | null>(null);
+
+  // Apply the cached snapshot before first paint (client only, so SSR markup matches).
+  useIsomorphicLayoutEffect(() => {
+    const snap = initialSnapshot(locale);
+    setActiveChartProfileId(readActiveChartId());
+    setProfileTimezone(snap.tz);
+    if (snap.uid) {
+      userIdRef.current = snap.uid;
+      setUserId(snap.uid);
+    }
+    if (snap.pack) {
+      setPack(snap.pack);
+      setToday(snap.today);
+      setLoading(false);
+    }
+  }, []);
 
   const reloadChartProfiles = useCallback(async () => {
     try {
-      const res = await fetch("/api/engine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "chart_profile_list", locale }),
-      });
-      const json = (await res.json()) as Record<string, unknown>;
+      const { res, json } = await postEngine({ action: "chart_profile_list", locale });
       if (res.ok) setChartProfiles(parseChartProfileList(json));
     } catch {
       /* ignore */
@@ -106,10 +151,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const load = useCallback(
     async (opts?: { silent?: boolean; force?: boolean }) => {
-      if (!opts?.silent) {
-        setLoading(true);
-        setError(null);
-      }
+      const chartId = readActiveChartId();
+      const cachedFor = (uid: string) => readCachedPackEntry(uid, locale, chartId);
 
       let uid: string | null = null;
       try {
@@ -120,105 +163,139 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        // Local session read (no network); the engine verifies the token server-side.
         const { data: sessionData } = await supabase.auth.getSession();
         uid = sessionData.session?.user.id ?? null;
-        setUserId(uid);
 
         if (!sessionData.session || !uid) {
+          userIdRef.current = null;
+          setUserId(null);
           setError("Sign in to load your reading.");
           setPack(null);
-          clearEngineCache();
+          setToday(null);
+          clearEngineCache({ forgetUser: true });
           return;
         }
 
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("current_timezone")
-          .eq("user_id", uid)
-          .maybeSingle();
-        const tz = prof?.current_timezone?.toString() || "Asia/Kolkata";
-        setProfileTimezone(tz);
+        if (uid !== userIdRef.current) {
+          // Different account than the cached snapshot: never show someone else's reading.
+          setPack(null);
+          setToday(null);
+        }
+        userIdRef.current = uid;
+        setUserId(uid);
+        writeLastUserId(uid);
 
-        const chartId = readActiveChartId();
-        const date = todayInTimezone(tz);
+        const cachedEntry = opts?.force ? null : cachedFor(uid);
+        const hasPack = Boolean(cachedEntry);
+        if (cachedEntry) setPack(cachedEntry.pack);
+        if (!opts?.silent && !hasPack) {
+          setLoading(true);
+          setError(null);
+        }
 
-        if (!opts?.force) {
-          const cachedPack = readCachedPack(uid, locale, chartId);
-          const cachedToday = readCachedToday(uid, locale, chartId, date);
-          if (cachedPack) setPack(cachedPack);
-          if (cachedToday) setToday(cachedToday);
-          if (cachedPack && cachedToday) {
-            void reloadChartProfiles();
+        // Timezone: start with the cached value so the pack/today requests are not
+        // serialized behind the profile query; correct it if the profile disagrees.
+        let tz = readCachedTimezone() || profileTimezone || "Asia/Kolkata";
+        const tzQuery: Promise<string | null> = Promise.resolve(
+          supabase
+            .from("profiles")
+            .select("current_timezone")
+            .eq("user_id", uid)
+            .maybeSingle(),
+        ).then(({ data }) => data?.current_timezone?.toString() || null);
+
+        const fetchToday = async (zone: string) => {
+          const date = todayInTimezone(zone);
+          const cached = opts?.force ? null : readCachedToday(uid!, locale, chartId, date);
+          if (cached) {
+            setToday(cached);
             return;
           }
-        }
-
-        const needPack = opts?.force || !readCachedPack(uid, locale, chartId);
-        const needToday = opts?.force || !readCachedToday(uid, locale, chartId, date);
-
-        const [packRes, todayRes] = await Promise.all([
-          needPack
-            ? fetch("/api/engine", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(
-                  engineExtras(locale, chartId, {
-                    action: "birth_pack_get",
-                    may_generate: false,
-                  }),
-                ),
-              })
-            : Promise.resolve(null),
-          needToday
-            ? fetch("/api/engine", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(
-                  engineExtras(locale, chartId, { action: "today_get", date }),
-                ),
-              })
-            : Promise.resolve(null),
-        ]);
-
-        if (packRes) {
-          const json = (await packRes.json()) as Record<string, unknown>;
-          if (!packRes.ok) {
-            const code = json.error_code?.toString() ?? "";
-            if (code === "birth_pack_not_ready") {
-              setError("Your reading is still preparing. Pull down to refresh in a moment.");
-            } else {
-              throw new Error(json.error?.toString() ?? "Failed to load pack");
-            }
-          } else {
-            const normalized = normalizePackResponse(json);
-            setPack(normalized);
-            writeCachedPack(uid, locale, chartId, normalized);
-          }
-        }
-
-        if (todayRes) {
-          const todayJson = (await todayRes.json()) as Record<string, unknown>;
-          if (todayRes.ok) {
-            const parsed = parseTodayPayload(todayJson);
+          const { res, json } = await postEngine(
+            engineExtras(locale, chartId, { action: "today_get", date }),
+          );
+          if (res.ok) {
+            const parsed = parseTodayPayload(json);
             setToday(parsed);
-            writeCachedToday(uid, locale, chartId, parsed);
-          } else {
+            writeCachedToday(uid!, locale, chartId, parsed);
+          } else if (!hasPack) {
             setToday(null);
           }
-        }
+        };
 
+        const needPackFetch =
+          opts?.force || !cachedEntry || cachedEntry.ageMs > PACK_REVALIDATE_MS;
+        const packTask = needPackFetch
+          ? postEngine(
+              engineExtras(locale, chartId, { action: "birth_pack_get", may_generate: false }),
+            ).then(({ res, json }) => {
+              if (!res.ok) {
+                const code = json.error_code?.toString() ?? "";
+                if (hasPack) return; // keep showing the cached reading
+                if (code === "birth_pack_not_ready") {
+                  setError("Your reading is still preparing. Pull down to refresh in a moment.");
+                  return;
+                }
+                throw new Error(json.error?.toString() ?? "Failed to load pack");
+              }
+              const normalized = normalizePackResponse(json);
+              setPack(normalized);
+              setError(null);
+              writeCachedPack(uid!, locale, chartId, normalized);
+            })
+          : Promise.resolve();
+
+        const todayTask = fetchToday(tz).then(async () => {
+          const fromProfile = await tzQuery.catch(() => null);
+          if (fromProfile && fromProfile !== tz) {
+            tz = fromProfile;
+            setProfileTimezone(fromProfile);
+            writeCachedTimezone(fromProfile);
+            await fetchToday(fromProfile);
+          } else if (fromProfile) {
+            setProfileTimezone(fromProfile);
+            writeCachedTimezone(fromProfile);
+          }
+        });
+
+        await Promise.all([packTask, todayTask]);
         void reloadChartProfiles();
       } catch (e) {
-        const chartId = readActiveChartId();
-        if (!uid || !readCachedPack(uid, locale, chartId)) {
-          setError(e instanceof Error ? e.message : "Load failed");
+        if (!uid || !cachedFor(uid)) {
+          const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+          setError(
+            offline
+              ? "You're offline. Connect to load your reading."
+              : e instanceof Error
+                ? e.message
+                : "Load failed",
+          );
           setPack(null);
         }
       } finally {
         setLoading(false);
       }
     },
+    // profileTimezone intentionally omitted: it is read as a hint only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [locale, reloadChartProfiles],
+  );
+
+  /** Coalesce overlapping loads (mount + auth events + locale change). */
+  const loadOnce = useCallback(
+    (opts?: { silent?: boolean; force?: boolean }) => {
+      const key = `${locale}:${readActiveChartId() ?? "self"}`;
+      if (inflight.current && inflight.current.key === key && !opts?.force) {
+        return inflight.current.promise;
+      }
+      const promise = load(opts).finally(() => {
+        if (inflight.current?.promise === promise) inflight.current = null;
+      });
+      inflight.current = { key, promise };
+      return promise;
+    },
+    [load, locale],
   );
 
   const setActiveChartProfile = useCallback(
@@ -227,24 +304,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setActiveChartLabel(label ?? null);
       if (id) localStorage.setItem(CHART_PROFILE_STORAGE_KEY, id);
       else localStorage.removeItem(CHART_PROFILE_STORAGE_KEY);
-      clearEngineCache();
-      await load({ force: true });
+      setPack(null);
+      setToday(null);
+      await loadOnce({ force: true });
     },
-    [load],
+    [loadOnce],
   );
 
   useEffect(() => {
     if (!localeReady) return;
-    void load({ silent: false });
+    void loadOnce({ silent: false });
     const supabase = createClient();
     if (!supabase) return;
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      void load();
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // INITIAL_SESSION / TOKEN_REFRESHED / USER_UPDATED must not trigger a reload:
+      // they fired a second full load (and a spinner) on every page open before.
+      const nextUid = session?.user.id ?? null;
+      if (event === "SIGNED_OUT" || (event === "SIGNED_IN" && nextUid !== userIdRef.current)) {
+        void loadOnce({ silent: true, force: event === "SIGNED_IN" });
+      }
     });
     return () => subscription.unsubscribe();
-  }, [load, locale, localeReady]);
+  }, [loadOnce, localeReady]);
 
   useEffect(() => {
     if (!activeChartProfileId) {
@@ -344,7 +427,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       isPro: pack?.access?.isPro === true,
       refresh: async () => {
         clearEngineCache();
-        await load({ force: true });
+        await loadOnce({ force: true });
       },
       profileTimezone,
       userId,
@@ -361,7 +444,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     today,
     loading,
     error,
-    load,
+    loadOnce,
     userId,
     activeChartProfileId,
     activeChartLabel,
