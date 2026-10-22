@@ -22,7 +22,7 @@ export async function resolveInitialAppPath(
     .from("birth_inputs")
     .select("id")
     .eq("profile_id", profile.id)
-    .neq("source", "chart_profile")
+    .or("source.is.null,source.neq.chart_profile")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -14,6 +14,8 @@ import {
 } from "@/lib/location/resolved-place";
 import { cn } from "@/components/ui/cn";
 
+const AUTO_DETECT_KEY = "muh_autodetect_done_v1";
+
 export function LocationPicker({
   label,
   value,
@@ -68,6 +70,13 @@ export function LocationPicker({
   useEffect(() => {
     if (!mounted || !autoDetect || value || detectStarted.current) return;
     detectStarted.current = true;
+    // Auto-detect at most once per browser session; afterwards the user taps Detect.
+    try {
+      if (sessionStorage.getItem(AUTO_DETECT_KEY)) return;
+      sessionStorage.setItem(AUTO_DETECT_KEY, "1");
+    } catch {
+      /* private mode: still detect once for this mount */
+    }
     void detect();
   }, [mounted, autoDetect, value, detect]);
 
@@ -155,7 +164,7 @@ export function LocationPicker({
           onClick={() => setSheetOpen(false)}
         />
         <div
-          className="relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-2xl border border-line bg-canvas shadow-2xl sm:rounded-2xl"
+          className="relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-2xl border border-line bg-canvas pb-[env(safe-area-inset-bottom)] shadow-2xl sm:rounded-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
@@ -255,9 +264,9 @@ export function LocationPicker({
               {value?.label ?? (busy ? t("settings.detecting") : placeholder)}
             </p>
             {value?.timezone ? (
-              <p className="truncate text-[11px] text-ink-tertiary">{value.timezone}</p>
+              <p className="truncate text-xs text-ink-tertiary">{value.timezone}</p>
             ) : (
-              <p className="text-[11px] text-ink-tertiary">{t("location.tapToSearch")}</p>
+              <p className="text-xs text-ink-tertiary">{t("location.tapToSearch")}</p>
             )}
           </div>
           {busy ? (
@@ -272,14 +281,14 @@ export function LocationPicker({
         type="button"
         onClick={() => void detect()}
         disabled={busy}
-        className="inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5 text-xs font-medium text-gold-text underline-offset-2 hover:underline disabled:opacity-50"
+        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-1 py-1 text-sm font-medium text-gold-text underline-offset-2 hover:underline disabled:opacity-50"
       >
-        <Navigation className="h-3.5 w-3.5" aria-hidden />
+        <Navigation className="h-4 w-4" aria-hidden />
         {busy ? t("settings.detecting") : t("settings.detectLocation")}
       </button>
 
       {error && !sheetOpen ? (
-        <p className="text-xs text-warning-ink" role="alert">
+        <p className="text-sm text-warning-ink" role="alert">
           {error}
         </p>
       ) : null}

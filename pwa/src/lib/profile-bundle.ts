@@ -28,44 +28,63 @@ function timeBucketLabel(bucket: string | null, exact: string | null): string | 
   return map[bucket] ?? bucket.replaceAll("_", " ");
 }
 
-export async function loadBirthProfileSummary(): Promise<BirthProfileSummary | null> {
+export type BirthProfileResult =
+  | { status: "ok"; summary: BirthProfileSummary }
+  | { status: "no_profile" }
+  | { status: "signed_out" }
+  | { status: "error"; message: string };
+
+/**
+ * Settings birth details. Previously every failure (expired session, network, RLS) was
+ * swallowed and rendered as "—" in every row, indistinguishable from "still loading".
+ * Now the caller gets an explicit status.
+ */
+export async function loadBirthProfileResult(): Promise<BirthProfileResult> {
   const supabase = createClient();
-  if (!supabase) return null;
+  if (!supabase) return { status: "error", message: "Supabase is not configured." };
 
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
+  const { data: sessionData } = await supabase.auth.getSession();
+  const uid = sessionData.session?.user.id;
+  if (!uid) return { status: "signed_out" };
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("id, display_name, current_city, current_timezone, current_lat, current_lng")
-    .eq("user_id", auth.user.id)
+    .eq("user_id", uid)
     .maybeSingle();
+  if (profileError) return { status: "error", message: profileError.message };
+  if (!profile?.id) return { status: "no_profile" };
 
-  if (!profile?.id) return null;
-
-  const { data: birth } = await supabase
+  // `source` is nullable: neq() alone would also drop rows where source IS NULL.
+  const { data: birth, error: birthError } = await supabase
     .from("birth_inputs")
     .select("date_of_birth, birth_place, time_bucket, exact_birth_time, janma_nakshatra")
     .eq("profile_id", profile.id)
-    .neq("source", "chart_profile")
+    .or("source.is.null,source.neq.chart_profile")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (birthError) return { status: "error", message: birthError.message };
 
   const dob = birth?.date_of_birth?.toString() ?? null;
   const exact = birth?.exact_birth_time?.toString() ?? null;
   const bucket = birth?.time_bucket?.toString() ?? null;
 
-  return {
+  return { status: "ok", summary: {
     profileId: profile.id,
     displayName: profile.display_name ?? null,
     dateOfBirth: dob ? dob.slice(0, 10) : null,
-    birthPlace: birth?.birth_place?.toString() ?? null,
+    birthPlace: birth?.birth_place?.toString().trim() || null,
     timeLabel: timeBucketLabel(bucket, exact),
     janmaNakshatra: birth?.janma_nakshatra?.toString() ?? null,
     currentCity: profile.current_city ?? null,
     timezone: profile.current_timezone ?? null,
     currentLat: profile.current_lat != null ? Number(profile.current_lat) : null,
     currentLng: profile.current_lng != null ? Number(profile.current_lng) : null,
-  };
+  } };
+}
+
+export async function loadBirthProfileSummary(): Promise<BirthProfileSummary | null> {
+  const r = await loadBirthProfileResult();
+  return r.status === "ok" ? r.summary : null;
 }

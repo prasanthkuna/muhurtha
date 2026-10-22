@@ -44,12 +44,36 @@ function mergePlaces(primary: ResolvedPlace[], extra: ResolvedPlace[], limit: nu
   return out;
 }
 
-export async function resolvePlaceByCoords(lat: number, lng: number): Promise<ResolvedPlace | null> {
-  const { res, data } = await enginePost({ action: "birth_place_resolve", lat, lng });
-  if (!res.ok) {
-    throw new Error(data.error?.toString() ?? "Could not resolve coordinates");
+const DETECT_TIMEOUT_MS = 8_000;
+
+function deviceTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+  } catch {
+    return "Asia/Kolkata";
   }
-  return mapRow(data, `${lat.toFixed(2)}, ${lng.toFixed(2)}`);
+}
+
+function coordsOnlyPlace(lat: number, lng: number): ResolvedPlace {
+  return { label: `Near ${lat.toFixed(2)}, ${lng.toFixed(2)}`, lat, lng, timezone: deviceTimezone() };
+}
+
+export async function resolvePlaceByCoords(
+  lat: number,
+  lng: number,
+  timeoutMs = DETECT_TIMEOUT_MS,
+): Promise<ResolvedPlace | null> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const { res, data } = await enginePost({ action: "birth_place_resolve", lat, lng }, ac.signal);
+    if (!res.ok) {
+      throw new Error(data.error?.toString() ?? "Could not resolve coordinates");
+    }
+    return mapRow(data, `${lat.toFixed(2)}, ${lng.toFixed(2)}`);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function resolvePlaceByQuery(query: string): Promise<ResolvedPlace | null> {
@@ -100,10 +124,11 @@ export function readDeviceLocation(): Promise<GeolocationPosition> {
       reject(new Error("Geolocation unavailable"));
       return;
     }
+    // City-level accuracy is enough for Panchanga timings; low accuracy answers in ~1 s.
     navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 12_000,
-      maximumAge: 120_000,
+      enableHighAccuracy: false,
+      timeout: DETECT_TIMEOUT_MS,
+      maximumAge: 10 * 60_000,
     });
   });
 }
@@ -126,7 +151,12 @@ export async function detectCurrentPlace(): Promise<ResolvedPlace> {
   } catch (e) {
     throw new Error(geolocationErrorMessage(e));
   }
-  const resolved = await resolvePlaceByCoords(pos.coords.latitude, pos.coords.longitude);
-  if (!resolved) throw new Error("Could not resolve this location.");
-  return resolved;
+  const { latitude, longitude } = pos.coords;
+  // Coordinates are what timing needs; if naming the place is slow or fails, keep the
+  // coordinates with a neutral label instead of leaving the picker stuck on "Detecting…".
+  try {
+    return (await resolvePlaceByCoords(latitude, longitude)) ?? coordsOnlyPlace(latitude, longitude);
+  } catch {
+    return coordsOnlyPlace(latitude, longitude);
+  }
 }

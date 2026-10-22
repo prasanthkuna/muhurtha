@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { formatDisplayDate } from "@/lib/format-date";
 import {
   Bell,
   BellOff,
@@ -24,7 +25,7 @@ import { LocationPicker } from "@/components/location/location-picker";
 import { clearEngineCache } from "@/lib/engine-cache";
 import type { ResolvedPlace } from "@/lib/location/resolved-place";
 import { saveProfileCurrentPlace } from "@/lib/onboarding/save-onboarding";
-import { loadBirthProfileSummary, type BirthProfileSummary } from "@/lib/profile-bundle";
+import { loadBirthProfileResult, type BirthProfileSummary } from "@/lib/profile-bundle";
 import { createClient } from "@/lib/supabase/client";
 import {
   notificationsEnabled,
@@ -50,22 +51,31 @@ function Section({
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value, pending }: { label: string; value: string; pending?: boolean }) {
   return (
     <div className="flex justify-between gap-4 border-b border-line/80 py-2.5 last:border-0">
-      <dt className="text-ink-tertiary">{label}</dt>
-      <dd className="max-w-[58%] text-right text-sm font-medium text-ink">{value}</dd>
+      <dt className="text-sm text-ink-tertiary">{label}</dt>
+      <dd className="max-w-[58%] text-right text-sm font-medium text-ink">
+        {pending ? (
+          <span className="inline-block h-4 w-24 animate-pulse rounded bg-gold-wash/70 align-middle" />
+        ) : (
+          value
+        )}
+      </dd>
     </div>
   );
 }
 
+type BirthState = "loading" | "ok" | "missing" | "error";
+
 export default function SettingsPage() {
   const { t, locale, setLocale } = useLocale();
-  const { isPro, refresh, today, profileTimezone } = useAppData();
+  const { isPro, refresh, today, profileTimezone, pack } = useAppData();
   const [email, setEmail] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
   const [birth, setBirth] = useState<BirthProfileSummary | null>(null);
-  const [profileMissing, setProfileMissing] = useState(false);
+  const [birthState, setBirthState] = useState<BirthState>("loading");
+  const [birthError, setBirthError] = useState<string | null>(null);
   const [currentPlace, setCurrentPlace] = useState<ResolvedPlace | null>(null);
   const [locationMsg, setLocationMsg] = useState<string | null>(null);
   const [alertsOn, setAlertsOn] = useState(false);
@@ -73,19 +83,15 @@ export default function SettingsPage() {
   const [langBusy, setLangBusy] = useState(false);
   const [refreshBusy, setRefreshBusy] = useState(false);
 
-  useEffect(() => {
-    setAlertsOn(notificationsEnabled());
-    void (async () => {
-      const supabase = createClient();
-      if (!supabase) return;
-      const { data: auth } = await supabase.auth.getUser();
-      setEmail(auth.user?.email ?? null);
-      setPhone(auth.user?.phone ?? null);
-
-      const summary = await loadBirthProfileSummary();
-      if (summary) {
+  const loadBirth = useCallback(async () => {
+    setBirthState("loading");
+    setBirthError(null);
+    try {
+      const result = await loadBirthProfileResult();
+      if (result.status === "ok") {
+        const summary = result.summary;
         setBirth(summary);
-        setProfileMissing(!summary.dateOfBirth);
+        setBirthState(summary.dateOfBirth ? "ok" : "missing");
         if (summary.currentCity && summary.currentLat != null && summary.currentLng != null) {
           setCurrentPlace({
             label: summary.currentCity,
@@ -94,14 +100,33 @@ export default function SettingsPage() {
             timezone: summary.timezone ?? "Asia/Kolkata",
           });
         }
+      } else if (result.status === "no_profile") {
+        setBirthState("missing");
       } else {
-        setProfileMissing(true);
+        setBirthState("error");
+        setBirthError(result.status === "error" ? result.message : t("ui.birthLoadFailed"));
       }
+    } catch (e) {
+      setBirthState("error");
+      setBirthError(e instanceof Error ? e.message : t("ui.birthLoadFailed"));
+    }
+  }, [t]);
+
+  useEffect(() => {
+    setAlertsOn(notificationsEnabled());
+    void (async () => {
+      const supabase = createClient();
+      if (!supabase) return;
+      const { data } = await supabase.auth.getSession();
+      setEmail(data.session?.user.email ?? null);
+      setPhone(data.session?.user.phone ?? null);
     })();
+    void loadBirth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function signOut() {
-    clearEngineCache();
+    clearEngineCache({ forgetUser: true });
     const supabase = createClient();
     if (supabase) await supabase.auth.signOut();
     window.location.assign("/welcome");
@@ -111,12 +136,7 @@ export default function SettingsPage() {
     setRefreshBusy(true);
     try {
       clearEngineCache();
-      await refresh();
-      const summary = await loadBirthProfileSummary();
-      if (summary) {
-        setBirth(summary);
-        setProfileMissing(!summary.dateOfBirth);
-      }
+      await Promise.all([refresh(), loadBirth()]);
     } finally {
       setRefreshBusy(false);
     }
@@ -172,7 +192,10 @@ export default function SettingsPage() {
     await syncTimingNotifications(today, locale, profileTimezone);
   }
 
-  const displayName = birth?.displayName ?? email?.split("@")[0] ?? t("common.you");
+  const displayName =
+    birth?.displayName || pack?.displayName || email?.split("@")[0] || t("common.you");
+  const pending = birthState === "loading";
+  const dash = birthState === "error" ? "?" : "—";
 
   return (
     <div className="space-y-8 pb-4" data-testid="settings-loaded">
@@ -224,11 +247,19 @@ export default function SettingsPage() {
       <Section title={t("settings.signedIn")}>
         <div className="rounded-xl border border-line bg-paper px-4 py-1">
           <dl>
-            <Fact label={t("settings.displayName")} value={birth?.displayName ?? "—"} />
-            <Fact label={t("settings.dob")} value={birth?.dateOfBirth ?? "—"} />
-            <Fact label={t("settings.birthPlace")} value={birth?.birthPlace ?? "—"} />
-            <Fact label={t("settings.birthTime")} value={birth?.timeLabel ?? "—"} />
-            <Fact label={t("settings.nakshatra")} value={birth?.janmaNakshatra ?? "—"} />
+            <Fact
+              label={t("settings.displayName")}
+              value={birth?.displayName || pack?.displayName || dash}
+              pending={pending && !pack?.displayName}
+            />
+            <Fact
+              label={t("settings.dob")}
+              value={birth?.dateOfBirth ? formatDisplayDate(birth.dateOfBirth, locale, { weekday: false }) : dash}
+              pending={pending}
+            />
+            <Fact label={t("settings.birthPlace")} value={birth?.birthPlace ?? dash} pending={pending} />
+            <Fact label={t("settings.birthTime")} value={birth?.timeLabel ?? dash} pending={pending} />
+            <Fact label={t("settings.nakshatra")} value={birth?.janmaNakshatra ?? dash} pending={pending} />
             <Fact
               label={t("settings.timingsLocation")}
               value={
@@ -236,11 +267,30 @@ export default function SettingsPage() {
                   ? today.locationLabel || t("settings.verified")
                   : birth?.currentCity || t("settings.notSet")
               }
+              pending={pending && !today?.locationVerified}
             />
           </dl>
         </div>
-        {profileMissing ? (
+        {pending ? (
+          <p className="px-1 text-sm text-ink-tertiary" aria-live="polite">{t("ui.loadingBirth")}</p>
+        ) : null}
+        {birthState === "missing" ? (
           <p className="px-1 text-sm text-ink-secondary">{t("settings.birthMissing")}</p>
+        ) : null}
+        {birthState === "error" ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-warning-wash/50 px-3 py-2" role="alert">
+            <p className="text-sm text-warning-ink">
+              {t("ui.birthLoadFailed")}
+              {birthError ? <span className="block text-xs opacity-80">{birthError}</span> : null}
+            </p>
+            <button
+              type="button"
+              onClick={() => void loadBirth()}
+              className="min-h-10 shrink-0 rounded-full border border-warning-ink/30 px-3 text-sm font-medium text-warning-ink"
+            >
+              {t("ui.retry")}
+            </button>
+          </div>
         ) : null}
       </Section>
 
@@ -250,7 +300,11 @@ export default function SettingsPage() {
           label={t("settings.cityTitle")}
           value={currentPlace}
           onChange={(place) => void onCurrentPlaceChange(place)}
-          autoDetect={!currentPlace}
+          autoDetect={
+            (birthState === "ok" || birthState === "missing") &&
+            !currentPlace &&
+            birth?.currentLat == null
+          }
         />
         {locationMsg ? <p className="px-1 text-sm text-success-ink">{locationMsg}</p> : null}
       </Section>
@@ -327,14 +381,16 @@ export default function SettingsPage() {
           title={t("common.refresh")}
           trailing={null}
         />
-        <SettingsRow
-          onClick={() => void signOut()}
-          icon={<LogOut className="h-4 w-4" />}
-          title={t("common.signOut")}
-          trailing={null}
-          className="border-warning-ink/20 text-warning-ink hover:bg-warning-wash/30"
-        />
       </section>
+
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full border border-danger-ink/40 bg-transparent px-4 text-sm font-semibold text-danger-ink transition-colors hover:bg-danger-ink/5 active:bg-danger-ink/10"
+      >
+        <LogOut className="h-4 w-4" aria-hidden />
+        {t("common.signOut")}
+      </button>
     </div>
   );
 }

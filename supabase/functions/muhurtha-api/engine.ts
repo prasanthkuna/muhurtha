@@ -2705,7 +2705,7 @@ async function getLatestBirthInput(
       "id, profile_id, date_of_birth, birth_place, birth_input_mode, exact_birth_time, time_bucket, janma_nakshatra, nakshatra_pada, birth_timezone, birth_lat, birth_lng",
     )
     .eq("profile_id", profileId)
-    .neq("source", "chart_profile")
+    .or("source.is.null,source.neq.chart_profile")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
