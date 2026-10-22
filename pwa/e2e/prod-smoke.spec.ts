@@ -48,7 +48,7 @@ test.describe.serial("Production signed-in tabs", () => {
   test("04 life", async ({ page }) => {
     await page.goto("/life");
     await expect(page.getByTestId("life-loaded")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole("heading", { name: "Current" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Current/ })).toBeVisible();
   });
 
   test("05 timing", async ({ page }) => {

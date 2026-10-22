@@ -18,7 +18,7 @@ test.describe.serial("Pro PWA flows (live Supabase + muhurtha-api)", () => {
   test("03 life map spine and chapter page", async ({ page }) => {
     await page.goto("/life");
     await expect(page.getByTestId("life-loaded")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole("heading", { name: "Current" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Current/ })).toBeVisible();
 
     const chapter = page.getByRole("link").filter({ hasText: /chapter|phase/i }).first();
     if (await chapter.isVisible()) {
