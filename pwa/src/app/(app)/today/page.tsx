@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { MapPin } from "@/components/celestial/muh-icon";
+import { DisclosureButton } from "@/components/ui/disclosure-button";
+import { formatDisplayDate } from "@/lib/format-date";
 import { CelestialHeaderCard } from "@/components/celestial/celestial-header-card";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
@@ -31,7 +34,7 @@ function HorizonCard({
 }
 
 export default function TodayPage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { views, today, loading, error, pack } = useAppData();
   const [outlookOpen, setOutlookOpen] = useState(false);
 
@@ -40,16 +43,20 @@ export default function TodayPage() {
 
   if (loading && !pack) return <LoadingState message={t("today.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("nav.today")} subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("nav.today")} subtitle={error ?? t("ui.unavailable")} />;
   }
 
+  // No hardcoded advice: if neither the pack card nor the engine gave a line for today,
+  // show a calm "preparing" state instead of recycled or generic copy.
   const mainAdvice =
     playbook?.one_line?.toString()?.trim() ||
     playbook?.oneLine?.toString()?.trim() ||
     today?.oneLine?.toString()?.trim() ||
-    "Finish one pending thing before lunch.";
+    "";
+  const cardMissing = !playbook && !mainAdvice;
   const detailedBody = playbook?.body?.toString()?.trim() ?? "";
-  const cardTitle = playbook?.title?.toString() ?? "Today";
+  const cardTitle = playbook?.title?.toString() || t("nav.today");
+  const dateLabel = date ? formatDisplayDate(date, locale) : t("nav.today");
 
   const betterFor =
     (Array.isArray(playbook?.better_for) ? playbook.better_for.map(String) : null) ??
@@ -69,21 +76,22 @@ export default function TodayPage() {
     <div className="space-y-6" data-testid="today-loaded">
       {luck?.moonSignLabel || luck?.moonSymbol ? (
         <CelestialHeaderCard
-          heroLabel={date || t("nav.today")}
+          heroLabel={dateLabel}
           heroTitle={cardTitle}
           moonSignKey={luck.moonSignKey}
           moonSymbol={luck.moonSymbol}
           moonSignLabel={luck.moonSignLabel}
-          heroSubline={mainAdvice}
+          heroSubline={mainAdvice || undefined}
         />
       ) : (
-        <PageHeader eyebrow={date || "Today"} title={cardTitle} subtitle={mainAdvice} />
+        <PageHeader eyebrow={dateLabel} title={cardTitle} subtitle={mainAdvice || undefined} />
       )}
 
-      {views.packMeta.todayCount > 0 && views.packMeta.todayCount < 25 ? (
-        <p className="rounded-xl bg-warning-wash px-4 py-3 text-sm text-warning-ink">
-          Daily cards {views.packMeta.todayCount} of ~30 for this locale — use Refresh reading after your dossier finishes preparing.
-        </p>
+      {cardMissing ? (
+        <ProseBlock className="border-dashed">
+          <p className="font-serif text-lg text-ink">{t("ui.preparingTitle")}</p>
+          <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{t("ui.preparingBody")}</p>
+        </ProseBlock>
       ) : null}
 
       {!today?.locationVerified ? (
@@ -94,8 +102,11 @@ export default function TodayPage() {
           </Link>
         </p>
       ) : today.locationLabel ? (
-        <p className="text-xs text-ink-tertiary">
-          {t("today.localFor")} {today.locationLabel}
+        <p className="flex items-center gap-1.5 text-sm text-ink-secondary">
+          <MapPin className="h-4 w-4 shrink-0 text-gold-text" aria-hidden />
+          <span>
+            {t("ui.timingsFor")} <span className="font-medium text-ink">{today.locationLabel}</span>
+          </span>
         </p>
       ) : null}
 
@@ -125,13 +136,9 @@ export default function TodayPage() {
       />
 
       <div>
-        <button
-          type="button"
-          onClick={() => setOutlookOpen((v) => !v)}
-          className="text-sm font-medium text-gold-text underline-offset-4 hover:underline"
-        >
+        <DisclosureButton open={outlookOpen} onToggle={() => setOutlookOpen((v) => !v)}>
           {outlookOpen ? t("today.hideOutlook") : t("today.outlook")}
-        </button>
+        </DisclosureButton>
         {outlookOpen ? (
           <div className="mt-4 space-y-4">
             <HorizonCard eyebrow={t("today.week")} headline={week.headline} body={week.body} />
@@ -141,7 +148,7 @@ export default function TodayPage() {
         ) : null}
       </div>
 
-      <PrimaryButton href="/timing?purpose=career_interview">{t("today.checkTiming")}</PrimaryButton>
+      <PrimaryButton href="/timing">{t("today.checkTiming")}</PrimaryButton>
       <Link href="/decode" className="block text-center text-sm text-gold-text">
         {t("today.whyDecode")}
       </Link>

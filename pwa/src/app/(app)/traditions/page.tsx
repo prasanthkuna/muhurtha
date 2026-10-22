@@ -15,9 +15,9 @@ export default function TraditionsPage() {
   const { views, loading, error } = useAppData();
   const [whyOpen, setWhyOpen] = useState(false);
 
-  if (loading) return <LoadingState message={t("traditions.loading")} />;
+  if (loading && !views) return <LoadingState message={t("traditions.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("traditions.title")} subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("traditions.title")} subtitle={error ?? t("ui.unavailable")} />;
   }
 
   const luck = views.natalLuck;

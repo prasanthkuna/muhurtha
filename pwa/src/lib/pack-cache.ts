@@ -6,7 +6,8 @@ export function readPackCache(): BirthPackPayload | null {
   return null;
 }
 
-export function writePackCache(_: BirthPackPayload) {
+export function writePackCache(pack: BirthPackPayload) {
+  void pack;
   /* handled by engine-cache in app-data-context */
 }
 

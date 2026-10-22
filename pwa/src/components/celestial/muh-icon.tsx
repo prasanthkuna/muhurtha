@@ -29,4 +29,7 @@ export {
   Navigation,
   Calendar,
   Heart,
+  ChevronDown,
+  Lock,
+  WifiOff,
 } from "lucide-react";

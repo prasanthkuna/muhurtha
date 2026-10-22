@@ -15,6 +15,7 @@
   --success-wash: #e4f0e7;
   --warning-ink: #88551b;
   --warning-wash: #fcedd8;
+  --danger-ink: #a23b2c;
 }
 
 @theme inline {
@@ -32,6 +33,7 @@
   --color-success-wash: var(--success-wash);
   --color-warning-ink: var(--warning-ink);
   --color-warning-wash: var(--warning-wash);
+  --color-danger-ink: var(--danger-ink);
   --font-serif: var(--font-fraunces);
   --font-sans: var(--font-instrument);
 }

@@ -6,7 +6,7 @@ import type { NatalLuckInfo } from "@/lib/types";
 function Chip({ children, gold }: { children: ReactNode; gold?: boolean }) {
   return (
     <span
-      className={`inline-flex rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-ink-secondary ${
+      className={`inline-flex rounded-full border border-line px-2 py-0.5 text-xs font-medium text-ink-secondary ${
         gold ? "bg-gold-wash/80" : "bg-paper"
       }`}
     >
@@ -26,7 +26,7 @@ function LuckGroup({
 }) {
   return (
     <div className={compact ? "min-w-0" : undefined}>
-      <p className={`font-medium text-ink-tertiary ${compact ? "text-[10px] uppercase tracking-wide" : "text-xs"}`}>
+      <p className={`font-medium text-ink-tertiary ${compact ? "text-xs uppercase tracking-wide" : "text-xs"}`}>
         {label}
       </p>
       <div className={`flex flex-wrap gap-1.5 ${compact ? "mt-1" : "mt-1.5"}`}>{children}</div>
@@ -76,7 +76,7 @@ export function LuckyStrip({
           {luck.luckyColours.map((c) => (
             <span
               key={c.key || c.label}
-              className="inline-flex items-center gap-1 text-[11px] text-ink-secondary"
+              className="inline-flex items-center gap-1 text-xs text-ink-secondary"
             >
               <span
                 className="h-3 w-3 shrink-0 rounded-full border border-line shadow-sm"
@@ -97,10 +97,10 @@ export function LuckyStrip({
         className="rounded-xl border border-line bg-paper px-3 py-3"
         data-testid="lucky-strip"
       >
-        <h2 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-text">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">
           {t("luck.title")}
         </h2>
-        <p className="mt-1 text-[10px] text-ink-tertiary">{t("luck.associationNote")}</p>
+        <p className="mt-1 text-xs text-ink-tertiary">{t("luck.associationNote")}</p>
         <div className="mt-2 grid gap-3 sm:grid-cols-3">{chips}</div>
       </section>
     );
@@ -127,7 +127,7 @@ export function LuckyStrip({
               {t("luck.moonIn")} {luck.moonSignLabel}
             </p>
           ) : null}
-          <p className="mt-1 text-[10px] text-ink-tertiary">{t("luck.associationNote")}</p>
+          <p className="mt-1 text-xs text-ink-tertiary">{t("luck.associationNote")}</p>
           <div className={compact ? "mt-2 space-y-2" : "mt-3 space-y-3"}>{chips}</div>
         </div>
       </div>

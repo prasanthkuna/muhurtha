@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { WindowPillRow, WindowTimePill } from "@/components/editorial/window-time-pill";
+import { DisclosureButton } from "@/components/ui/disclosure-button";
 import { useLocale } from "@/context/locale-context";
 import { formatWindowRange } from "@/lib/format-time";
 import type { TimingWindow } from "@/lib/today-types";
@@ -79,13 +80,9 @@ export function TodayTimingPanel({
 
       {(goodWindows.length > 1 || cautionWindows.length > 0) && (
         <>
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="text-sm font-medium text-gold-text underline-offset-4 hover:underline"
-          >
+          <DisclosureButton open={expanded} onToggle={() => setExpanded((v) => !v)}>
             {expanded ? t("today.hideTimeline") : t("today.showTimeline")}
-          </button>
+          </DisclosureButton>
           {expanded ? (
             <div className="space-y-4">
               {goodWindows.length > 0 ? (

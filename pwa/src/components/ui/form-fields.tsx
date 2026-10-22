@@ -27,7 +27,7 @@ export function MuhField({
     <label className="block space-y-1.5" htmlFor={htmlFor}>
       <FieldLabel htmlFor={htmlFor}>{label}</FieldLabel>
       {children}
-      {hint ? <p className="text-[11px] text-ink-tertiary">{hint}</p> : null}
+      {hint ? <p className="text-xs text-ink-tertiary">{hint}</p> : null}
     </label>
   );
 }

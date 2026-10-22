@@ -123,7 +123,7 @@ export function OnboardingScreen() {
         <div className="relative flex gap-3">
           <GrahaMedallion lord="Moon" size="md" shimmer />
           <div className="min-w-0 flex-1 pt-0.5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-tertiary">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-tertiary">
               {t("onboarding.eyebrow")}
             </p>
             <h1 className="mt-1 font-serif text-2xl font-bold leading-tight text-gold-text">

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { PageTransition } from "@/components/motion/page-transition";
 import { ChartProfileBanner } from "@/components/shell/chart-profile-banner";
 import { cn } from "@/components/ui/cn";
@@ -27,6 +28,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useLocale();
 
+  // Flag the on-screen keyboard on <html data-kb="open"> so the tab bar can step aside and
+  // composers can pin to the keyboard edge instead of hiding behind the nav.
+  useEffect(() => {
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    const isField = (el: Element | null) =>
+      !!el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" &&
+        !["checkbox", "radio", "button", "submit", "date", "range"].includes(
+          (el as HTMLInputElement).type,
+        )));
+    const update = () => {
+      const shrunk = vv ? window.innerHeight - vv.height > 150 : false;
+      const open = shrunk || (isField(document.activeElement) && window.innerWidth < 768);
+      if (open) root.dataset.kb = "open";
+      else delete root.dataset.kb;
+    };
+    vv?.addEventListener("resize", update);
+    window.addEventListener("focusin", update);
+    const onOut = () => window.setTimeout(update, 50);
+    window.addEventListener("focusout", onOut);
+    return () => {
+      vv?.removeEventListener("resize", update);
+      window.removeEventListener("focusin", update);
+      window.removeEventListener("focusout", onOut);
+      delete root.dataset.kb;
+    };
+  }, []);
+
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas text-ink">
       <header className="flex items-center justify-between px-5 pt-[max(0.75rem,env(safe-area-inset-top))]">
@@ -46,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <PageTransition>{children}</PageTransition>
       </main>
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-line bg-paper/95 backdrop-blur-md"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-line bg-paper/95 backdrop-blur-md [html[data-kb=open]_&]:hidden"
         aria-label="Primary"
       >
         <div className="mx-auto grid max-w-lg grid-cols-5 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
@@ -59,7 +88,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={tab.href}
                 href={tab.href}
                 className={cn(
-                  "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-[10px] font-medium leading-none transition-colors",
+                  "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-[11px] font-medium leading-none transition-colors",
                   active ? "text-gold-text" : "text-ink-tertiary",
                   "center" in tab && tab.center && active && "font-semibold",
                 )}

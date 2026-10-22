@@ -58,9 +58,9 @@ function AskInner() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  if (loading) return <LoadingState message={t("ask.loading")} />;
+  if (loading && !views) return <LoadingState message={t("ask.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("nav.ask")} subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("nav.ask")} subtitle={error ?? t("ui.unavailable")} />;
   }
 
   const suggestions = views.askSuggestions();
@@ -155,7 +155,7 @@ function AskInner() {
                     );
                   })();
                 }}
-                className="shrink-0 rounded-full border border-line bg-paper px-3 py-1.5 text-xs text-ink-secondary hover:border-gold-accent/50"
+                className="min-h-9 shrink-0 rounded-full border border-line bg-paper px-3 py-1.5 text-sm text-ink-secondary hover:border-gold-accent/50"
               >
                 {s.title.slice(0, 42)}
               </button>
@@ -172,7 +172,7 @@ function AskInner() {
           <p className="mt-1 text-sm font-medium text-ink">{currentChapter.title}</p>
           <button
             type="button"
-            className="mt-2 text-xs font-medium text-gold-text"
+            className="mt-2 min-h-9 text-sm font-medium text-gold-text"
             onClick={() =>
               void send("Explain my current life chapter and its main themes.")
             }
@@ -193,7 +193,7 @@ function AskInner() {
                 key={s}
                 type="button"
                 onClick={() => void send(s)}
-                className="rounded-full border border-line bg-paper px-3 py-2 text-left text-xs text-ink-secondary hover:border-gold-accent/50"
+                className="rounded-full border border-line bg-paper px-3 py-2 text-left text-sm text-ink-secondary hover:border-gold-accent/50"
               >
                 {s}
               </button>
@@ -225,8 +225,9 @@ function AskInner() {
         <div ref={bottomRef} />
       </div>
 
+      <p className="px-1 pb-2 text-xs leading-relaxed text-ink-tertiary">{t("ask.disclaimer")}</p>
       <form
-        className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] flex gap-2 border-t border-line bg-canvas pt-3"
+        className="sticky bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-40 flex gap-2 border-t border-line bg-canvas pb-2 pt-3 [html[data-kb=open]_&]:bottom-0"
         onSubmit={(e) => {
           e.preventDefault();
           void send(input);
@@ -236,7 +237,13 @@ function AskInner() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={t("ask.placeholder")}
-          className="min-h-11 flex-1 rounded-full border border-line bg-paper px-4 text-sm outline-none focus:ring-2 focus:ring-gold-text/25"
+          enterKeyHint="send"
+          onFocus={(e) => {
+            const el = e.currentTarget;
+            // Keep the composer visible above the on-screen keyboard.
+            window.setTimeout(() => el.scrollIntoView({ block: "nearest", behavior: "smooth" }), 250);
+          }}
+          className="min-h-11 flex-1 rounded-full border border-line bg-paper px-4 text-base outline-none focus:ring-2 focus:ring-gold-text/25"
         />
         <button
           type="submit"

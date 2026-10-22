@@ -1,4 +1,5 @@
 import type { AppLocale } from "./locale";
+import { SUPPLEMENT } from "./messages-supplement";
 
 type MessageTree = { [key: string]: string | MessageTree };
 
@@ -302,6 +303,50 @@ const en: MessageTree = {
     bodyGeneral:
       "General daylight windows on Today follow Panchanga rhythm for your city. Preliminary factors may appear in details; they are not individualized favourable-outcome guarantees.",
   },
+  ui: {
+    preparingTitle: "Today's written card is still being prepared",
+    preparingBody: "Your timing windows below are live. The written reading for today appears as soon as it is ready — pull Refresh in Settings later if it hasn't shown up.",
+    unavailable: "Unavailable right now",
+    loading: "Loading…",
+    retry: "Try again",
+    upgradeTitle: "This chapter is part of Pro",
+    upgradeBody: "Pro opens every future chapter of your life map — the full story, sub-phases and what each period asks of you.",
+    upgradeHow: "Upgrade from the Muhūrta Android app (Settings → Plan). Pro then unlocks here too on the same account.",
+    lockedTap: "Pro chapter — tap to preview",
+    legendTitle: "What the symbols mean",
+    legendHint: "Each chapter is a planetary period (dasha) ruled by one graha.",
+    pickPurpose: "Pick what you're planning, then check its timing.",
+    startDate: "Start from",
+    bestDay: "Best day in this range",
+    tapToCheck: "Tap a date to check that day",
+    checkedFor: "Checked for",
+    status_matched: "Supportive",
+    status_mixed: "Mixed",
+    status_not_matched: "Better to avoid",
+    status_limited_assessment: "General guidance only",
+    f_tithi: "Lunar day",
+    f_nakshatra: "Moon's star",
+    f_yoga: "Sun–Moon combination",
+    f_karana: "Half lunar day",
+    f_vara: "Weekday",
+    f_tarabala: "Star strength for you",
+    f_chandrabala: "Moon strength for you",
+    loadingBirth: "Loading your birth details…",
+    birthLoadFailed: "Couldn't load your birth details.",
+    detecting: "Detecting your location…",
+    detectTimeout: "Location is taking too long. Search for your city instead.",
+    timingsFor: "Timings for",
+    offline: "You're offline — showing your last saved reading.",
+    g_Sun: "Sun",
+    g_Moon: "Moon",
+    g_Mars: "Mars",
+    g_Mercury: "Mercury",
+    g_Jupiter: "Jupiter",
+    g_Venus: "Venus",
+    g_Saturn: "Saturn",
+    g_Rahu: "Rahu",
+    g_Ketu: "Ketu",
+  },
 };
 
 const te: MessageTree = {
@@ -523,6 +568,50 @@ const te: MessageTree = {
     lateNight: "ఆలస్య రాత్రి",
     unknown: "సమయం unknown",
   },
+  ui: {
+    preparingTitle: "ఈరోజు రాత కార్డు ఇంకా సిద్ధమవుతోంది",
+    preparingBody: "కింద ఉన్న సమయాలు ఇప్పటికే సిద్ధం. ఈరోజు రీడింగ్ సిద్ధమైన వెంటనే ఇక్కడ కనిపిస్తుంది — కనిపించకపోతే తర్వాత Settings లో Refresh నొక్కండి.",
+    unavailable: "ప్రస్తుతం అందుబాటులో లేదు",
+    loading: "లోడ్ అవుతోంది…",
+    retry: "మళ్లీ ప్రయత్నించండి",
+    upgradeTitle: "ఈ అధ్యాయం Pro లో ఉంది",
+    upgradeBody: "Pro తో మీ లైఫ్ మ్యాప్‌లోని రాబోయే అన్ని అధ్యాయాలు — పూర్తి కథ, ఉప దశలు, ప్రతి కాలం మీ నుంచి ఏం కోరుతుందో — తెరుచుకుంటాయి.",
+    upgradeHow: "Muhūrta Android యాప్‌లో (Settings → Plan) అప్‌గ్రేడ్ చేయండి. అదే ఖాతాతో ఇక్కడ కూడా Pro తెరుచుకుంటుంది.",
+    lockedTap: "Pro అధ్యాయం — చూడటానికి నొక్కండి",
+    legendTitle: "ఈ గుర్తుల అర్థం",
+    legendHint: "ప్రతి అధ్యాయం ఒక గ్రహ దశ కాలం.",
+    pickPurpose: "మీరు ఏం ప్లాన్ చేస్తున్నారో ఎంచుకోండి, తర్వాత సమయం చూడండి.",
+    startDate: "ఈ తేదీ నుంచి",
+    bestDay: "ఈ కాలంలో ఉత్తమ రోజు",
+    tapToCheck: "ఆ రోజు చూడటానికి తేదీని నొక్కండి",
+    checkedFor: "చూసిన తేదీ",
+    status_matched: "అనుకూలం",
+    status_mixed: "మిశ్రమం",
+    status_not_matched: "నివారించడం మంచిది",
+    status_limited_assessment: "సాధారణ సూచన మాత్రమే",
+    f_tithi: "చాంద్ర దినం",
+    f_nakshatra: "చంద్రుని నక్షత్రం",
+    f_yoga: "సూర్య–చంద్ర యోగం",
+    f_karana: "అర్ధ తిథి",
+    f_vara: "వారం",
+    f_tarabala: "మీకు తారాబలం",
+    f_chandrabala: "మీకు చంద్రబలం",
+    loadingBirth: "మీ జన్మ వివరాలు లోడ్ అవుతున్నాయి…",
+    birthLoadFailed: "జన్మ వివరాలు లోడ్ కాలేదు.",
+    detecting: "మీ స్థానం గుర్తిస్తోంది…",
+    detectTimeout: "స్థానం గుర్తించడానికి ఆలస్యం అవుతోంది. మీ నగరాన్ని వెతకండి.",
+    timingsFor: "సమయాలు —",
+    offline: "ఆఫ్‌లైన్ — మీ చివరి రీడింగ్ చూపిస్తున్నాం.",
+    g_Sun: "సూర్యుడు",
+    g_Moon: "చంద్రుడు",
+    g_Mars: "కుజుడు",
+    g_Mercury: "బుధుడు",
+    g_Jupiter: "గురువు",
+    g_Venus: "శుక్రుడు",
+    g_Saturn: "శని",
+    g_Rahu: "రాహు",
+    g_Ketu: "కేతు",
+  },
 };
 
 const hi: MessageTree = {
@@ -671,6 +760,50 @@ const hi: MessageTree = {
     lateNight: "देर रात",
     unknown: "समय unknown",
   },
+  ui: {
+    preparingTitle: "आज का लिखित कार्ड अभी तैयार हो रहा है",
+    preparingBody: "नीचे के समय तैयार हैं। आज की रीडिंग तैयार होते ही यहाँ दिखेगी — न दिखे तो बाद में Settings में Refresh करें।",
+    unavailable: "अभी उपलब्ध नहीं",
+    loading: "लोड हो रहा है…",
+    retry: "फिर कोशिश करें",
+    upgradeTitle: "यह अध्याय Pro में है",
+    upgradeBody: "Pro आपके लाइफ मैप के सभी आने वाले अध्याय खोलता है — पूरी कहानी, उप-दशाएँ और हर दौर आपसे क्या माँगता है।",
+    upgradeHow: "Muhūrta Android ऐप (Settings → Plan) से अपग्रेड करें। उसी खाते पर यहाँ भी Pro खुल जाएगा।",
+    lockedTap: "Pro अध्याय — देखने के लिए टैप करें",
+    legendTitle: "चिह्नों का अर्थ",
+    legendHint: "हर अध्याय एक ग्रह की दशा का समय है।",
+    pickPurpose: "आप क्या योजना बना रहे हैं चुनें, फिर उसका समय देखें।",
+    startDate: "इस तारीख से",
+    bestDay: "इस अवधि का सबसे अच्छा दिन",
+    tapToCheck: "उस दिन को देखने के लिए तारीख टैप करें",
+    checkedFor: "जाँची गई तारीख",
+    status_matched: "अनुकूल",
+    status_mixed: "मिश्रित",
+    status_not_matched: "टालना बेहतर",
+    status_limited_assessment: "केवल सामान्य मार्गदर्शन",
+    f_tithi: "चंद्र दिवस",
+    f_nakshatra: "चंद्रमा का नक्षत्र",
+    f_yoga: "सूर्य–चंद्र योग",
+    f_karana: "आधी तिथि",
+    f_vara: "वार",
+    f_tarabala: "आपके लिए तारा बल",
+    f_chandrabala: "आपके लिए चंद्र बल",
+    loadingBirth: "आपका जन्म विवरण लोड हो रहा है…",
+    birthLoadFailed: "जन्म विवरण लोड नहीं हुआ।",
+    detecting: "आपकी लोकेशन पता की जा रही है…",
+    detectTimeout: "लोकेशन में देर हो रही है। अपना शहर खोजें।",
+    timingsFor: "समय —",
+    offline: "आप ऑफ़लाइन हैं — आपकी पिछली रीडिंग दिख रही है।",
+    g_Sun: "सूर्य",
+    g_Moon: "चंद्र",
+    g_Mars: "मंगल",
+    g_Mercury: "बुध",
+    g_Jupiter: "गुरु",
+    g_Venus: "शुक्र",
+    g_Saturn: "शनि",
+    g_Rahu: "राहु",
+    g_Ketu: "केतु",
+  },
 };
 
 const catalogs: Record<AppLocale, MessageTree> = { en, te, hi };
@@ -686,5 +819,10 @@ function lookup(tree: MessageTree, path: string): string | undefined {
 }
 
 export function t(locale: AppLocale, key: string): string {
-  return lookup(catalogs[locale], key) ?? lookup(catalogs.en, key) ?? key;
+  return (
+    lookup(catalogs[locale], key) ??
+    (locale === "en" ? undefined : SUPPLEMENT[locale]?.[key]) ??
+    lookup(catalogs.en, key) ??
+    key
+  );
 }
