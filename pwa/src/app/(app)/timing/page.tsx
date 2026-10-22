@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
@@ -15,6 +15,8 @@ import { todayInTimezone } from "@/lib/local-date";
 import { localizedPurposeLabel, localizedPurposeOptions } from "@/lib/purpose-labels";
 import { normalizePurposeType } from "@/lib/purpose-types";
 import { savePlan } from "@/lib/saved-plans";
+import { formatDisplayDate } from "@/lib/format-date";
+import { statusLabel } from "@/lib/timing-labels";
 
 type Mode = "check" | "find";
 
@@ -33,6 +35,17 @@ function TimingInner() {
   const purposeOptions = localizedPurposeOptions(locale);
   const engineBody = useEngineBody();
   const { views, loading, error, pack, profileTimezone } = useAppData();
+  const resultRef = useRef<HTMLDivElement>(null);
+  const [scrollPending, setScrollPending] = useState(false);
+
+  useEffect(() => {
+    if (!result || !scrollPending) return;
+    setScrollPending(false);
+    // Bring the answer into view instead of leaving it below the fold.
+    window.requestAnimationFrame(() =>
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  }, [result, scrollPending]);
 
   useEffect(() => {
     const p = normalizePurposeType(params.get("purpose"));
@@ -75,6 +88,7 @@ function TimingInner() {
         throw new Error(msg);
       }
       setResult(parsePurposeCheck(json));
+      setScrollPending(true);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Check failed");
     } finally {
@@ -102,9 +116,9 @@ function TimingInner() {
     setSavedMsg(t("timing.planSaved"));
   }
 
-  if (loading) return <LoadingState message={t("timing.loading")} />;
+  if (loading && !views) return <LoadingState message={t("timing.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("nav.timing")} subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("nav.timing")} subtitle={error ?? t("ui.unavailable")} />;
   }
 
   const timingPlan = (pack?.content?.timing_plan ?? {}) as Record<string, Record<string, string>>;
@@ -165,7 +179,9 @@ function TimingInner() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-ink-tertiary">{t("timing.dateLabel")}</span>
+          <span className="text-xs font-medium text-ink-tertiary">
+            {mode === "find" ? t("ui.startDate") : t("timing.dateLabel")}
+          </span>
           <input
             type="date"
             value={targetDate}
@@ -189,8 +205,11 @@ function TimingInner() {
         ) : null}
       </div>
 
+      {!purpose ? <p className="text-sm text-ink-secondary">{t("ui.pickPurpose")}</p> : null}
+
       <PrimaryButton
         onClick={() => void runCheck()}
+        disabled={!purpose || busy}
         className={!purpose ? "pointer-events-none opacity-50" : undefined}
       >
         {busy ? t("timing.checking") : mode === "find" ? t("timing.findRun") : t("timing.run")}
@@ -208,23 +227,33 @@ function TimingInner() {
       ) : null}
 
       {result && purpose ? (
-        <>
-          <PurposeResultCard result={result} purposeId={purpose} />
+        <div ref={resultRef} className="scroll-mt-4 space-y-6">
+          <PurposeResultCard result={result} purposeId={purpose} mode={mode} />
           {result.candidateDates.length > 1 ? (
             <ProseBlock>
               <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">
                 {t("timing.compareResults")}
               </p>
+              <p className="mt-1 text-sm text-ink-tertiary">{t("ui.tapToCheck")}</p>
               <ul className="mt-3 space-y-2">
                 {result.candidateDates.slice(0, 5).map((c) => (
-                  <li
-                    key={c.date}
-                    className="flex items-center justify-between rounded-xl border border-line bg-paper px-3 py-2 text-sm"
-                  >
-                    <span className="font-medium text-ink">{c.date}</span>
-                    <span className="text-xs text-ink-secondary">
-                      {c.status.replaceAll("_", " ")} · {c.nakshatra}
-                    </span>
+                  <li key={c.date}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Check that specific day (auto-runs via the check-mode effect).
+                        setMode("check");
+                        setResult(null);
+                        setTargetDate(c.date);
+                      }}
+                      className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-line bg-paper px-3 py-2 text-left text-sm transition-colors hover:border-gold-accent/40 active:bg-gold-wash/30"
+                    >
+                      <span className="font-medium text-ink">{formatDisplayDate(c.date, locale)}</span>
+                      <span className="text-right text-xs text-ink-secondary">
+                        {statusLabel(t, c.status)}
+                        {c.nakshatra ? ` · ${c.nakshatra}` : ""}
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -239,7 +268,7 @@ function TimingInner() {
             </PrimaryButton>
           </div>
           {savedMsg ? <p className="text-sm text-success-ink">{savedMsg}</p> : null}
-        </>
+        </div>
       ) : null}
 
       {!result && !errorMsg && !busy && mode === "check" ? (

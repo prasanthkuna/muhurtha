@@ -5,6 +5,8 @@ import { WindowPillRow } from "@/components/editorial/window-time-pill";
 import { useLocale } from "@/context/locale-context";
 import type { PurposeCheckResult } from "@/lib/engine-parsers";
 import { localizedPurposeLabel } from "@/lib/purpose-labels";
+import { formatDisplayDate } from "@/lib/format-date";
+import { factorLabel, statusLabel } from "@/lib/timing-labels";
 
 function FactorList({ title, items, tone }: { title: string; items: string[]; tone: "good" | "caution" }) {
   if (items.length === 0) return null;
@@ -24,20 +26,28 @@ function FactorList({ title, items, tone }: { title: string; items: string[]; to
 export function PurposeResultCard({
   result,
   purposeId,
+  mode = "check",
 }: {
   result: PurposeCheckResult;
   purposeId: string;
+  mode?: "check" | "find";
 }) {
   const { t, locale } = useLocale();
   const label = localizedPurposeLabel(locale, purposeId);
-  const statusLabel = result.status.replaceAll("_", " ");
+  const status = statusLabel(t, result.status);
+  const dateLine = result.targetDate ? formatDisplayDate(result.targetDate, locale) : "";
 
   return (
     <div data-testid="purpose-result" className="space-y-4">
       <ProseBlock>
         <p className="text-xs uppercase tracking-wide text-gold-text">
-          {label} · {statusLabel}
+          {label} · {status}
         </p>
+        {dateLine ? (
+          <p className="mt-1 text-sm font-medium text-ink">
+            {mode === "find" ? t("ui.bestDay") : t("ui.checkedFor")}: {dateLine}
+          </p>
+        ) : null}
         <p className="mt-2 font-serif text-xl text-ink">{result.headline}</p>
         <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{result.summary}</p>
 
@@ -87,7 +97,7 @@ export function PurposeResultCard({
           <p className="mt-3 text-xs text-ink-tertiary">
             {result.locationLabel}
             {result.timezone ? ` · ${result.timezone}` : ""}
-            {result.targetDate ? ` · ${result.targetDate}` : ""}
+            {dateLine ? ` · ${dateLine}` : ""}
           </p>
         ) : null}
 
@@ -99,7 +109,7 @@ export function PurposeResultCard({
           <ul className="mt-3 space-y-2 text-ink-secondary">
             {result.factors.map((f, i) => (
               <li key={`${f.name}-${i}`}>
-                {f.name ? <span className="font-medium text-ink">{f.name}: </span> : null}
+                {f.name ? <span className="font-medium text-ink">{factorLabel(t, f.name)}: </span> : null}
                 {f.value}
               </li>
             ))}

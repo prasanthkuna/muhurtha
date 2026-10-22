@@ -20,24 +20,29 @@ export default function SharePage() {
     setBusy(true);
     setCopyMsg(null);
     try {
-      const res = await fetch("/api/engine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(engineBody("share_card_generate", { surface: "decode" })),
-      });
-      const json = (await res.json()) as Record<string, unknown>;
-      if (!res.ok) throw new Error(json.error?.toString() ?? "Share failed");
       const previewBlock = pack?.content?.free_preview;
       const previewText =
         typeof previewBlock === "object" && previewBlock !== null
           ? (previewBlock as Record<string, unknown>).decode_hit?.toString()
           : "";
+      const title = views?.displayHook || previewText || "Muhūrta";
+      // Engine contract: source_type + payload object (no birth details in the payload).
+      const res = await fetch("/api/engine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          engineBody("share_card_generate", {
+            source_type: "decode",
+            payload: { title, shareHook: previewText || title, summary: views?.identitySummary ?? "" },
+          }),
+        ),
+      });
+      const json = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) throw new Error(json.error?.toString() ?? "Share failed");
       const hook =
-        json.shareHook?.toString() ||
-        json.headline?.toString() ||
-        views?.displayHook ||
-        previewText ||
-        "";
+        json.shareText?.toString() ||
+        json.shareBody?.toString() ||
+        title;
       setPreview(hook);
     } catch (e) {
       setPreview(e instanceof Error ? e.message : "Could not build share card");
@@ -48,7 +53,7 @@ export default function SharePage() {
 
   async function onShare() {
     if (!preview) return;
-    const text = `${preview}\n\n${t("share.footer")}`;
+    const text = preview.includes("http") ? preview : `${preview}\n\n${t("share.footer")}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: "Muhūrta", text });
@@ -61,9 +66,9 @@ export default function SharePage() {
     setCopyMsg(t("share.copied"));
   }
 
-  if (loading) return <LoadingState message={t("share.loading")} />;
+  if (loading && !views) return <LoadingState message={t("share.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("share.title")} subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("share.title")} subtitle={error ?? t("ui.unavailable")} />;
   }
 
   return (
