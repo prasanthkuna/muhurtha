@@ -138,6 +138,8 @@ export type BirthIntelligencePackContent = {
   notification_copy?: {
     today_ready?: { title?: string; body?: string };
     good_time_start?: { title?: string; body?: string };
+    good_time_reminder?: { title?: string; body?: string };
+    caution_time_reminder?: { title?: string; body?: string };
     caution_start?: { title?: string; body?: string };
     weekly_ready?: { title?: string; body?: string };
     monthly_ready?: { title?: string; body?: string };
@@ -377,91 +379,6 @@ export function packHasLlmReadingBody(
   content: BirthIntelligencePackContent,
 ): boolean {
   return getPackScreensReady(content).length > 0;
-}
-
-/** Pad LLM partial calendar arrays so quality gates and notifications stay consistent. */
-export function backfillBirthPackCalendarCards(
-  content: BirthIntelligencePackContent,
-  keys: {
-    dailyKeys: string[];
-    weeklyKeys: string[];
-    monthlyKeys: string[];
-  },
-): BirthIntelligencePackContent {
-  const guidance = mapRecord(content.today_guidance);
-  const preview = mapRecord(content.free_preview);
-  const identity = mapRecord(content.user_identity) ?? mapRecord(content.me_profile);
-  const oneLine = safeString(guidance?.main_advice) ||
-    safeString(preview?.decode_hit) ||
-    safeString(identity?.summary) ||
-    "Stay practical and finish one clear task.";
-
-  const todayArr = asArray<PackTodayCard>(content.today_cards);
-  const todayMap = new Map(
-    todayArr
-      .filter((c) => safeString(c.key))
-      .map((c) => [safeString(c.key), c]),
-  );
-  const todayTemplate: PackTodayCard = todayArr[0] ?? {
-    key: keys.dailyKeys[0] ?? "",
-    title: "Today",
-    body: oneLine,
-    one_line: oneLine,
-    share_hook: oneLine,
-    better_for: asArray<string>(guidance?.best_for as unknown),
-    be_careful: asArray<string>(guidance?.be_careful as unknown),
-  };
-  const filledToday = keys.dailyKeys.map((key, idx) => {
-    const hit = todayMap.get(key);
-    if (hit) return { ...hit, key };
-    const donor = todayArr[idx] ?? todayArr[todayArr.length - 1] ?? todayTemplate;
-    return { ...donor, key };
-  });
-
-  const weeklyArr = asArray<PackRangeCard>(content.weekly_cards);
-  const weeklyMap = new Map(
-    weeklyArr
-      .filter((c) => safeString(c.key))
-      .map((c) => [safeString(c.key), c]),
-  );
-  const weeklyTemplate: PackRangeCard = weeklyArr[0] ?? {
-    key: keys.weeklyKeys[0] ?? "",
-    title: "This week",
-    body: oneLine,
-    share_hook: oneLine,
-  };
-  const filledWeekly = keys.weeklyKeys.map((key, idx) => {
-    const hit = weeklyMap.get(key);
-    if (hit) return { ...hit, key };
-    const donor = weeklyArr[idx] ?? weeklyArr[weeklyArr.length - 1] ?? weeklyTemplate;
-    return { ...donor, key };
-  });
-
-  const monthlyArr = asArray<PackRangeCard>(content.monthly_cards);
-  const monthlyMap = new Map(
-    monthlyArr
-      .filter((c) => safeString(c.key))
-      .map((c) => [safeString(c.key), c]),
-  );
-  const monthlyTemplate: PackRangeCard = monthlyArr[0] ?? {
-    key: keys.monthlyKeys[0] ?? "",
-    title: "This month",
-    body: oneLine,
-    share_hook: oneLine,
-  };
-  const filledMonthly = keys.monthlyKeys.map((key, idx) => {
-    const hit = monthlyMap.get(key);
-    if (hit) return { ...hit, key };
-    const donor = monthlyArr[idx] ?? monthlyArr[monthlyArr.length - 1] ?? monthlyTemplate;
-    return { ...donor, key };
-  });
-
-  return {
-    ...content,
-    today_cards: filledToday,
-    weekly_cards: filledWeekly,
-    monthly_cards: filledMonthly,
-  };
 }
 
 export async function generateBirthIntelligencePack(

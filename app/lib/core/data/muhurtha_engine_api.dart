@@ -912,28 +912,6 @@ class MuhurthaEngineApi {
     return ChartInitializeResult.fromJson(m);
   }
 
-  Future<QuickProofResult> quickProofGenerate({String? chartProfileId}) async {
-    final m = await _invoke(
-      'quick_proof_generate',
-      chartProfileId: chartProfileId,
-      timeout: _birthPackTimeout,
-    );
-    return QuickProofResult.fromJson(m);
-  }
-
-  Future<void> validationSubmit({
-    required String phaseSegmentId,
-    required String feedbackValue,
-  }) async {
-    await _invoke(
-      'validation_submit',
-      extra: {
-        'phase_segment_id': phaseSegmentId,
-        'feedback_value': feedbackValue,
-      },
-    );
-  }
-
   Future<PlaceResolveResult> resolvePlace({
     String? place,
     double? lat,

@@ -849,49 +849,6 @@ function countTodayCards(content: Record<string, unknown> | BirthIntelligencePac
   return asArray<PackTodayCard>((content as BirthIntelligencePackContent).today_cards).length;
 }
 
-function mergeBirthPackWithFallback(
-  partial: BirthIntelligencePackContent,
-  fallback: BirthIntelligencePackContent,
-  keys: {
-    dailyKeys: string[];
-    weeklyKeys: string[];
-    monthlyKeys: string[];
-  },
-): BirthIntelligencePackContent {
-  const todayMap = new Map(
-    asArray<PackTodayCard>(partial.today_cards)
-      .filter((card) => safeString(card.key))
-      .map((card) => [safeString(card.key), card]),
-  );
-  const weeklyMap = new Map(
-    asArray<PackRangeCard>(partial.weekly_cards)
-      .filter((card) => safeString(card.key))
-      .map((card) => [safeString(card.key), card]),
-  );
-  const monthlyMap = new Map(
-    asArray<PackRangeCard>(partial.monthly_cards)
-      .filter((card) => safeString(card.key))
-      .map((card) => [safeString(card.key), card]),
-  );
-  const fbToday = asArray<PackTodayCard>(fallback.today_cards);
-  const fbWeekly = asArray<PackRangeCard>(fallback.weekly_cards);
-  const fbMonthly = asArray<PackRangeCard>(fallback.monthly_cards);
-
-  return {
-    ...fallback,
-    ...partial,
-    today_cards: keys.dailyKeys.map((key, idx) =>
-      todayMap.get(key) ?? fbToday[idx] ?? fbToday[0]
-    ),
-    weekly_cards: keys.weeklyKeys.map((key, idx) =>
-      weeklyMap.get(key) ?? fbWeekly[idx] ?? fbWeekly[0]
-    ),
-    monthly_cards: keys.monthlyKeys.map((key, idx) =>
-      monthlyMap.get(key) ?? fbMonthly[idx] ?? fbMonthly[0]
-    ),
-  };
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1236,9 +1193,12 @@ async function findBestExistingPack(
   birthInputId: string,
   locale: AppLocale,
 ): Promise<BirthPackRow | null> {
-  const { data, error } = await supabase
+  // List candidate ids first (tiny payload), then pull full content one row at a time.
+  // Usually the newest ready pack qualifies, so this is 2 light queries instead of
+  // shipping up to 8 full packs (~100 kB each) on every read.
+  const { data: ids, error } = await supabase
     .from("birth_intelligence_packs")
-    .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on")
+    .select("id")
     .eq("profile_id", profileId)
     .eq("birth_input_id", birthInputId)
     .eq("locale", locale)
@@ -1247,10 +1207,23 @@ async function findBestExistingPack(
     .order("created_at", { ascending: false })
     .limit(8);
   if (error) throw error;
-  const rows = (data ?? []) as BirthPackRow[];
-  return rows.find((row) =>
-    row.status === "ready" && packHasLlmReadingBody(row.content as BirthIntelligencePackContent)
-  ) ?? null;
+  for (const candidate of (ids ?? []) as { id: string }[]) {
+    const { data: row, error: rowError } = await supabase
+      .from("birth_intelligence_packs")
+      .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on")
+      .eq("id", candidate.id)
+      .eq("profile_id", profileId)
+      .maybeSingle();
+    if (rowError) throw rowError;
+    const pack = row as BirthPackRow | null;
+    if (
+      pack && pack.status === "ready" &&
+      packHasLlmReadingBody(pack.content as BirthIntelligencePackContent)
+    ) {
+      return pack;
+    }
+  }
+  return null;
 }
 
 async function pruneStalePacks(
@@ -2878,6 +2851,20 @@ function computeTimeline(
   };
 }
 
+/** Read-only variant: resolves missing birth coordinates in memory, never writes. */
+async function withBirthPlacePrecision(bi: BioRow | null): Promise<BioRow | null> {
+  if (!bi) return null;
+  if (bi.birth_lat != null && bi.birth_lng != null && bi.birth_timezone) return bi;
+  const resolved = await resolveBirthPlace(bi.birth_place);
+  if (!resolved) return bi;
+  return {
+    ...bi,
+    birth_lat: resolved.lat,
+    birth_lng: resolved.lng,
+    birth_timezone: resolved.timezone,
+  };
+}
+
 async function ensureBirthPlacePrecision(
   supabase: SupabaseClient,
   bi: BioRow | null,
@@ -3367,7 +3354,10 @@ async function _handleInternal(
     const dateStr = (body.date as string) ?? todayInTimezone(tz);
     const mayGenerate = body.may_generate === true;
     const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
-    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    // Read path stays side-effect free: precision is resolved in memory only.
+    const bi = mayGenerate
+      ? await ensureBirthPlacePrecision(supabase, rawBi)
+      : await withBirthPlacePrecision(rawBi);
     if (!bi) {
       throw new ActionError("birth_input_missing", "No birth input", 409);
     }
@@ -3377,7 +3367,7 @@ async function _handleInternal(
       profile.display_name,
       body,
     );
-    let pack = await loadBirthPack(supabase, profile, bi, locale, dateStr);
+    let pack = await loadBirthPack(adminSupabase, profile, bi, locale, dateStr);
     if ((!pack || !isClientServablePack(pack)) && mayGenerate) {
       pack = await ensureBirthPack(adminSupabase, profile, bi, locale, dateStr);
     }
@@ -3410,11 +3400,9 @@ async function _handleInternal(
     );
     const phasePlans = buildPackPhasePlans(bi, profile, locale, refInstant, kernel);
     const packContent = pack.content as BirthIntelligencePackContent;
+    // Coverage repair is applied to the response only; persistence happens on the
+    // generation path (chart_initialize / ensureBirthPack), never on a read.
     if (repairPackTimelineCoverage(packContent, phasePlans, locale)) {
-      await adminSupabase
-        .from("birth_intelligence_packs")
-        .update({ content: packContent, updated_at: new Date().toISOString() })
-        .eq("id", pack.id);
       pack.content = packContent;
     }
 
@@ -3463,11 +3451,6 @@ async function _handleInternal(
     const locale = requestLocale(body, profile);
     const tz = profile.current_timezone ?? "Asia/Kolkata";
     const dateStr = (body.date as string) ?? todayInTimezone(tz);
-    const rawBi = await getLatestBirthInput(supabase, profile.id);
-    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
-    if (bi) {
-      await loadBirthPack(supabase, profile, bi, locale, dateStr);
-    }
     const nowIso = new Date().toISOString();
     const untilIso = DateTime.fromISO(dateStr, { zone: tz }).plus({ days: 7 }).toUTC().toISO();
     const access = await getSubscriptionAccess(supabase, profile.id);
@@ -3492,223 +3475,8 @@ async function _handleInternal(
     return { notifications: rows, locale, access: buildAccessPayload(access) };
   }
 
-  if (action === "quick_proof_generate") {
-    const locale = requestLocale(body, profile);
-    const rawBi = await getLatestBirthInput(supabase, profile.id);
-    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
-    if (!bi) {
-      throw new ActionError("birth_input_missing", "No birth input", 409);
-    }
-
-    const { data: chart } = await supabase
-      .from("chart_runs")
-      .select("*")
-      .eq("profile_id", profile.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!chart) {
-      throw new ActionError(
-        "chart_not_initialized",
-        "Chart not initialized",
-        409,
-      );
-    }
-
-    await supabase
-      .from("phase_runs")
-      .delete()
-      .eq("profile_id", profile.id)
-      .eq("run_type", "quick_proof");
-
-    const engineMode = chart.engine_mode as string;
-    const { segments, nk } = computeTimeline(
-      bi,
-      profile.current_timezone ?? "Asia/Kolkata",
-    );
-    let cards: unknown[] = [];
-
-    if (
-      nk != null && segments.length > 0 && engineMode !== "window_chart" &&
-      engineMode !== "general_panchanga"
-    ) {
-      const now = new Date();
-      const ads = allAntardashasFromMahadashas(segments);
-      const recent = recentAntardashasClipped(ads, now, JOURNEY_LOOKBACK_YEARS)
-        .slice(-5);
-      const currentLords = vimshottariLordsAt(segments, now);
-      const kernel = buildKernelForBirthInput(
-        bi,
-        profile,
-        locale,
-        now,
-        currentLords?.mdLord,
-        currentLords?.adLord,
-      );
-      const { data: prun, error: e2 } = await supabase
-        .from("phase_runs")
-        .insert({
-          profile_id: profile.id,
-          chart_run_id: chart.id,
-          engine_version: ENGINE_V,
-          run_type: "quick_proof",
-          status: "complete",
-        })
-        .select("id")
-        .single();
-      if (e2) throw e2;
-
-      const confidenceLabel = engineMode === "full_chart" ? "high" : "medium";
-      const plans: PhasePlan[] = recent.map((seg, idx) => {
-        const fallback = antardashaFallbackCopy(
-          seg.mdLord,
-          seg.adLord,
-          seg.start,
-          seg.end,
-          idx,
-          locale,
-        );
-        return buildPhasePlan(seg, idx, locale, {
-          now,
-          previous: idx > 0 ? recent[idx - 1] ?? null : null,
-          confidenceLabel,
-          periodLabel: plainPeriodLabel(seg.start, seg.end),
-          fallbackTitle: fallback.title,
-          fallbackSentences: fallback.sentences,
-          kernel,
-        });
-      });
-      const age = bi ? calculateAge(bi.date_of_birth) : undefined;
-      const llmEnvelope = await generateProofLlmCards(plans, locale, age, {
-        supabase,
-        profileId: profile.id,
-      });
-      let sort = 0;
-      const rows: Record<string, unknown>[] = [];
-      for (const plan of plans) {
-        const llm = llmEnvelope?.cards.get(plan.id) ?? null;
-        const seg = recent[plan.id]!;
-        const endInclusive = DateTime.fromJSDate(seg.end)
-          .minus({ days: 1 })
-          .toISODate()!;
-        rows.push({
-          phase_run_id: prun.id,
-          profile_id: profile.id,
-          start_date: seg.start.toISOString().slice(0, 10),
-          end_date: endInclusive,
-          mahadasha_lord: seg.mdLord,
-          antardasha_lord: seg.adLord,
-          active_life_areas: plan.activeDomains,
-          main_themes: [...plan.supportThemes, ...plan.dailyTexture].slice(0, 3),
-          caution_themes: [],
-          confidence_label: confidenceLabel,
-          sort_order: sort++,
-          deterministic_context: {
-            sentences: plan.fallbackSentences,
-            card_title: plan.fallbackTitle,
-            period_label: plan.periodLabel,
-            md_lord: seg.mdLord,
-            ad_lord: seg.adLord,
-            phase_pulse: plan.phasePulse,
-            active_domains: plan.activeDomains,
-            support_themes: plan.supportThemes,
-            pressure_themes: plan.pressureThemes,
-            kernel_signals: plan.kernelSignals,
-            domain_lenses: plan.domainLenses,
-            share_hook: llm?.share_hook ?? plan.shareHook,
-            evidence_line: plan.evidenceLine,
-            transition_note: plan.transitionNote,
-            llm_title: llm?.title ?? null,
-            llm_highlight: llm?.highlight ?? null,
-            llm_sentences: llm?.sentences ?? null,
-            provenance: buildProvenance({
-              promptVersion: llmEnvelope?.promptVersion ?? "proof-fallback",
-              provider: llmEnvelope?.provider ?? "deterministic",
-              model: llmEnvelope?.model ?? "none",
-              source: llm ? "llm" : "fallback",
-              factSignature: buildFactSignature([
-                profile.id,
-                bi.id,
-                KERNEL_VERSION,
-                seg.mdLord,
-                seg.adLord,
-                plan.phasePulse,
-                plan.activeDomains.join(","),
-                plan.kernelSignals?.join(","),
-              ]),
-            }),
-          },
-        });
-      }
-
-      const { data: inserted, error: e3 } = await supabase
-        .from("phase_segments")
-        .insert(rows)
-        .select("id, deterministic_context");
-      if (e3) throw e3;
-
-      cards = (inserted ?? []).map((r: Record<string, unknown>) => {
-        const ctx = r.deterministic_context as Record<string, unknown>;
-        const llmTitle = typeof ctx.llm_title === "string" ? ctx.llm_title : null;
-        const llmHighlight = typeof ctx.llm_highlight === "string" ? ctx.llm_highlight : null;
-        const llmSentences = Array.isArray(ctx.llm_sentences)
-          ? ctx.llm_sentences.map((x) => String(x))
-          : null;
-        return {
-          phaseSegmentId: r.id,
-          periodLabel: ctx.period_label,
-          title: llmTitle ?? ctx.card_title,
-          highlight: llmHighlight ?? ctx.evidence_line,
-          sentences: llmSentences ?? ctx.sentences,
-          activeDomains: Array.isArray(ctx.active_domains) ? ctx.active_domains : [],
-          shareHook: ctx.share_hook,
-          phasePulse: ctx.phase_pulse,
-          evidenceLine: ctx.evidence_line,
-          confidenceLabel,
-          validationOptions: ["exactly_this", "partly_true", "wrong_timing", "didnt_happen"],
-        };
-      });
-    } else {
-      cards = [];
-    }
-
-    return { cards, engineMode };
-  }
-
-  if (action === "validation_submit") {
-    const phaseSegmentId = body.phase_segment_id as string;
-    const feedbackValue = body.feedback_value as string;
-    if (!phaseSegmentId || !feedbackValue) {
-      throw new ActionError(
-        "validation_missing_fields",
-        "Missing fields",
-        400,
-      );
-    }
-    const { data: pseg } = await supabase
-      .from("phase_segments")
-      .select("profile_id")
-      .eq("id", phaseSegmentId)
-      .maybeSingle();
-    if (!pseg || pseg.profile_id !== profile.id) {
-      throw new ActionError("invalid_phase_segment", "Invalid segment", 400);
-    }
-
-    const { error } = await supabase.from("validation_feedback").insert({
-      profile_id: profile.id,
-      phase_segment_id: phaseSegmentId,
-      feedback_value: feedbackValue,
-      optional_note: (body.optional_note as string) ?? null,
-    });
-    if (error) throw error;
-    return {
-      saved: true,
-      nextAction: feedbackValue === "wrong_timing" || feedbackValue === "didnt_happen"
-        ? "show_more_phases"
-        : "go_to_today",
-    };
-  }
+  // quick_proof_generate / validation_submit were removed with phase_runs,
+  // phase_segments and validation_feedback; DEPRECATED_ACTIONS answers them with 410.
 
   if (action === "today_get") {
     const locale = requestLocale(body, profile);
@@ -3800,7 +3568,7 @@ async function _handleInternal(
 
     const pastFeedback = await getValidationFeedback(supabase, profile.id);
     const lifeChapter = lifeChapterInfo(kernel, locale);
-    const pack = await loadBirthPack(supabase, profile, bi, locale, dateStr);
+    const pack = await loadBirthPack(adminSupabase, profile, bi, locale, dateStr);
     const packCard = packTodayCard(pack, dateStr);
     let provenance = pack
       ? buildProvenance({
@@ -4171,7 +3939,7 @@ async function _handleInternal(
     const targetDate = todayInTimezone(tz);
     const access = await getSubscriptionAccess(supabase, profile.id);
     const askQuota = await consumeAskQuota(
-      supabase,
+      adminSupabase,
       profile.id,
       targetDate,
       access.isPlus,
@@ -4234,7 +4002,7 @@ async function _handleInternal(
       }
     }
     // Ask uses pack templates + live timing windows — no per-question LLM call.
-    const pack = await loadBirthPack(supabase, profile, bi, locale, targetDate);
+    const pack = await loadBirthPack(adminSupabase, profile, bi, locale, targetDate);
 
     const { error: userMessageError } = await supabase.from("chat_messages").insert({
       session_id: sessionId,
@@ -4802,7 +4570,7 @@ async function _handleInternal(
         keepItSimple: remedyKeepSimple(b.remedyType, locale),
       };
     });
-    const pack = await loadBirthPack(supabase, profile, bi, locale, dateStr);
+    const pack = await loadBirthPack(adminSupabase, profile, bi, locale, dateStr);
     const packRemedies = asArray<Record<string, unknown>>(pack?.content.remedy_cards);
     let remedyProvenance = pack
       ? buildProvenance({
