@@ -13,6 +13,7 @@ import { WhyLink, WhySheet } from "@/components/explainer/why-sheet";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { explainerForGraha } from "@/lib/jyotish-explainers";
+import { formatPeriod } from "@/lib/format-date";
 
 function ChipRow({ label, items }: { label: string; items: string[] }) {
   if (items.length === 0) return null;
@@ -39,9 +40,9 @@ export default function LifeChapterPage() {
   const { views, loading, error } = useAppData();
   const [whyOpen, setWhyOpen] = useState(false);
 
-  if (loading) return <LoadingState message={t("life.chapterLoading")} />;
+  if (loading && !views) return <LoadingState message={t("life.chapterLoading")} />;
   if (error || !views) {
-    return <PageHeader title={t("life.chapterTitle")} subtitle={error ?? "Unavailable"} />;
+    return <PageHeader title={t("life.chapterTitle")} subtitle={error ?? t("ui.unavailable")} />;
   }
 
   const chapter = views.chapterById(params.chapterId);
@@ -68,15 +69,13 @@ export default function LifeChapterPage() {
         {t("life.backIndex")}
       </Link>
 
-      <ChapterHeroCard chapter={chapter} currentLabel={t("life.currentBadge")} />
-
-      {(chapter.periodStart || chapter.periodEnd) && (
-        <p className="text-xs text-ink-tertiary">
-          {chapter.periodStart && chapter.periodEnd
-            ? `${chapter.periodStart} – ${chapter.periodEnd}`
-            : chapter.periodLabel}
-        </p>
-      )}
+      <ChapterHeroCard
+        chapter={{
+          ...chapter,
+          periodLabel: formatPeriod(chapter.periodLabel, chapter.periodStart, chapter.periodEnd, locale),
+        }}
+        currentLabel={t("life.currentBadge")}
+      />
 
       <ProseBlock>
         <p className="whitespace-pre-wrap text-base leading-relaxed text-ink-secondary">{chapter.body}</p>
