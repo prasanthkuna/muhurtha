@@ -140,8 +140,9 @@ export class BirthPackViews {
           domainLenses: strList(p.domainLenses ?? fact?.domainLenses),
           transitionNote:
             p.transitionNote?.toString() ?? fact?.transitionNote?.toString() ?? "",
-          periodStart: fact?.periodStart?.toString() ?? fact?.start?.toString(),
-          periodEnd: fact?.periodEnd?.toString() ?? fact?.end?.toString(),
+          periodStart:
+            p.periodStart?.toString() ?? fact?.periodStart?.toString() ?? fact?.start?.toString(),
+          periodEnd: p.periodEnd?.toString() ?? fact?.periodEnd?.toString() ?? fact?.end?.toString(),
         } satisfies ChapterView;
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);

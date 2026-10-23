@@ -41,5 +41,21 @@ export function formatPeriod(
   if (start && end && /^\d{4}-\d{2}/.test(start) && /^\d{4}-\d{2}/.test(end)) {
     return `${formatMonthYear(start, locale)} – ${formatMonthYear(end, locale)}`;
   }
-  return label.replace(/\s+-\s+/g, " – ");
+  const dashed = label.replace(/\s+-\s+/g, " – ");
+  return locale === "en" ? dashed : localizeMonthNames(dashed, locale);
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/** Translate English "Feb 2026" / bare "Feb" tokens in an engine label ("Feb – Dec 2026"). */
+function localizeMonthNames(label: string, locale: AppLocale): string {
+  const loc = INTL_LOCALE[locale] ?? "en-IN";
+  return label.replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?(?:\s+(\d{4}))?\b/g, (m, mon: string, year?: string) => {
+    const month = MONTHS.indexOf(mon.toLowerCase()) + 1;
+    if (month < 1) return m;
+    const dt = DateTime.fromObject({ year: year ? Number(year) : 2000, month, day: 1 }).setLocale(loc);
+    return year
+      ? dt.toLocaleString({ month: "short", year: "numeric" })
+      : dt.toLocaleString({ month: "short" });
+  });
 }

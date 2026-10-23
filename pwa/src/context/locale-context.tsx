@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -20,14 +21,20 @@ type LocaleContextValue = {
   localeReady: boolean;
 };
 
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<AppLocale>(() => {
-    if (typeof window === "undefined") return "en";
-    return normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY));
-  });
+  // Start from "en" on both server and client so hydration matches (React #418); the saved
+  // device locale is applied in a layout effect, before the first paint.
+  const [locale, setLocaleState] = useState<AppLocale>("en");
   const [localeReady, setLocaleReady] = useState(false);
+
+  useIsomorphicLayoutEffect(() => {
+    const saved = localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (saved) setLocaleState(normalizeLocale(saved));
+  }, []);
 
   useEffect(() => {
     // A locale saved on this device is good enough to start loading immediately;
