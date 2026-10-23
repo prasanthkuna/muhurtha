@@ -676,14 +676,24 @@ function packTodayCard(pack: BirthPackRow | null, dateStr: string): PackTodayCar
   return cards.find((c) => safeString(c.key) === dateStr) ?? null;
 }
 
+const CAUTION_WINDOW_LABEL: Record<"te" | "hi", Record<string, string>> = {
+  te: { "Rahu Kalam": "రాహు కాలం", Yamagandam: "యమగండం", Gulika: "గుళిక కాలం", Caution: "జాగ్రత్త సమయం" },
+  hi: { "Rahu Kalam": "राहु काल", Yamagandam: "यमगंड", Gulika: "गुलिक काल", Caution: "सावधानी का समय" },
+};
+
 function normalizeWindowCopy(
   note: PackTimingWindowCopy | undefined,
   fallbackLabel: string,
   windowType: "good" | "caution",
+  locale: AppLocale = "en",
 ) {
+  const fallback = windowType === "good"
+    ? (locale === "en" ? "Useful window" : fallbackPackStrings(locale).goodCategory)
+    : locale === "en"
+    ? fallbackLabel || "Caution"
+    : CAUTION_WINDOW_LABEL[locale][fallbackLabel || "Caution"] ?? CAUTION_WINDOW_LABEL[locale].Caution;
   return {
-    category: safeString(note?.category) ||
-      (windowType === "good" ? "Useful window" : fallbackLabel || "Caution"),
+    category: safeString(note?.category) || fallback,
     why: safeString(note?.why_it_works),
     bestFor: asArray<string>(note?.best_for).map((s) => String(s).trim()).filter(Boolean),
     avoidFor: asArray<string>(note?.avoid_for).map((s) => String(s).trim()).filter(Boolean),
@@ -695,9 +705,10 @@ function decorateWindows(
   windows: { start: string; end: string; label: string }[],
   notes: PackTimingWindowCopy[] | undefined,
   windowType: "good" | "caution",
+  locale: AppLocale = "en",
 ) {
   return windows.map((w, i) => {
-    const copy = normalizeWindowCopy(notes?.[i], w.label, windowType);
+    const copy = normalizeWindowCopy(notes?.[i], w.label, windowType, locale);
     return {
       start: w.start,
       end: w.end,
@@ -5260,11 +5271,13 @@ async function _handleInternal(
         good.map((w) => ({ start: w.start, end: w.end, label: w.label })),
         asArray<PackTimingWindowCopy>(packCard?.good_window_notes),
         "good",
+        locale,
       ),
       cautionWindows: decorateWindows(
         caution.map((w) => ({ start: w.start, end: w.end, label: w.label })),
         asArray<PackTimingWindowCopy>(packCard?.caution_window_notes),
         "caution",
+        locale,
       ),
       currentLifePeriod,
       mahadashaLord: mdLordFact,
