@@ -11,6 +11,8 @@ import { LuckyStrip } from "@/components/editorial/lucky-strip";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { isChildStage } from "@/lib/life-stage";
+import { ShareCardButton } from "@/components/share/share-button";
+import { clip, rashiGlyph } from "@/lib/share/builders";
 
 const ADULT_ONLY_DOMAINS = new Set(["career", "money", "business", "relationship"]);
 
@@ -55,6 +57,20 @@ export default function DecodePage() {
           subtitle={views.identitySummary}
         />
       )}
+
+      <div className="flex justify-end">
+        <ShareCardButton
+          type="decode"
+          build={() => ({
+            title: clip(views.displayHook, 88) ?? t("nav.decode"),
+            value: luck?.moonSignLabel || undefined,
+            subtitle: t("decode.janmaLabel"),
+            body: clip(views.identitySummary, 230),
+            chips: views.strengths.filter((x) => x.length <= 28).slice(0, 2),
+            glyph: rashiGlyph(luck?.moonSignKey || luck?.moonSymbol) ?? "decode",
+          })}
+        />
+      </div>
 
       {luck ? <LuckyStrip luck={luck} compact showMedallion={false} /> : null}
 

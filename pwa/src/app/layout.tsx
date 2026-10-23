@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Instrument_Sans, Noto_Sans_Symbols_2 } from "next/font/google";
 import { SwRegister } from "@/components/pwa/sw-register";
+import { INSTALL_CAPTURE_SCRIPT } from "@/lib/install-capture";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -23,6 +24,7 @@ const symbols = Noto_Sans_Symbols_2({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://pwa-lyart-phi.vercel.app"),
   title: "Muhūrta",
   description: "Your life has a story. Understand its chapters.",
   manifest: "/manifest.webmanifest",
@@ -52,6 +54,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Capture beforeinstallprompt before hydration (Chrome may fire it very early). */}
+        <script dangerouslySetInnerHTML={{ __html: INSTALL_CAPTURE_SCRIPT }} />
+      </head>
       <body className={`${fraunces.variable} ${instrument.variable} ${symbols.variable} antialiased`}>
         {children}
         <SwRegister />

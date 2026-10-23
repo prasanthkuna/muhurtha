@@ -1,0 +1,2 @@
+/** Inline, pre-hydration capture (kept tiny; runs in <head>). */
+export const INSTALL_CAPTURE_SCRIPT = `(function(){try{window.__muhBip=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__muhBip=e;window.dispatchEvent(new Event('muh-bip'));});window.addEventListener('appinstalled',function(){window.__muhInstalled=true;window.__muhBip=null;});}catch(_){}})();`;

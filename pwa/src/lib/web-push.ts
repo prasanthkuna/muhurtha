@@ -19,8 +19,24 @@ export type PushDeviceStatus = {
   prefs: PushPrefs;
 };
 
-export type PushPrefs = { daily: boolean; good: boolean; rahu: boolean };
-export const DEFAULT_PREFS: PushPrefs = { daily: true, good: true, rahu: true };
+export type PushPrefs = {
+  daily: boolean;
+  good: boolean;
+  rahu: boolean;
+  chapter: boolean;
+  child: boolean;
+  friends: boolean;
+  weekly: boolean;
+};
+export const DEFAULT_PREFS: PushPrefs = {
+  daily: true,
+  good: true,
+  rahu: true,
+  chapter: true,
+  child: true,
+  friends: false,
+  weekly: false,
+};
 
 const SYNC_KEY = "muh_push_sync_v1";
 
@@ -95,12 +111,16 @@ async function saveSubscription(
     locale,
     timezone,
     user_agent: navigator.userAgent,
+    installed: isStandalone(),
     subscription: json,
     ...(prefs ? { prefs } : {}),
   });
   if (!res.ok) throw new Error(out.error?.toString() ?? "Could not save this device");
   try {
-    localStorage.setItem(SYNC_KEY, JSON.stringify({ endpoint: json.endpoint, locale, at: Date.now() }));
+    localStorage.setItem(
+      SYNC_KEY,
+      JSON.stringify({ endpoint: json.endpoint, locale, installed: isStandalone(), at: Date.now() }),
+    );
   } catch {
     /* ignore */
   }
@@ -155,10 +175,13 @@ export async function syncPushSubscription(locale: string, timezone: string): Pr
   if (!sub) return;
   try {
     const raw = localStorage.getItem(SYNC_KEY);
-    const last = raw ? (JSON.parse(raw) as { endpoint?: string; locale?: string; at?: number }) : null;
+    const last = raw
+      ? (JSON.parse(raw) as { endpoint?: string; locale?: string; installed?: boolean; at?: number })
+      : null;
     if (
       last?.endpoint === sub.endpoint &&
       last.locale === locale &&
+      last.installed === isStandalone() &&
       Date.now() - (last.at ?? 0) < 24 * 60 * 60 * 1000
     ) {
       return;

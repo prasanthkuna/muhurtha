@@ -5085,7 +5085,7 @@ async function handlePushAction(
     }
     const now = new Date().toISOString();
     const locale = ["en", "te", "hi"].includes(String(body.locale)) ? String(body.locale) : "en";
-    const { data, error } = await admin.from("push_subscriptions").upsert({
+    const row: Record<string, unknown> = {
       profile_id: prof.id,
       endpoint,
       p256dh,
@@ -5093,13 +5093,21 @@ async function handlePushAction(
       locale,
       timezone: String(body.timezone ?? prof.current_timezone ?? "Asia/Kolkata").slice(0, 64),
       user_agent: String(body.user_agent ?? "").slice(0, 300) || null,
-      prefs: normalizePrefs(body.prefs),
       disabled_at: null,
       failure_count: 0,
       updated_at: now,
-    }, { onConflict: "endpoint" }).select("id").single();
-    if (error) throw error;
-    return { subscribed: true, id: data.id };
+    };
+    // Background syncs send no prefs: keep what the user chose instead of resetting.
+    if (body.prefs && typeof body.prefs === "object") row.prefs = normalizePrefs(body.prefs);
+    if (typeof body.installed === "boolean") row.installed = body.installed;
+    let res = await admin.from("push_subscriptions").upsert(row, { onConflict: "endpoint" }).select("id").single();
+    if (res.error && "installed" in row && /installed/.test(res.error.message ?? "")) {
+      // Column arrives with migration 20261023190000; tolerate the deploy gap.
+      delete row.installed;
+      res = await admin.from("push_subscriptions").upsert(row, { onConflict: "endpoint" }).select("id").single();
+    }
+    if (res.error) throw res.error;
+    return { subscribed: true, id: res.data.id };
   }
 
   if (action === "push_unsubscribe") {
@@ -5163,4 +5171,193 @@ async function handlePushAction(
   }
 
   throw new ActionError("unknown_action", `Unknown action ${action}`, 400);
+}
+
+// ---------------------------------------------------------------------------
+// Chart moments for Web Push (called by push.ts via index.ts, once per day slot).
+// ---------------------------------------------------------------------------
+
+export type ChartMomentKind = "chapter_change" | "child_milestone" | "friend_birthday";
+export type ChartMoment = {
+  key: string;
+  kind: ChartMomentKind;
+  title: string;
+  body: string;
+  url: string;
+  image: string;
+};
+
+const CHILD_MILESTONES: {
+  id: string;
+  /** Child age in days on which we send the heads-up. */
+  notifyAtDay: number;
+  purpose: string;
+  name: Record<AppLocale, string>;
+}[] = [
+  { id: "naming", notifyAtDay: 7, purpose: "child_naming", name: { en: "Naming ceremony", te: "నామకరణం", hi: "नामकरण" } },
+  { id: "first_food", notifyAtDay: 150, purpose: "child_first_food", name: { en: "Annaprashana (first rice)", te: "అన్నప్రాశన", hi: "अन्नप्राशन" } },
+  { id: "first_haircut", notifyAtDay: 330, purpose: "child_first_haircut", name: { en: "First haircut", te: "పుట్టు వెంట్రుకలు", hi: "मुंडन" } },
+  { id: "school_start", notifyAtDay: 3 * 365 - 45, purpose: "child_school_start", name: { en: "Starting school", te: "అక్షరాభ్యాసం / బడి ప్రారంభం", hi: "विद्यारंभ" } },
+];
+
+const MOMENT_COPY: Record<AppLocale, {
+  chapterSoonTitle: (who: string, lord: string) => string;
+  chapterSoonBody: (date: string, lord: string) => string;
+  chapterTodayTitle: (who: string, lord: string) => string;
+  chapterTodayBody: (lord: string) => string;
+  milestoneTitle: (name: string, child: string) => string;
+  milestoneBody: (child: string) => string;
+  bdayTitle: (who: string) => string;
+  bdayBody: (window: string) => string;
+  bdayChildTitle: (who: string, age: number) => string;
+  you: string;
+}> = {
+  en: {
+    chapterSoonTitle: (who, lord) => who ? `${who}'s ${lord} chapter begins next week` : `Your ${lord} chapter begins next week`,
+    chapterSoonBody: (date, lord) => `A new ${lord} period starts on ${date}. Read what it brings and plan the first steps.`,
+    chapterTodayTitle: (who, lord) => who ? `${who}'s ${lord} chapter begins today` : `Your ${lord} chapter begins today`,
+    chapterTodayBody: (lord) => `The ${lord} period starts today. Your Life page has the themes for this chapter.`,
+    milestoneTitle: (name, child) => `${name} for ${child}`,
+    milestoneBody: (child) => `The usual time for this is coming up. Find a good date for ${child} in a few taps.`,
+    bdayTitle: (who) => `${who}'s birthday today`,
+    bdayBody: (w) => w ? `A good window for wishes or a small puja: ${w}.` : `Open Muhūrta for today's good window.`,
+    bdayChildTitle: (who, age) => `${who} turns ${age} today`,
+    you: "",
+  },
+  te: {
+    chapterSoonTitle: (who, lord) => who ? `${who}కి వచ్చే వారం ${lord} దశ మొదలు` : `వచ్చే వారం మీ ${lord} దశ మొదలు`,
+    chapterSoonBody: (date, lord) => `${date} నుండి కొత్త ${lord} కాలం. అది ఏమి తెస్తుందో చదివి, మొదటి అడుగులు ప్లాన్ చేసుకోండి.`,
+    chapterTodayTitle: (who, lord) => who ? `ఈ రోజు ${who}కి ${lord} దశ మొదలు` : `ఈ రోజు మీ ${lord} దశ మొదలు`,
+    chapterTodayBody: (lord) => `${lord} కాలం ఈ రోజు మొదలవుతుంది. ఈ అధ్యాయం విషయాలు జీవనం పేజీలో ఉన్నాయి.`,
+    milestoneTitle: (name, child) => `${child}కి ${name}`,
+    milestoneBody: (child) => `దీనికి సాధారణ సమయం దగ్గర పడుతోంది. ${child}కి మంచి తేదీని సులభంగా కనుగొనండి.`,
+    bdayTitle: (who) => `ఈ రోజు ${who} పుట్టినరోజు`,
+    bdayBody: (w) => w ? `శుభాకాంక్షలు లేదా చిన్న పూజకు మంచి సమయం: ${w}.` : `ఈ రోజు మంచి సమయం కోసం ముహూర్త తెరవండి.`,
+    bdayChildTitle: (who, age) => `ఈ రోజు ${who}కి ${age} ఏళ్లు`,
+    you: "",
+  },
+  hi: {
+    chapterSoonTitle: (who, lord) => who ? `${who} की ${lord} दशा अगले हफ़्ते शुरू` : `आपकी ${lord} दशा अगले हफ़्ते शुरू`,
+    chapterSoonBody: (date, lord) => `${date} से नया ${lord} काल। पढ़ें यह क्या लाता है और पहले कदम तय करें।`,
+    chapterTodayTitle: (who, lord) => who ? `${who} की ${lord} दशा आज से` : `आपकी ${lord} दशा आज से`,
+    chapterTodayBody: (lord) => `${lord} काल आज शुरू होता है। इस अध्याय की बातें जीवन पेज पर हैं।`,
+    milestoneTitle: (name, child) => `${child} का ${name}`,
+    milestoneBody: (child) => `इसका सामान्य समय पास है। ${child} के लिए शुभ तिथि कुछ ही टैप में देखें।`,
+    bdayTitle: (who) => `आज ${who} का जन्मदिन`,
+    bdayBody: (w) => w ? `शुभकामना या छोटी पूजा के लिए अच्छा समय: ${w}.` : `आज का शुभ समय देखने के लिए मुहूर्त खोलें।`,
+    bdayChildTitle: (who, age) => `आज ${who} का ${age}वाँ जन्मदिन`,
+    you: "",
+  },
+};
+
+function shortDateLocalized(iso: string, loc: AppLocale): string {
+  const d = DateTime.fromISO(iso);
+  if (!d.isValid) return iso;
+  return d.setLocale(loc === "te" ? "te-IN" : loc === "hi" ? "hi-IN" : "en-IN").toFormat("d LLL");
+}
+
+/**
+ * Chart-specific push moments for one owner on `dateStr` (owner's local date):
+ * mahadasha changes (7 days before + on the day) for you and saved charts, child ceremony
+ * heads-ups, and birthdays of saved charts. Cheap: dates only, no LLM, no writes.
+ */
+export async function pushChartMoments(
+  admin: SupabaseClient,
+  ownerProfileId: string,
+  ownerTimezone: string,
+  dateStr: string,
+  localeRaw: string | null | undefined,
+  prefs: { chapter: boolean; child: boolean; friends: boolean },
+  goodWindowText: string,
+): Promise<ChartMoment[]> {
+  const loc = normalizeLocale(localeRaw ?? "en");
+  const c = MOMENT_COPY[loc];
+  const out: ChartMoment[] = [];
+  const today = DateTime.fromISO(dateStr, { zone: ownerTimezone }).startOf("day");
+  if (!today.isValid) return out;
+
+  type Subject = { chartId: string | null; label: string; bi: BioRow };
+  const subjects: Subject[] = [];
+  const own = await getLatestBirthInput(admin, ownerProfileId).catch(() => null);
+  if (own) subjects.push({ chartId: null, label: "", bi: own });
+  const { data: charts } = await admin
+    .from("chart_profiles")
+    .select("id, label, birth_input_id")
+    .eq("owner_profile_id", ownerProfileId)
+    .limit(20);
+  const chartRows = (charts ?? []) as ChartProfileRow[];
+  if (chartRows.length) {
+    const { data: bis } = await admin
+      .from("birth_inputs")
+      .select(
+        "id, profile_id, date_of_birth, birth_place, birth_input_mode, exact_birth_time, time_bucket, janma_nakshatra, nakshatra_pada, birth_timezone, birth_lat, birth_lng",
+      )
+      .in("id", chartRows.map((r) => r.birth_input_id));
+    const byId = new Map(((bis ?? []) as BioRow[]).map((b) => [b.id, b]));
+    for (const r of chartRows) {
+      const bi = byId.get(r.birth_input_id);
+      if (bi) subjects.push({ chartId: r.id, label: String(r.label ?? "").trim().split(/\s+/)[0] ?? "", bi });
+    }
+  }
+
+  for (const s of subjects) {
+    const dob = DateTime.fromISO(String(s.bi.date_of_birth).slice(0, 10), { zone: ownerTimezone }).startOf("day");
+    if (!dob.isValid) continue;
+    const ageDays = Math.round(today.diff(dob, "days").days);
+    const ageYears = Math.floor(today.diff(dob, "years").years);
+    const isChild = ageYears < 13;
+    const chartQ = s.chartId ? `chart=${s.chartId}` : "chart=self";
+    const allowChapter = s.chartId == null ? prefs.chapter : isChild ? prefs.child : prefs.friends;
+
+    if (allowChapter) {
+      try {
+        const { segments } = computeTimeline(s.bi, ownerTimezone);
+        for (const seg of segments) {
+          const start = DateTime.fromJSDate(seg.start, { zone: ownerTimezone }).startOf("day");
+          const daysTo = Math.round(start.diff(today, "days").days);
+          if (daysTo !== 7 && daysTo !== 0) continue;
+          if (seg.start.getTime() <= dob.toMillis() + 86400_000) continue; // birth segment
+          const lord = planetLabel(seg.lord, loc);
+          const startIso = start.toISODate() ?? dateStr;
+          out.push({
+            key: `chapter:${s.bi.id}:${startIso}:${daysTo === 0 ? "day" : "pre"}`,
+            kind: "chapter_change",
+            title: daysTo === 0 ? c.chapterTodayTitle(s.label, lord) : c.chapterSoonTitle(s.label, lord),
+            body: daysTo === 0 ? c.chapterTodayBody(lord) : c.chapterSoonBody(shortDateLocalized(startIso, loc), lord),
+            url: `/life?${chartQ}&src=push_chapter`,
+            image: "/notifications/chart.png",
+          });
+        }
+      } catch (_e) {
+        // No nakshatra / timeline for this chart; skip.
+      }
+    }
+
+    if (s.chartId && isChild && prefs.child) {
+      for (const m of CHILD_MILESTONES) {
+        if (ageDays !== m.notifyAtDay) continue;
+        out.push({
+          key: `child:${s.chartId}:${m.id}`,
+          kind: "child_milestone",
+          title: c.milestoneTitle(m.name[loc], s.label),
+          body: c.milestoneBody(s.label),
+          url: `/timing?purpose=${m.purpose}&${chartQ}&src=push_child`,
+          image: "/notifications/chart.png",
+        });
+      }
+    }
+
+    const isBirthday = ageDays > 0 && dob.month === today.month && dob.day === today.day;
+    if (s.chartId && isBirthday && (isChild ? prefs.child : prefs.friends)) {
+      out.push({
+        key: `bday:${s.chartId}:${today.year}`,
+        kind: isChild ? "child_milestone" : "friend_birthday",
+        title: isChild ? c.bdayChildTitle(s.label, ageYears) : c.bdayTitle(s.label),
+        body: c.bdayBody(goodWindowText),
+        url: `/today?${chartQ}&src=push_bday`,
+        image: "/notifications/good.png",
+      });
+    }
+  }
+  return out;
 }

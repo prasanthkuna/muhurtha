@@ -227,7 +227,7 @@ function AskInner() {
       ) : null}
 
       <div className="flex-1 space-y-4 overflow-y-auto pb-4">
-        {messages.map((m) =>
+        {messages.map((m, i) =>
           m.role === "user" ? (
             <div
               key={m.id}
@@ -236,7 +236,11 @@ function AskInner() {
               {m.text}
             </div>
           ) : m.meta ? (
-            <AskAnswerCard key={m.id} result={m.meta} />
+            <AskAnswerCard
+              key={m.id}
+              result={m.meta}
+              question={messages.slice(0, i).reverse().find((x) => x.role === "user")?.text}
+            />
           ) : (
             <div
               key={m.id}

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { WelcomeActions } from "./welcome-client";
+import { LocaleProvider } from "@/context/locale-context";
+import { InstallChip } from "@/components/pwa/install-chip";
+import { AttributionCapture } from "@/components/share/attribution-capture";
 
 export const metadata: Metadata = {
   title: "Muhūrta — your life has a story",
@@ -55,6 +58,10 @@ export default function WelcomePage() {
         your city.
       </p>
       <SampleReading />
+      <LocaleProvider>
+        <AttributionCapture />
+        <InstallChip variant="banner" className="mt-6" />
+      </LocaleProvider>
       <ul className="mt-6 space-y-2 text-sm text-ink-secondary">
         <li>• Personal reading from your birth details — not a sun-sign feed</li>
         <li>• Today&apos;s good and caution windows, calculated for where you are</li>

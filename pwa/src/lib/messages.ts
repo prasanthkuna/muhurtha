@@ -1,4 +1,5 @@
 import type { AppLocale } from "./locale";
+import { EXTRA } from "./messages-share";
 import { SUPPLEMENT } from "./messages-supplement";
 
 type MessageTree = { [key: string]: string | MessageTree };
@@ -924,7 +925,9 @@ export function t(locale: AppLocale, key: string): string {
   return (
     lookup(catalogs[locale], key) ??
     (locale === "en" ? undefined : SUPPLEMENT[locale]?.[key]) ??
+    EXTRA[locale]?.[key] ??
     lookup(catalogs.en, key) ??
+    EXTRA.en[key] ??
     key
   );
 }

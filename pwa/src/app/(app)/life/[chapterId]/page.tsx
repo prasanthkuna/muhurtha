@@ -15,6 +15,8 @@ import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { explainerForGraha } from "@/lib/jyotish-explainers";
 import { formatPeriod } from "@/lib/format-date";
+import { ShareCardButton } from "@/components/share/share-button";
+import { clip, grahaGlyph } from "@/lib/share/builders";
 
 function ChipRow({ label, items }: { label: string; items: string[] }) {
   if (items.length === 0) return null;
@@ -77,6 +79,20 @@ export default function LifeChapterPage() {
         }}
         currentLabel={t("life.currentBadge")}
       />
+
+      <div className="flex justify-end">
+        <ShareCardButton
+          type="chapter"
+          build={() => ({
+            title: chapter.title,
+            value: formatPeriod(chapter.periodLabel, chapter.periodStart, chapter.periodEnd, locale),
+            subtitle: [chapter.mahadashaLord, chapter.antardashaLord].filter(Boolean).join(" · ") || undefined,
+            body: clip(chapter.highlight || chapter.shareHook || (chapter.proLocked ? "" : chapter.body), 230),
+            chips: chapter.focusAreas.filter((x) => x.length <= 28).slice(0, 2),
+            glyph: grahaGlyph(chapter.mahadashaLord),
+          })}
+        />
+      </div>
 
       <ProseBlock>
         <p className="whitespace-pre-wrap text-base leading-relaxed text-ink-secondary">{chapter.body}</p>

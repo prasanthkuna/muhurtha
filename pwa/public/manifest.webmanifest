@@ -1,18 +1,33 @@
 {
   "id": "/today",
-  "name": "Muhūrta",
+  "name": "Muhūrta — personal Panchanga timing",
   "short_name": "Muhūrta",
-  "description": "Personal life journal informed by Jyotish",
-  "start_url": "/today",
+  "description": "Your day's good and caution windows for your city, life chapters from your birth chart, and dates for the things that matter. In English, Telugu and Hindi.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/today?src=pwa",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#F8F5EE",
   "theme_color": "#F8F5EE",
   "orientation": "portrait-primary",
+  "categories": ["lifestyle", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshots/welcome-narrow.png", "sizes": "1080x2400", "type": "image/png", "form_factor": "narrow", "label": "Your day, your chapters and your timing" },
+    { "src": "/screenshots/today-card-narrow.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Share a beautiful card of your day" },
+    { "src": "/screenshots/welcome-wide.png", "sizes": "1920x1080", "type": "image/png", "form_factor": "wide", "label": "Muhūrta on a larger screen" }
+  ],
+  "shortcuts": [
+    { "name": "Today", "short_name": "Today", "url": "/today?src=shortcut", "icons": [{ "src": "/icons/shortcut-today.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Check a time", "short_name": "Timing", "url": "/timing?src=shortcut", "icons": [{ "src": "/icons/shortcut-timing.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Ask", "short_name": "Ask", "url": "/ask?src=shortcut", "icons": [{ "src": "/icons/shortcut-ask.png", "sizes": "192x192", "type": "image/png" }] }
   ]
 }

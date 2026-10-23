@@ -13,6 +13,10 @@ import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { TodayTimingPanel } from "@/components/today/today-timing-panel";
+import { ShareCardButton } from "@/components/share/share-button";
+import { InstallChip } from "@/components/pwa/install-chip";
+import { formatWindowRange } from "@/lib/format-time";
+import { clip } from "@/lib/share/builders";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { isChildStage } from "@/lib/life-stage";
@@ -249,6 +253,48 @@ export default function TodayPage() {
       ) : (
         <PageHeader eyebrow={dateLabel} title={cardTitle} subtitle={mainAdvice || undefined} />
       )}
+
+      {!dayLoading && !dayError && !cardMissing ? (
+        <div className="flex flex-wrap items-center justify-end gap-2" data-testid="today-share-row">
+          {isToday ? <InstallChip className="mr-auto" /> : null}
+          <ShareCardButton
+            type="today"
+            build={() => {
+              const best = goodWindows[0];
+              const short = (xs: string[]) => xs.filter((x) => x.length <= 28).slice(0, 2);
+              return {
+                title: clip(cardTitle, 88) ?? t("nav.today"),
+                value: best ? `${t("today.firstGood")}: ${formatWindowRange(best.start, best.end)}` : undefined,
+                subtitle: [dateLabel, luck?.moonSignLabel].filter(Boolean).join(" · "),
+                body: clip(mainAdvice || detailedBody, 230),
+                chips: short(betterFor),
+                glyph: "sunrise",
+              };
+            }}
+          />
+          {isToday && goodWindows[0] ? (
+            <ShareCardButton
+              type="window"
+              label={t("today.firstGood")}
+              build={() => {
+                const best = goodWindows[0];
+                const caution = cautionWindows[0];
+                return {
+                  title: best.label || t("today.firstGood"),
+                  value: formatWindowRange(best.start, best.end),
+                  subtitle: dateLabel,
+                  body: clip(scrub(best.whyItWorks) || mainAdvice, 200),
+                  chips: caution
+                    ? [`${t("today.firstCaution")} ${formatWindowRange(caution.start, caution.end)}`]
+                    : undefined,
+                  glyph: "goodWindow",
+                  verdict: "good",
+                };
+              }}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       {dayLoading ? (
         <div className="space-y-3" aria-busy="true" aria-label={t("today.dayLoading")}>

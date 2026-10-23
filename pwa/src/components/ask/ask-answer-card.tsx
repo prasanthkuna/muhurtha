@@ -4,9 +4,11 @@ import { ProseBlock } from "@/components/editorial/prose-block";
 import { WindowPillRow } from "@/components/editorial/window-time-pill";
 import { useLocale } from "@/context/locale-context";
 import type { AskAnswerResult } from "@/lib/engine-parsers";
-import { formatTimesInString } from "@/lib/format-time";
+import { formatTimesInString, formatWindowRange } from "@/lib/format-time";
+import { ShareCardButton } from "@/components/share/share-button";
+import { clip } from "@/lib/share/builders";
 
-export function AskAnswerCard({ result }: { result: AskAnswerResult }) {
+export function AskAnswerCard({ result, question }: { result: AskAnswerResult; question?: string }) {
   const { t } = useLocale();
 
   const best = formatTimesInString(result.bestTime);
@@ -15,9 +17,29 @@ export function AskAnswerCard({ result }: { result: AskAnswerResult }) {
   return (
     <div data-testid="ask-answer" className="mr-1 space-y-3">
       <ProseBlock>
-        <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">
-          {t("ask.answerLabel")}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">
+            {t("ask.answerLabel")}
+          </p>
+          <ShareCardButton
+            type="ask"
+            className="-mt-1 shrink-0"
+            build={() => {
+              const w = result.goodWindows[0];
+              return {
+                title: clip(question || result.directAnswer, 88) ?? t("ask.answerLabel"),
+                value: w ? formatWindowRange(w.start, w.end) : undefined,
+                body: clip(
+                  question
+                    ? [result.directAnswer, result.simpleWhy ? formatTimesInString(result.simpleWhy) : ""].filter(Boolean).join(" ")
+                    : formatTimesInString(result.simpleWhy ?? result.actionLine),
+                  280,
+                ),
+                glyph: "ask",
+              };
+            }}
+          />
+        </div>
         <p className="mt-2 text-[17px] font-semibold leading-snug text-ink">
           {result.directAnswer}
         </p>

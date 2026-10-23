@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Share cards render with Skia (native module) + bundled Noto fonts.
+  serverExternalPackages: ["@napi-rs/canvas"],
+  outputFileTracingIncludes: {
+    "/api/card/[id]": ["./assets/fonts/**/*"],
+    "/api/card/sample": ["./assets/fonts/**/*"],
+  },
   // Type errors fail the build again (scripts/ are Bun-only and excluded in tsconfig).
   async headers() {
     return [

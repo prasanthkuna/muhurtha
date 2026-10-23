@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { handleRequest, warmBirthPack } from "./engine.ts";
+import { handleRequest, pushChartMoments, warmBirthPack } from "./engine.ts";
 import { smokeTestLocaleLlm } from "./locale_smoke.ts";
 import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
@@ -182,8 +182,8 @@ Deno.serve(async (req) => {
         });
       }
       const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
-      const result = await dispatchDuePush(adminSupabase);
-      if (result.considered > 0) console.log("[push_dispatch]", JSON.stringify(result));
+      const result = await dispatchDuePush(adminSupabase, Date.now(), pushChartMoments);
+      if (result.considered > 0 || result.suppressed > 0) console.log("[push_dispatch]", JSON.stringify(result));
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
       });

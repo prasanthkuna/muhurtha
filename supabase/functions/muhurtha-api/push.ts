@@ -11,10 +11,71 @@ import * as webpush from "jsr:@negrel/webpush@0.3";
 import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
 
 export type PushLocale = "en" | "te" | "hi";
-export type PushKind = "test" | "daily_brief" | "good_window" | "rahu_heads_up";
-export type PushPrefs = { daily: boolean; good: boolean; rahu: boolean };
+export type PushKind =
+  | "test"
+  | "daily_brief"
+  | "good_window"
+  | "rahu_heads_up"
+  | "chapter_change"
+  | "child_milestone"
+  | "friend_birthday"
+  | "weekly_outlook";
+export type PushPrefs = {
+  daily: boolean;
+  good: boolean;
+  rahu: boolean;
+  chapter: boolean;
+  child: boolean;
+  friends: boolean;
+  weekly: boolean;
+};
 
-export const DEFAULT_PUSH_PREFS: PushPrefs = { daily: true, good: true, rahu: true };
+export const DEFAULT_PUSH_PREFS: PushPrefs = {
+  daily: true,
+  good: true,
+  rahu: true,
+  chapter: true,
+  child: true,
+  friends: false,
+  weekly: false,
+};
+
+/** Chart-specific moments come from engine.ts (injected by index.ts to avoid an import cycle). */
+export type ChartMomentsFn = (
+  admin: SupabaseClient,
+  ownerProfileId: string,
+  tz: string,
+  dateStr: string,
+  locale: string | null,
+  prefs: { chapter: boolean; child: boolean; friends: boolean },
+  goodWindowText: string,
+) => Promise<
+  { key: string; kind: "chapter_change" | "child_milestone" | "friend_birthday"; title: string; body: string; url: string; image: string }[]
+>;
+
+// Spam-safety rules (Chrome's on-device classifier and plain good manners):
+/** No scheduled alert in the first hour after someone turns notifications on. */
+const NEW_SUBSCRIPTION_GRACE_MS = 60 * 60 * 1000;
+/** Local quiet hours: nothing between 21:30 and 06:30. */
+const QUIET_START = "21:30";
+const QUIET_END = "06:30";
+/** Never more than this many scheduled alerts per local day per device. */
+const DAILY_CAP = 4;
+/** A good-window alert this soon after the brief repeats it; skip. */
+const BRIEF_OVERLAP_MS = 45 * 60 * 1000;
+const CHART_MOMENT_LOCAL = "09:00";
+const WEEKLY_LOCAL = "19:00";
+/** Lower number = more important when the cap bites. */
+const KIND_PRIORITY: Record<PushKind, number> = {
+  test: 0,
+  daily_brief: 1,
+  chapter_change: 2,
+  child_milestone: 2,
+  friend_birthday: 3,
+  rahu_heads_up: 4,
+  good_window: 5,
+  weekly_outlook: 6,
+};
 const DAILY_BRIEF_LOCAL = "06:45";
 const LEAD_MINUTES = 10;
 /** Cron runs every 5 min; anything due in the last 12 min and not yet sent goes out. */
@@ -31,6 +92,7 @@ export type SubscriptionRow = {
   timezone: string | null;
   prefs: Partial<PushPrefs> | null;
   failure_count: number | null;
+  created_at?: string | null;
 };
 
 export type NotificationPayload = {
@@ -189,41 +251,47 @@ function loc(raw: string | null | undefined): PushLocale {
 
 const COPY = {
   en: {
-    testTitle: "Muhurta notifications are on",
-    testBody: "This is how your daily brief and window alerts will look.",
-    dailyTitle: "Today's muhurta brief",
+    testTitle: "Test notification you requested",
+    testBody: "Muhūrta alerts are working on this phone. Your daily brief arrives at 6:45 AM.",
+    dailyTitle: "Your day in Muhūrta",
     dailyBody: (good: string, rahu: string) =>
-      `Best window ${good}. Rahu Kalam ${rahu}; keep new starts out of it.`,
-    goodTitle: (t: string) => `Good window opens at ${t}`,
-    goodBody: (range: string) => `${range} is today's supportive window. Line up the one thing that matters.`,
-    rahuTitle: (t: string) => `Rahu Kalam starts at ${t}`,
-    rahuBody: (range: string) => `${range}: go lighter, avoid fresh starts and signatures.`,
+      `Good window ${good}. Rahu Kalam ${rahu}.`,
+    goodTitle: (t: string) => `Good window from ${t}`,
+    goodBody: (range: string) => `${range} is today's supportive window.`,
+    rahuTitle: (t: string) => `Rahu Kalam from ${t}`,
+    rahuBody: (range: string) => `${range}. A lighter hour for routine work.`,
+    weeklyTitle: "Your week ahead",
+    weeklyBody: (rahuLine: string) => `Good windows and Rahu Kalam for each day are ready. Monday's Rahu Kalam: ${rahuLine}.`,
     openToday: "Open today",
     openTiming: "Check timing",
   },
   te: {
-    testTitle: "ముహూర్త నోటిఫికేషన్లు ఆన్ అయ్యాయి",
-    testBody: "రోజువారీ సారాంశం, మంచి సమయ హెచ్చరికలు ఇలా కనిపిస్తాయి.",
-    dailyTitle: "ఈ రోజు ముహూర్త సారాంశం",
+    testTitle: "మీరు అడిగిన టెస్ట్ నోటిఫికేషన్",
+    testBody: "ఈ ఫోన్‌లో ముహూర్త అలర్ట్‌లు పనిచేస్తున్నాయి. రోజువారీ సారాంశం ఉదయం 6:45కి వస్తుంది.",
+    dailyTitle: "ముహూర్తలో మీ రోజు",
     dailyBody: (good: string, rahu: string) =>
-      `మంచి సమయం ${good}. రాహుకాలం ${rahu}; ఆ సమయంలో కొత్త పనులు మొదలు పెట్టకండి.`,
-    goodTitle: (t: string) => `${t}కి మంచి సమయం మొదలవుతుంది`,
-    goodBody: (range: string) => `${range} ఈ రోజు అనుకూల సమయం. ముఖ్యమైన పనిని సిద్ధం చేసుకోండి.`,
-    rahuTitle: (t: string) => `${t}కి రాహుకాలం మొదలవుతుంది`,
-    rahuBody: (range: string) => `${range}: తేలికగా ఉండండి; కొత్త ప్రారంభాలు, సంతకాలు వద్దు.`,
+      `మంచి సమయం ${good}. రాహుకాలం ${rahu}.`,
+    goodTitle: (t: string) => `${t} నుండి మంచి సమయం`,
+    goodBody: (range: string) => `${range} ఈ రోజు అనుకూల సమయం.`,
+    rahuTitle: (t: string) => `${t} నుండి రాహుకాలం`,
+    rahuBody: (range: string) => `${range}. సాధారణ పనులకు తేలికైన సమయం.`,
+    weeklyTitle: "మీ వచ్చే వారం",
+    weeklyBody: (rahuLine: string) => `ప్రతి రోజు మంచి సమయాలు, రాహుకాలం సిద్ధంగా ఉన్నాయి. సోమవారం రాహుకాలం: ${rahuLine}.`,
     openToday: "ఈ రోజు చూడండి",
     openTiming: "సమయం చూడండి",
   },
   hi: {
-    testTitle: "मुहूर्त सूचनाएँ चालू हैं",
-    testBody: "रोज़ का सार और शुभ समय की सूचनाएँ ऐसी दिखेंगी।",
-    dailyTitle: "आज का मुहूर्त सार",
+    testTitle: "आपकी माँगी हुई टेस्ट सूचना",
+    testBody: "इस फ़ोन पर मुहूर्त अलर्ट काम कर रहे हैं। रोज़ का सार सुबह 6:45 बजे आएगा।",
+    dailyTitle: "मुहूर्त में आपका दिन",
     dailyBody: (good: string, rahu: string) =>
-      `शुभ समय ${good}. राहुकाल ${rahu}; उसमें नई शुरुआत न करें।`,
-    goodTitle: (t: string) => `${t} बजे शुभ समय शुरू`,
-    goodBody: (range: string) => `${range} आज का अनुकूल समय है। सबसे ज़रूरी काम तैयार रखें।`,
-    rahuTitle: (t: string) => `${t} बजे राहुकाल शुरू`,
-    rahuBody: (range: string) => `${range}: हल्का रहें; नई शुरुआत और हस्ताक्षर टालें।`,
+      `शुभ समय ${good}। राहुकाल ${rahu}।`,
+    goodTitle: (t: string) => `${t} से शुभ समय`,
+    goodBody: (range: string) => `${range} आज का अनुकूल समय है।`,
+    rahuTitle: (t: string) => `${t} से राहुकाल`,
+    rahuBody: (range: string) => `${range}। रोज़मर्रा के कामों के लिए हल्का समय।`,
+    weeklyTitle: "आपका आने वाला हफ़्ता",
+    weeklyBody: (rahuLine: string) => `हर दिन के शुभ समय और राहुकाल तैयार हैं। सोमवार का राहुकाल: ${rahuLine}।`,
     openToday: "आज देखें",
     openTiming: "समय देखें",
   },
@@ -260,8 +328,15 @@ export function testPayload(localeRaw: string | null | undefined): NotificationP
 
 type DueEvent = { key: string; at: number; payload: NotificationPayload; urgency: "high" | "normal"; ttl: number };
 
+function clock12(hhmm: string): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm);
+  if (!m) return hhmm;
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 ? "PM" : "AM"}`;
+}
+
 function fmtRange(a: string, b: string): string {
-  return `${a}–${b}`;
+  return `${clock12(a)} – ${clock12(b)}`;
 }
 
 /** Today's alerts for one subscriber, from their saved city (same math as the Today screen). */
@@ -314,7 +389,7 @@ export function eventsForDay(
         ttl: LEAD_MINUTES * 60 + 300,
         payload: {
           ...basePayload("good_window", l, `muh-good-${dateStr}`),
-          title: c.goodTitle(w.start),
+          title: c.goodTitle(clock12(w.start)),
           body: c.goodBody(fmtRange(w.start, w.end)),
           image: "/notifications/good.png",
           url: "/timing?src=push_good",
@@ -334,7 +409,7 @@ export function eventsForDay(
       ttl: LEAD_MINUTES * 60 + 300,
       payload: {
         ...basePayload("rahu_heads_up", l, `muh-rahu-${dateStr}`),
-        title: c.rahuTitle(rahu.start),
+        title: c.rahuTitle(clock12(rahu.start)),
         body: c.rahuBody(fmtRange(rahu.start, rahu.end)),
         image: "/notifications/rahu.png",
         url: "/today?src=push_rahu",
@@ -347,10 +422,54 @@ export function eventsForDay(
 
 export function normalizePrefs(raw: unknown): PushPrefs {
   const p = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const flag = (k: keyof PushPrefs) => (typeof p[k] === "boolean" ? (p[k] as boolean) : DEFAULT_PUSH_PREFS[k]);
   return {
-    daily: p.daily !== false,
-    good: p.good !== false,
-    rahu: p.rahu !== false,
+    daily: flag("daily"),
+    good: flag("good"),
+    rahu: flag("rahu"),
+    chapter: flag("chapter"),
+    child: flag("child"),
+    friends: flag("friends"),
+    weekly: flag("weekly"),
+  };
+}
+
+function firstGoodWindowText(dateStr: string, tz: string, lat: number, lng: number): string {
+  const day = DateTime.fromISO(dateStr, { zone: tz });
+  const sun = sunriseSunset(day.set({ hour: 12 }).toJSDate(), lat, lng);
+  if (!Number.isFinite(sun.sunrise.getTime())) return "";
+  const { good } = goodAndCautionWindows(divideDaylight(sun, day.weekday % 7), tz);
+  return good[0] ? fmtRange(good[0].start, good[0].end) : "";
+}
+
+function inQuietHours(atMs: number, tz: string): boolean {
+  const hm = DateTime.fromMillis(atMs, { zone: tz }).toFormat("HH:mm");
+  return hm >= QUIET_START || hm < QUIET_END;
+}
+
+/** Sunday-evening outlook (+ Monday's Rahu Kalam so it carries something concrete). */
+function weeklyEvent(dateStr: string, tz: string, lat: number, lng: number, l: PushLocale): DueEvent | null {
+  const day = DateTime.fromISO(dateStr, { zone: tz });
+  if (day.weekday !== 7) return null;
+  const monday = day.plus({ days: 1 });
+  const sun = sunriseSunset(monday.set({ hour: 12 }).toJSDate(), lat, lng);
+  const { caution } = goodAndCautionWindows(divideDaylight(sun, 1), tz);
+  const rahu = caution.find((w) => w.label === "Rahu Kalam");
+  const c = COPY[l];
+  return {
+    key: `weekly:${dateStr}`,
+    at: DateTime.fromISO(`${dateStr}T${WEEKLY_LOCAL}`, { zone: tz }).toMillis(),
+    urgency: "normal",
+    ttl: 6 * 60 * 60,
+    payload: {
+      ...basePayload("weekly_outlook", l, `muh-weekly-${dateStr}`),
+      renotify: false,
+      title: c.weeklyTitle,
+      body: c.weeklyBody(rahu ? fmtRange(rahu.start, rahu.end) : "—"),
+      image: "/notifications/daily.png",
+      url: "/today?src=push_weekly",
+      actions: [{ action: "today", title: c.openToday, url: "/today?src=push_weekly" }],
+    },
   };
 }
 
@@ -422,11 +541,15 @@ export async function sendTestToProfile(
 }
 
 /** Cron entry point: send every alert that became due since the last run, once. */
-export async function dispatchDuePush(admin: SupabaseClient, nowMs = Date.now()) {
+export async function dispatchDuePush(
+  admin: SupabaseClient,
+  nowMs = Date.now(),
+  chartMoments?: ChartMomentsFn,
+) {
   const { data, error } = await admin
     .from("push_subscriptions")
     .select(
-      "id, profile_id, endpoint, p256dh, auth, locale, timezone, prefs, failure_count, profiles!inner(current_timezone, current_lat, current_lng)",
+      "id, profile_id, endpoint, p256dh, auth, locale, timezone, prefs, failure_count, created_at, profiles!inner(current_timezone, current_lat, current_lng)",
     )
     .is("disabled_at", null)
     .limit(2000);
@@ -438,6 +561,10 @@ export async function dispatchDuePush(admin: SupabaseClient, nowMs = Date.now())
   let considered = 0;
   let sent = 0;
   let failed = 0;
+  let suppressed = 0;
+  const momentsCache = new Map<string, Awaited<ReturnType<ChartMomentsFn>>>();
+  const isDue = (at: number) => at <= nowMs && nowMs - at <= DUE_LOOKBACK_MS;
+
   for (const sub of rows) {
     const p = sub.profiles;
     const tz = p?.current_timezone || sub.timezone || "Asia/Kolkata";
@@ -445,17 +572,93 @@ export async function dispatchDuePush(admin: SupabaseClient, nowMs = Date.now())
     const lng = p?.current_lng != null ? Number(p.current_lng) : 78.4867;
     const dateStr = DateTime.fromMillis(nowMs, { zone: tz }).toISODate();
     if (!dateStr) continue;
-    const due = eventsForDay(dateStr, tz, lat, lng, sub.locale, normalizePrefs(sub.prefs))
-      .filter((e) => e.at <= nowMs && nowMs - e.at <= DUE_LOOKBACK_MS);
+    const prefs = normalizePrefs(sub.prefs);
+    const l = loc(sub.locale);
+    const all = eventsForDay(dateStr, tz, lat, lng, sub.locale, prefs);
+    const brief = all.find((e) => e.payload.kind === "daily_brief");
+    let due = all.filter((e) => isDue(e.at));
+    // The brief already lists the first good window; don't repeat it within 45 min.
+    if (brief) {
+      due = due.filter((e) => !(e.payload.kind === "good_window" && e.at - brief.at < BRIEF_OVERLAP_MS));
+    }
+
+    if (prefs.weekly) {
+      const wk = weeklyEvent(dateStr, tz, lat, lng, l);
+      if (wk && isDue(wk.at)) due.push(wk);
+    }
+
+    const momentAt = DateTime.fromISO(`${dateStr}T${CHART_MOMENT_LOCAL}`, { zone: tz }).toMillis();
+    if (chartMoments && isDue(momentAt) && (prefs.chapter || prefs.child || prefs.friends)) {
+      const cacheKey = `${sub.profile_id}:${dateStr}:${l}`;
+      let moments = momentsCache.get(cacheKey);
+      if (!moments) {
+        const goodTxt = firstGoodWindowText(dateStr, tz, lat, lng);
+        moments = await chartMoments(admin, sub.profile_id, tz, dateStr, l, prefs, goodTxt).catch((e) => {
+          console.warn("[push_dispatch] chart moments failed", e instanceof Error ? e.message : e);
+          return [];
+        });
+        momentsCache.set(cacheKey, moments);
+      }
+      for (const m of moments) {
+        due.push({
+          key: m.key,
+          at: momentAt,
+          urgency: "normal",
+          ttl: 8 * 60 * 60,
+          payload: {
+            ...basePayload(m.kind, l, `muh-${m.kind}-${m.key.split(":")[1] ?? dateStr}`),
+            renotify: false,
+            title: m.title,
+            body: m.body,
+            image: m.image,
+            url: m.url,
+            actions: [{ action: "open", title: COPY[l].openToday, url: m.url }],
+          },
+        });
+      }
+    }
     if (!due.length) continue;
+
+    // New subscribers get a quiet first hour (only the test they asked for).
+    const createdMs = sub.created_at ? Date.parse(sub.created_at) : 0;
+    if (createdMs && nowMs - createdMs < NEW_SUBSCRIPTION_GRACE_MS) {
+      suppressed += due.length;
+      continue;
+    }
+    due = due.filter((e) => {
+      if (inQuietHours(e.at, tz)) {
+        suppressed++;
+        return false;
+      }
+      return true;
+    });
+    if (!due.length) continue;
+
     const { data: done } = await admin
       .from("push_deliveries")
       .select("notification_key")
       .eq("subscription_id", sub.id)
       .in("notification_key", due.map((e) => e.key));
     const doneKeys = new Set(((done ?? []) as { notification_key: string }[]).map((d) => d.notification_key));
+    due = due.filter((e) => !doneKeys.has(e.key));
+    if (!due.length) continue;
+
+    const dayStartIso = DateTime.fromMillis(nowMs, { zone: tz }).startOf("day").toUTC().toISO();
+    const { count: sentToday } = await admin
+      .from("push_deliveries")
+      .select("id", { count: "exact", head: true })
+      .eq("subscription_id", sub.id)
+      .eq("ok", true)
+      .neq("kind", "test")
+      .gte("sent_at", dayStartIso ?? new Date(nowMs - 86400_000).toISOString());
+    let budget = Math.max(0, DAILY_CAP - (sentToday ?? 0));
+    due.sort((a, b) => KIND_PRIORITY[a.payload.kind] - KIND_PRIORITY[b.payload.kind]);
+
     for (const ev of due) {
-      if (doneKeys.has(ev.key)) continue;
+      if (budget <= 0) {
+        suppressed++;
+        continue;
+      }
       considered++;
       const r = await sendToSubscription(sub, ev.payload, {
         ttl: ev.ttl,
@@ -463,10 +666,12 @@ export async function dispatchDuePush(admin: SupabaseClient, nowMs = Date.now())
         topic: ev.payload.kind,
       });
       await recordResult(admin, sub, ev.key, ev.payload.kind, r);
-      if (r.ok) sent++;
-      else failed++;
+      if (r.ok) {
+        sent++;
+        budget--;
+      } else failed++;
       if (r.gone) break;
     }
   }
-  return { subscriptions: rows.length, considered, sent, failed, at: new Date(nowMs).toISOString() };
+  return { subscriptions: rows.length, considered, sent, failed, suppressed, at: new Date(nowMs).toISOString() };
 }

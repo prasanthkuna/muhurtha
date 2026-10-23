@@ -7,6 +7,21 @@ import type { PurposeCheckResult } from "@/lib/engine-parsers";
 import { localizedPurposeLabel } from "@/lib/purpose-labels";
 import { formatDisplayDate } from "@/lib/format-date";
 import { factorLabel, statusLabel } from "@/lib/timing-labels";
+import { formatWindowRange } from "@/lib/format-time";
+import { ShareCardButton } from "@/components/share/share-button";
+import { clip, purposeGlyph, verdictFromStatus } from "@/lib/share/builders";
+import type { CardData } from "@/lib/share/card-types";
+
+function shortDate(iso: string, locale: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale === "te" ? "te-IN" : locale === "hi" ? "hi-IN" : "en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(d);
+}
 
 function FactorList({ title, items, tone }: { title: string; items: string[]; tone: "good" | "caution" }) {
   if (items.length === 0) return null;
@@ -36,13 +51,45 @@ export function PurposeResultCard({
   const label = localizedPurposeLabel(locale, purposeId);
   const status = statusLabel(t, result.status);
   const dateLine = result.targetDate ? formatDisplayDate(result.targetDate, locale) : "";
+  const isChildPurpose = purposeId.startsWith("child_");
+  const shareType = isChildPurpose ? "milestone" : mode === "find" ? "finddate" : "timing";
+
+  function buildShare(): CardData {
+    const best = result.bestWindows[0];
+    const range = best ? formatWindowRange(best.start, best.end) : "";
+    const verdict = verdictFromStatus(result.status);
+    const day = result.targetDate ? shortDate(result.targetDate, locale) : "";
+    const body = clip([result.headline, result.summary].filter(Boolean).join(" "), 230);
+    if (shareType === "finddate") {
+      const tops = result.candidateDates.slice(0, 3).map((c) => shortDate(c.date, locale));
+      return {
+        title: label,
+        value: tops.length > 1 ? tops.join(" · ") : [day, range].filter(Boolean).join(" · "),
+        subtitle: dateLine ? `${t("ui.bestDay")}: ${dateLine}` : undefined,
+        body,
+        glyph: purposeGlyph(purposeId),
+        verdict,
+      };
+    }
+    return {
+      title: shareType === "milestone" ? label : [label, day].filter(Boolean).join(" · "),
+      value: shareType === "milestone" ? [day, range].filter(Boolean).join(" · ") : [status, range].filter(Boolean).join(" · "),
+      subtitle: shareType === "milestone" ? status : result.locationLabel || undefined,
+      body,
+      glyph: purposeGlyph(purposeId),
+      verdict,
+    };
+  }
 
   return (
     <div data-testid="purpose-result" className="space-y-4">
       <ProseBlock>
-        <p className="text-xs uppercase tracking-wide text-gold-text">
-          {label} · {status}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-xs uppercase tracking-wide text-gold-text">
+            {label} · {status}
+          </p>
+          <ShareCardButton type={shareType} build={buildShare} className="-mt-1 shrink-0" />
+        </div>
         {dateLine ? (
           <p className="mt-1 text-sm font-medium text-ink">
             {mode === "find" ? t("ui.bestDay") : t("ui.checkedFor")}: {dateLine}

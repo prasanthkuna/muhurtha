@@ -13,7 +13,10 @@ import {
   updatePushPrefs,
   type PushDeviceStatus,
   type PushPrefs,
+  DEFAULT_PREFS,
 } from "@/lib/web-push";
+import { InstallChip } from "@/components/pwa/install-chip";
+import { usePwaInstall } from "@/lib/pwa-install";
 
 function StatusRow({ label, value, tone }: { label: string; value: string; tone?: "ok" | "warn" }) {
   return (
@@ -33,7 +36,8 @@ function StatusRow({ label, value, tone }: { label: string; value: string; tone?
 /** Settings → Notifications: real Web Push (works with the app closed), status and test. */
 export function PushSection() {
   const { t, locale } = useLocale();
-  const { profileTimezone } = useAppData();
+  const { profileTimezone, chartProfiles } = useAppData();
+  const { standalone, ready: installReady } = usePwaInstall();
   const [status, setStatus] = useState<PushDeviceStatus | null>(null);
   const [busy, setBusy] = useState<"toggle" | "test" | "prefs" | null>(null);
   const [msg, setMsg] = useState<{ text: string; tone: "ok" | "warn" } | null>(null);
@@ -144,6 +148,11 @@ export function PushSection() {
       <p className="px-1 text-sm text-ink-secondary">{t("settings.alertsHint")}</p>
       <dl className="rounded-2xl border border-line bg-paper px-4 py-1">
         <StatusRow
+          label={t("install.openedAs")}
+          value={installReady ? (standalone ? t("install.modeApp") : t("install.modeBrowser")) : "…"}
+          tone={installReady ? (standalone ? "ok" : "warn") : undefined}
+        />
+        <StatusRow
           label={t("settings.pushPermission")}
           value={status ? permissionLabel : "…"}
           tone={status?.permission === "granted" ? "ok" : status?.permission === "denied" ? "warn" : undefined}
@@ -171,6 +180,7 @@ export function PushSection() {
         }
         title={on ? t("settings.alertsOn") : t("settings.alertsOff")}
       />
+      <InstallChip variant="row" force />
       {on ? (
         <>
           <div className="rounded-2xl border border-line bg-paper px-4 py-2">
@@ -179,6 +189,14 @@ export function PushSection() {
                 ["daily", t("settings.pushPrefDaily")],
                 ["good", t("settings.pushPrefGood")],
                 ["rahu", t("settings.pushPrefRahu")],
+                ["chapter", t("settings.pushPrefChapter")],
+                ...(chartProfiles.length > 0
+                  ? ([
+                      ["child", t("settings.pushPrefChild")],
+                      ["friends", t("settings.pushPrefFriends")],
+                    ] as const)
+                  : []),
+                ["weekly", t("settings.pushPrefWeekly")],
               ] as const
             ).map(([key, label]) => (
               <label key={key} className="flex min-h-11 items-center justify-between gap-3 text-sm text-ink">
@@ -186,12 +204,13 @@ export function PushSection() {
                 <input
                   type="checkbox"
                   className="h-5 w-5 accent-[var(--color-gold-text,#8a6a2f)]"
-                  checked={status?.prefs[key] ?? true}
+                  checked={status?.prefs[key] ?? DEFAULT_PREFS[key]}
                   disabled={busy === "prefs"}
                   onChange={(e) => void setPref(key, e.target.checked)}
                 />
               </label>
             ))}
+            <p className="border-t border-line/70 py-2 text-xs text-ink-tertiary">{t("settings.pushQuiet")}</p>
           </div>
           <SettingsRow
             onClick={() => void test()}
@@ -201,6 +220,7 @@ export function PushSection() {
           />
         </>
       ) : null}
+      {on ? <p className="px-1 text-xs text-ink-tertiary">{t("settings.pushSpamHelp")}</p> : null}
       {status?.permission === "denied" && !msg ? (
         <p className="px-1 text-sm text-warning-ink">{t("settings.pushBlockedHelp")}</p>
       ) : null}
