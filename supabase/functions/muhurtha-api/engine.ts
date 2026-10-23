@@ -6241,7 +6241,7 @@ async function _handleInternal(
     const dateStr = todayInTimezone(tz);
     const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
     const bi = await ensureBirthPlacePrecision(supabase, rawBi);
-    // remedy_catalog was never populated (dropped 2026-10-23); remedies come from the reading.
+    // remedy_catalog (6 unused seed rows) was dropped 2026-10-23; remedies come from the reading.
     const catalog: Record<string, unknown>[] = [];
     let lord = "";
     if (bi) {
