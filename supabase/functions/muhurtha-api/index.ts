@@ -9,7 +9,6 @@ import {
   sweepStalledBirthPacks,
   warmBirthPack,
 } from "./engine.ts";
-import { smokeTestLocaleLlm } from "./locale_smoke.ts";
 import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
 import { runWarmup } from "./warmup.ts";
@@ -115,30 +114,6 @@ Deno.serve(async (req) => {
         serviceKey,
       );
       const result = await warmBirthPack(adminSupabase, body);
-      return new Response(JSON.stringify(result), {
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
-    }
-
-    if (body.action === "smoke_test_locale_llm") {
-      if (!isServiceRoleRequest(req, serviceKey)) {
-        return new Response(JSON.stringify({ error: "forbidden" }), {
-          status: 403,
-          headers: { ...cors, "Content-Type": "application/json" },
-        });
-      }
-      const locale = (body.locale as AppLocale) ?? "en";
-      const skipOpenAi = body.skip_openai === true;
-      const loggingSupabase = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "",
-        serviceKey,
-      );
-      const result = await smokeTestLocaleLlm(
-        locale,
-        loggingSupabase,
-        null,
-        { skipOpenAi },
-      );
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
       });

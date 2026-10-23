@@ -63,7 +63,6 @@ import { generateJourneyLlmCards, generateProofLlmCards } from "./journey_llm.ts
 import {
   CONTENT_PROMPT_VERSION,
   generateNarrativeCopy,
-  generatePurposeCopy,
 } from "./content_llm.ts";
 import { ASK_PROMPT_VERSION } from "./ask_llm.ts";
 import { formatAskWindow, normalizeAskTemplates, resolveAskFromPack, type AskAnswerCopy } from "./ask_pack.ts";
@@ -2699,7 +2698,7 @@ async function ensureBirthPack(
     "info",
     "birth_pack_llm_started",
     undefined,
-    { locale, factSignature: factSignature.slice(0, 120), mode: "phased-openai-mini-3" },
+    { locale, factSignature: factSignature.slice(0, 120), mode: "phased" },
   );
 
   await continueBirthPackGeneration(continuationCtx, {
@@ -6242,10 +6241,8 @@ async function _handleInternal(
     const dateStr = todayInTimezone(tz);
     const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
     const bi = await ensureBirthPlacePrecision(supabase, rawBi);
-    const { data: catalog } = await supabase
-      .from("remedy_catalog")
-      .select("id, remedy_key, remedy_type, title, simple_line, applicable_planets")
-      .eq("is_active", true);
+    // remedy_catalog was never populated (dropped 2026-10-23); remedies come from the reading.
+    const catalog: Record<string, unknown>[] = [];
     let lord = "";
     if (bi) {
       const { segments, nk } = computeTimeline(
