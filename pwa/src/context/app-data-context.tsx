@@ -171,6 +171,29 @@ async function postEngine(body: Record<string, unknown>) {
   return { res, json };
 }
 
+const CHART_LIST_KEY = "muhurta.chartProfiles.v1";
+
+function readCachedChartProfiles(uid: string | null): ChartProfileSummary[] {
+  if (!uid || typeof window === "undefined") return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(`${CHART_LIST_KEY}:${uid}`) ?? "[]");
+    return Array.isArray(raw)
+      ? raw.filter((p): p is ChartProfileSummary => Boolean(p && typeof p.id === "string" && p.label))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedChartProfiles(uid: string | null, list: ChartProfileSummary[]) {
+  if (!uid || typeof window === "undefined") return;
+  try {
+    localStorage.setItem(`${CHART_LIST_KEY}:${uid}`, JSON.stringify(list));
+  } catch {
+    /* storage full or blocked */
+  }
+}
+
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const { locale, localeReady } = useLocale();
   const [pack, setPack] = useState<BirthPackPayload | null>(null);
@@ -217,6 +240,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       userIdRef.current = snap.uid;
       setUserId(snap.uid);
       setAccessState(readAccess(snap.uid));
+      // Family charts survive a hard reload (the chip menu used to show only "You" until a
+      // full load finished, and never if that load was superseded or failed).
+      const cachedCharts = readCachedChartProfiles(snap.uid);
+      if (cachedCharts.length) setChartProfiles(cachedCharts);
     }
     if (readActiveChartId()) {
       try {
@@ -247,7 +274,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         action: "chart_profile_list",
         locale: localeRef.current,
       });
-      if (res.ok) setChartProfiles(parseChartProfileList(json));
+      if (res.ok) {
+        const list = parseChartProfileList(json);
+        setChartProfiles(list);
+        writeCachedChartProfiles(userIdRef.current, list);
+      }
     } catch {
       /* ignore */
     }
@@ -310,6 +341,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           setPack(null);
           setToday(null);
           clearEngineCache({ forgetUser: true });
+          setChartProfiles([]);
           return;
         }
 
@@ -321,6 +353,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         userIdRef.current = uid;
         setUserId(uid);
         writeLastUserId(uid);
+        // The chart list does not depend on the reading: fetch it right away, in parallel.
+        if (!opts?.poll) void reloadChartProfiles();
 
         const cachedEntry = opts?.force ? null : cachedFor(uid);
         const hasPack = Boolean(cachedEntry);
@@ -435,7 +469,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         });
 
         await Promise.all([packTask, todayTask]);
-        if (live() && !opts?.poll) void reloadChartProfiles();
       } catch (e) {
         if (!live()) return;
         if (!uid || !cachedFor(uid)) {
