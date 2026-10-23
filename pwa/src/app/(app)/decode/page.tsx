@@ -10,10 +10,13 @@ import { LoadingState } from "@/components/editorial/loading-state";
 import { LuckyStrip } from "@/components/editorial/lucky-strip";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
+import { isChildStage } from "@/lib/life-stage";
+
+const ADULT_ONLY_DOMAINS = new Set(["career", "money", "business", "relationship"]);
 
 export default function DecodePage() {
   const { t } = useLocale();
-  const { views, loading, error, pack, preparing } = useAppData();
+  const { views, loading, error, pack, preparing, activeLifeStage } = useAppData();
 
   if (loading && !pack) return <LoadingState message={t("decode.opening")} />;
   if (preparing && (!views || !pack)) return <ReadingUnavailable title={t("nav.decode")} />;
@@ -28,7 +31,10 @@ export default function DecodePage() {
     );
   }
 
-  const domains = views.domainReports();
+  // A child's chart has no career/money/business/romance reading: hide those sections.
+  const domains = isChildStage(activeLifeStage)
+    ? views.domainReports().filter((d) => !ADULT_ONLY_DOMAINS.has(d.key))
+    : views.domainReports();
   const luck = views.natalLuck;
 
   return (

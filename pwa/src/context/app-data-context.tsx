@@ -14,6 +14,7 @@ import {
 import { useLocale } from "@/context/locale-context";
 import { BirthPackViews, normalizePackResponse } from "@/lib/birth-pack-views";
 import { parseChartProfileList, type ChartProfileSummary } from "@/lib/chart-profiles";
+import { lifeStageFromDob, type LifeStage } from "@/lib/life-stage";
 import { CHART_PROFILE_STORAGE_KEY } from "@/lib/locale";
 import {
   clearEngineCache,
@@ -45,6 +46,9 @@ export type PackPreparing = {
 type AccessInfo = { isPro?: boolean; isPlus?: boolean; planCode?: string };
 
 const ACTIVE_LABEL_KEY = "muh_active_chart_label_v1";
+const ACTIVE_DOB_KEY = "muh_active_chart_dob_v1";
+/** While a renamed/legacy friend reading regenerates in the background, re-check this often. */
+const PACK_REFRESH_POLL_MS = 15_000;
 const ACCESS_KEY_PREFIX = "muh_access_v1_";
 const PACK_POLL_MS = 4_000;
 const PACK_STALL_MS = 6 * 60_000;
@@ -86,6 +90,8 @@ type AppDataContextValue = {
   dataLocale: string | null;
   activeChartProfileId: string | null;
   activeChartLabel: string | null;
+  /** Age band of the chart on screen (friend charts by birth date; your own = adult). */
+  activeLifeStage: LifeStage;
   chartProfiles: ChartProfileSummary[];
   setActiveChartProfile: (id: string | null, label?: string | null) => Promise<void>;
   reloadChartProfiles: () => Promise<void>;
@@ -163,12 +169,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [activeChartProfileId, setActiveChartProfileId] = useState<string | null>(null);
   const [activeChartLabel, setActiveChartLabel] = useState<string | null>(null);
+  const [activeChartDob, setActiveChartDob] = useState<string | null>(null);
+  const [packRefreshing, setPackRefreshing] = useState(false);
   const [chartProfiles, setChartProfiles] = useState<ChartProfileSummary[]>([]);
   const [dataLocale, setDataLocale] = useState<string | null>(null);
   const [access, setAccessState] = useState<AccessInfo | null>(null);
   const [preparing, setPreparing] = useState<PackPreparing | null>(null);
   const [pollTick, setPollTick] = useState(0);
   const userIdRef = useRef<string | null>(null);
+  const chartProfilesRef = useRef<ChartProfileSummary[]>([]);
+  useEffect(() => {
+    chartProfilesRef.current = chartProfiles;
+  }, [chartProfiles]);
   const inflight = useRef<{ key: string; promise: Promise<void> } | null>(null);
   // Always the latest locale, so callbacks captured before a language switch (e.g. a
   // refresh() closure held by Settings) can never reload the previous language.
@@ -197,6 +209,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (readActiveChartId()) {
       try {
         setActiveChartLabel(localStorage.getItem(ACTIVE_LABEL_KEY));
+        setActiveChartDob(localStorage.getItem(ACTIVE_DOB_KEY));
       } catch {
         /* ignore */
       }
@@ -368,6 +381,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 throw new Error(json.error?.toString() ?? "Failed to load pack");
               }
               const normalized = normalizePackResponse(json);
+              // Old reading served while a corrected one regenerates (e.g. a friend chart
+              // written with the wrong name): keep polling quietly until it lands.
+              setPackRefreshing(Boolean(json.refreshing));
               recordAccess(normalized.access);
               setPack(normalized);
               setPreparing(null);
@@ -459,6 +475,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (id: string | null, label?: string | null) => {
       setActiveChartProfileId(id);
       setActiveChartLabel(label ?? null);
+      setActiveChartDob(id ? chartProfilesRef.current.find((p) => p.id === id)?.dateOfBirth ?? null : null);
+      setPackRefreshing(false);
       setPreparing(null);
       if (id) {
         localStorage.setItem(CHART_PROFILE_STORAGE_KEY, id);
@@ -466,6 +484,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       } else {
         localStorage.removeItem(CHART_PROFILE_STORAGE_KEY);
         localStorage.removeItem(ACTIVE_LABEL_KEY);
+        localStorage.removeItem(ACTIVE_DOB_KEY);
       }
       // Cache-first: switching back to your own (or any previously opened) chart renders
       // instantly from the per-chart cache and revalidates in the background. The load
@@ -496,18 +515,35 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!activeChartProfileId) {
       setActiveChartLabel(null);
+      setActiveChartDob(null);
       return;
     }
     const found = chartProfiles.find((p) => p.id === activeChartProfileId);
     if (found) {
       setActiveChartLabel(found.label);
+      setActiveChartDob(found.dateOfBirth ?? null);
       try {
         localStorage.setItem(ACTIVE_LABEL_KEY, found.label);
+        if (found.dateOfBirth) localStorage.setItem(ACTIVE_DOB_KEY, found.dateOfBirth);
+        else localStorage.removeItem(ACTIVE_DOB_KEY);
       } catch {
         /* ignore */
       }
     }
   }, [activeChartProfileId, chartProfiles]);
+
+  useEffect(() => {
+    if (!packRefreshing) return;
+    const timer = window.setTimeout(() => {
+      void loadOnce({ silent: true, poll: true, force: true });
+    }, PACK_REFRESH_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [packRefreshing, pack, loadOnce]);
+
+  const activeLifeStage = useMemo<LifeStage>(
+    () => (activeChartProfileId ? lifeStageFromDob(activeChartDob) : "adult"),
+    [activeChartProfileId, activeChartDob],
+  );
 
   // While a reading is generating, poll (each poll also nudges the background generator)
   // and swap the reading in as soon as it is ready — no "pull down to refresh".
@@ -640,6 +676,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       userId,
       activeChartProfileId,
       activeChartLabel,
+      activeLifeStage,
       chartProfiles,
       setActiveChartProfile,
       reloadChartProfiles,
@@ -659,6 +696,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     userId,
     activeChartProfileId,
     activeChartLabel,
+    activeLifeStage,
     chartProfiles,
     setActiveChartProfile,
     reloadChartProfiles,

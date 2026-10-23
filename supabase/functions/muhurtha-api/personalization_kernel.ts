@@ -526,6 +526,11 @@ const PURPOSE_DOMAIN_KEYS: Record<string, string[]> = {
   legal_dispute: ["career", "property", "family"],
   spiritual_puja: ["spiritual", "family", "health"],
   creative_public: ["business", "career", "relationship"],
+  child_naming: ["family", "spiritual", "personality"],
+  child_first_food: ["health", "family", "spiritual"],
+  child_first_haircut: ["health", "family", "spiritual"],
+  child_doctor_visit: ["health", "family", "personality"],
+  child_school_start: ["education", "personality", "family"],
 };
 
 function normalizedNakshatraKey(name?: string | null): string {

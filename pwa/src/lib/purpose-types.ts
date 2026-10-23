@@ -14,11 +14,28 @@ export const PURPOSE_OPTIONS = [
   { id: "creative_public", label: "Creative / public" },
 ] as const;
 
-export type PurposeType = (typeof PURPOSE_OPTIONS)[number]["id"];
+/** Purposes shown for charts under 13 (also `purposeRules` keys in the engine). */
+export const CHILD_PURPOSE_OPTIONS = [
+  { id: "child_naming", label: "Naming ceremony" },
+  { id: "child_first_food", label: "First food (annaprashana)" },
+  { id: "child_first_haircut", label: "First haircut" },
+  { id: "child_doctor_visit", label: "Vaccination / doctor visit" },
+  { id: "travel", label: "Travel" },
+  { id: "child_school_start", label: "School start" },
+] as const;
+
+export type PurposeType =
+  | (typeof PURPOSE_OPTIONS)[number]["id"]
+  | (typeof CHILD_PURPOSE_OPTIONS)[number]["id"];
+
+const ALL_OPTIONS: readonly { id: PurposeType; label: string }[] = [
+  ...PURPOSE_OPTIONS,
+  ...CHILD_PURPOSE_OPTIONS,
+];
 
 /** Legacy query params from Today CTA */
 export function purposeLabel(id: string): string {
-  return PURPOSE_OPTIONS.find((p) => p.id === id)?.label ?? id.replaceAll("_", " ");
+  return ALL_OPTIONS.find((p) => p.id === id)?.label ?? id.replaceAll("_", " ");
 }
 
 export function normalizePurposeType(raw: string | null | undefined): PurposeType | "" {
@@ -30,6 +47,6 @@ export function normalizePurposeType(raw: string | null | undefined): PurposeTyp
     family: "family_discussion",
   };
   if (raw in map) return map[raw]!;
-  if (PURPOSE_OPTIONS.some((p) => p.id === raw)) return raw as PurposeType;
+  if (ALL_OPTIONS.some((p) => p.id === raw)) return raw as PurposeType;
   return "";
 }

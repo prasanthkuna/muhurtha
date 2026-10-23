@@ -148,9 +148,16 @@ export function evaluateDay(args: {
   const onlyGeneral = purpose === "relationship_marriage_talk" || purpose === "spiritual_puja" ||
     purpose === "property_vehicle" || purpose === "legal_dispute";
   if (onlyGeneral) limitations.push("A specialist Muhurta ruleset is required for formal ceremonies and binding decisions.");
-  const status: DayEvaluation["status"] = onlyGeneral || (natalNak < 0 && birthSign < 0)
+  const childSamskara = purpose === "child_naming" || purpose === "child_first_food" ||
+    purpose === "child_first_haircut";
+  if (childSamskara) limitations.push("For the ceremony itself, confirm the final Muhurta with your family priest.");
+  const medical = purpose === "child_doctor_visit";
+  if (medical) limitations.push("Never delay a vaccination or medical care for timing; use this only to pick a calmer slot within your doctor's schedule.");
+  let status: DayEvaluation["status"] = onlyGeneral || (natalNak < 0 && birthSign < 0)
     ? "limited_assessment"
     : rank > 0 ? "matched" : rank < 0 ? "not_matched" : "partly_matched";
+  // Medical visits are never "wait": at worst the day is mixed.
+  if (medical && status === "not_matched") status = "partly_matched";
   return {
     date,locationVerified:true,method:"sunrise-panchanga-lahiri-v1",timezone:zone,
     tithi,nakshatra,yoga,karana:karanaFactor,vara,tarabala,chandrabala,

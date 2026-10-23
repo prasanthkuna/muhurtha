@@ -171,6 +171,7 @@ const en: MessageTree = {
     summaryCaution: "Avoid",
   },
   timing: {
+    childHint: "Milestones for a child: naming, first food, first haircut, doctor visits, travel and school start.",
     loading: "Loading timing…",
     eyebrow: "Purpose timing",
     title: "Is today aligned?",
@@ -211,6 +212,11 @@ const en: MessageTree = {
     legal_dispute: "Legal matter",
     spiritual_puja: "Spiritual / puja",
     creative_public: "Creative / public",
+    child_naming: "Naming ceremony",
+    child_first_food: "First food (annaprashana)",
+    child_first_haircut: "First haircut",
+    child_doctor_visit: "Vaccination / doctor visit",
+    child_school_start: "School start",
   },
   luck: {
     title: "Your natal luck",
@@ -508,6 +514,11 @@ const te: MessageTree = {
     legal_dispute: "చట్టపరమైన విషయం",
     spiritual_puja: "పూజ / ఆధ్యాత్మిక",
     creative_public: "సృజనాత్మక / పబ్లిక్",
+    child_naming: "నామకరణం",
+    child_first_food: "అన్నప్రాశన (మొదటి అన్నం)",
+    child_first_haircut: "పుట్టు వెంట్రుకలు",
+    child_doctor_visit: "టీకా / డాక్టర్ దగ్గరికి",
+    child_school_start: "అక్షరాభ్యాసం / బడి ప్రారంభం",
   },
   luck: {
     title: "మీ జన్మ అదృష్టం",
@@ -532,6 +543,7 @@ const te: MessageTree = {
     readLife: "లైఫ్ మ్యాప్‌లో చదవండి →",
   },
   timing: {
+    childHint: "పిల్లల ముఖ్య ఘట్టాలు: నామకరణం, అన్నప్రాశన, పుట్టు వెంట్రుకలు, డాక్టర్ దగ్గరికి, ప్రయాణం, బడి ప్రారంభం.",
     loading: "టైమింగ్…",
     eyebrow: "పని సమయం",
     title: "ఈరోజు అనుకూలమా?",
@@ -734,6 +746,7 @@ const hi: MessageTree = {
     readLife: "Life map →",
   },
   timing: {
+    childHint: "बच्चे के खास पड़ाव: नामकरण, अन्नप्राशन, मुंडन, डॉक्टर विज़िट, यात्रा और स्कूल की शुरुआत।",
     loading: "टाइमिंग…",
     eyebrow: "Purpose timing",
     title: "क्या आज aligned है?",

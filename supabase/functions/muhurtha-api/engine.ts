@@ -81,7 +81,7 @@ const ENGINE_V = "v5";
 const JOURNEY_LOOKBACK_YEARS = 15;
 const DEFAULT_LAT = 19.076;
 const DEFAULT_LNG = 72.8777;
-const NARRATIVE_CACHE_VERSION = 11;
+const NARRATIVE_CACHE_VERSION = 12;
 const PACK_DAILY_DAYS = 30;
 const PACK_WEEKLY_WEEKS = 8;
 const PACK_MONTHLY_MONTHS = 12;
@@ -277,6 +277,67 @@ function lifeChapterInfo(
   const phaseSpan = kernel.period.startLabel && kernel.period.endLabel
     ? `${kernel.period.startLabel} - ${kernel.period.endLabel}`
     : "";
+  const stage = kernel.lifeStage ?? "";
+  const isInfant = stage.startsWith("infancy");
+  if (isInfant || stage.startsWith("childhood")) {
+    // Under-13 charts are read by a parent: no "close old loops / big move" adult framing.
+    const monthsLeft = months != null && months <= 18 ? Math.max(1, Math.round(months)) : null;
+    if (loc === "te") {
+      return {
+        title: `${md} అధ్యాయం: ఎదుగుతున్న వయసు`,
+        summary: isInfant
+          ? `ఈ పసి వయసుకు ${md} దశ పునాది వేస్తోంది; ఇప్పుడు ${ad} ఉప దశ నడుస్తోంది. ఈ సమయంలో ముఖ్యమైనవి: నిద్ర, పాలు/ఆహారం సమయానికి, ఆరోగ్య పరీక్షలు, ప్రశాంతమైన, ప్రేమ నిండిన ఇల్లు.`
+          : `ఈ బాల్యానికి ${md} దశ దిశ చూపుతోంది; ఇప్పుడు ${ad} ఉప దశ నడుస్తోంది. ఈ సమయంలో ముఖ్యమైనవి: ఆటల ద్వారా నేర్చుకోవడం, నిలకడైన దినచర్య, మంచి ఆరోగ్య అలవాట్లు, ఇంట్లో ప్రోత్సాహం.`,
+        qualityLabel: "ఎదుగుతున్న వయసు",
+        timelineLabel: monthsLeft != null
+          ? `${phaseSpan ? `${phaseSpan}. ` : ""}ఈ దశ ఇంకా దాదాపు ${monthsLeft} నెలలు; తర్వాత ${next} దశ.`
+          : "ఈ దశ ఇంకా కొనసాగుతోంది.",
+        currentChapterLabel: `${md} పెద్ద అధ్యాయం`,
+        currentEpisodeLabel: `${ad} ప్రస్తుత భాగం`,
+        nextChapterLabel: next ? `${next} తర్వాతి అధ్యాయం` : "",
+        actionLine: isInfant
+          ? "రోజువారీ లయ మృదువుగా, ఊహించగలిగేలా ఉంచండి; చిన్న అలవాట్లే ఇప్పుడు ముఖ్యం."
+          : "ఆసక్తిని ప్రోత్సహించండి, దినచర్య నిలకడగా ఉంచండి; ఫలితం కంటే ప్రయత్నాన్ని మెచ్చుకోండి.",
+        traditionalWhy: kernel.period.line,
+      };
+    }
+    if (loc === "hi") {
+      return {
+        title: `${md} अध्याय: बढ़ती उम्र`,
+        summary: isInfant
+          ? `इन शुरुआती सालों की नींव ${md} रख रहा है; अभी ${ad} का हिस्सा चल रहा है। इस समय सबसे ज़रूरी है: नींद और दूध/खाने की नियमित लय, स्वास्थ्य जांच, और शांत, प्यार भरा घर।`
+          : `इस बचपन को ${md} दिशा दे रहा है; अभी ${ad} का हिस्सा चल रहा है। इस समय सबसे ज़रूरी है: खेल-खेल में सीखना, नियमित दिनचर्या, अच्छी सेहत की आदतें और घर में हौसला।`,
+        qualityLabel: "बढ़ती उम्र",
+        timelineLabel: monthsLeft != null
+          ? `${phaseSpan ? `${phaseSpan}. ` : ""}यह दशा लगभग ${monthsLeft} महीने और; फिर ${next} की दशा।`
+          : "यह अध्याय अभी चल रहा है।",
+        currentChapterLabel: `${md} बड़ा अध्याय`,
+        currentEpisodeLabel: `${ad} अभी का हिस्सा`,
+        nextChapterLabel: next ? `${next} अगला अध्याय` : "",
+        actionLine: isInfant
+          ? "दिन की लय कोमल और तय रखें; अभी छोटी-छोटी आदतें ही सबसे अहम हैं।"
+          : "जिज्ञासा को बढ़ावा दें, दिनचर्या नियमित रखें; नतीजे से ज़्यादा मेहनत की तारीफ़ करें।",
+        traditionalWhy: kernel.period.line,
+      };
+    }
+    return {
+      title: `${md} chapter: growing years`,
+      summary: isInfant
+        ? `${md} sets the tone for these early years, with ${ad} as the current episode. What matters most now: a steady sleep and feeding rhythm, health check-ups, and a calm, loving home.`
+        : `${md} is guiding these childhood years, with ${ad} as the current episode. What matters most now: learning through play, steady routines, good health habits and encouragement at home.`,
+      qualityLabel: "Growing years",
+      timelineLabel: monthsLeft != null
+        ? `${phaseSpan ? `${phaseSpan}. ` : ""}About ${monthsLeft} months of this period remain; ${next} follows.`
+        : "This chapter is still active.",
+      currentChapterLabel: `${md} big chapter`,
+      currentEpisodeLabel: `${ad} current episode`,
+      nextChapterLabel: next ? `${next} next chapter` : "",
+      actionLine: isInfant
+        ? "Keep the day's rhythm gentle and predictable; small routines matter most right now."
+        : "Encourage curiosity and keep routines steady; praise effort more than results.",
+      traditionalWhy: kernel.period.line,
+    };
+  }
   const closeLineEn = months != null && months <= 18
     ? `${phaseSpan ? `${phaseSpan}. ` : ""}About ${
       Math.max(1, Math.round(months))
@@ -2060,7 +2121,8 @@ async function chartSubjectName(
   profile: ProfRow,
   bi: BioRow,
 ): Promise<string | null> {
-  if ((bi as { source?: string | null }).source !== "chart_profile") return null;
+  // Look up by birth_input_id: BioRow selects don't include `source`, so a source check
+  // silently returned null and friend charts were written with the owner's name.
   const { data } = await supabase
     .from("chart_profiles")
     .select("label")
@@ -2193,6 +2255,7 @@ function buildBirthPackContext(
     intentFingerprint(intent),
     phasePlans.map((p) => `${p.periodLabel}:${p.mahadashaLord}-${p.antardashaLord}:${p.tense}`)
       .join("|"),
+    ...(subjectName ? [`subject:${subjectName}`] : []),
   ]);
 
   const lifeChapter = lifeChapterInfo(kernel, locale);
@@ -2916,6 +2979,51 @@ async function resolveBirthInputForRequest(
   return await getLatestBirthInput(supabase, profileId);
 }
 
+type ChatScope = {
+  /** Birth input new chats are stored against (friend chart or the owner's own chart). */
+  birthInputId: string | null;
+  isFriend: boolean;
+  /** Owner scope only: friend-chart birth inputs to exclude from "my" history. */
+  friendBirthInputIds: string[];
+};
+
+/** Ask history is per chart: a friend chart only sees its own chats, "me" sees the rest. */
+async function resolveChatScope(
+  supabase: SupabaseClient,
+  profileId: string,
+  body: Record<string, unknown>,
+): Promise<ChatScope> {
+  const chartProfileId = chartProfileIdFromBody(body);
+  if (chartProfileId) {
+    const chartProfile = await getChartProfile(supabase, chartProfileId, profileId);
+    return { birthInputId: chartProfile.birth_input_id, isFriend: true, friendBirthInputIds: [] };
+  }
+  const [own, friends] = await Promise.all([
+    getLatestBirthInput(supabase, profileId),
+    supabase.from("chart_profiles").select("birth_input_id").eq("owner_profile_id", profileId),
+  ]);
+  return {
+    birthInputId: own?.id ?? null,
+    isFriend: false,
+    friendBirthInputIds: ((friends.data ?? []) as { birth_input_id: string | null }[])
+      .map((r) => r.birth_input_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  };
+}
+
+function chatSessionInScope(sessionBirthInputId: string | null | undefined, scope: ChatScope): boolean {
+  const sid = sessionBirthInputId ?? null;
+  if (scope.isFriend) return sid !== null && sid === scope.birthInputId;
+  return sid === null || !scope.friendBirthInputIds.includes(sid);
+}
+
+/** chat_sessions.birth_input_id ships in a migration applied right after this function. */
+function isMissingChatScopeColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return error.code === "42703" || error.code === "PGRST204" ||
+    (/birth_input_id/.test(error.message ?? "") && /column/i.test(error.message ?? ""));
+}
+
 async function getChartProfileLimit(
   supabase: SupabaseClient,
   profileId: string,
@@ -3083,6 +3191,12 @@ const purposeRules: Record<string, { favor: string[]; caution: string[] }> = {
   legal_dispute: { favor: ["Saturn", "Mars", "Mercury"], caution: ["Rahu"] },
   spiritual_puja: { favor: ["Jupiter", "Moon"], caution: ["Rahu"] },
   creative_public: { favor: ["Venus", "Mercury", "Moon"], caution: ["Rahu"] },
+  // Child purposes (charts under 13). `travel` is shared with the adult set.
+  child_naming: { favor: ["Jupiter", "Moon", "Mercury"], caution: ["Rahu"] },
+  child_first_food: { favor: ["Moon", "Jupiter", "Venus"], caution: ["Rahu", "Mars"] },
+  child_first_haircut: { favor: ["Moon", "Jupiter"], caution: ["Rahu", "Mars"] },
+  child_doctor_visit: { favor: ["Sun", "Moon"], caution: ["Rahu"] },
+  child_school_start: { favor: ["Mercury", "Jupiter"], caution: ["Rahu"] },
 };
 
 function errorMessage(error: unknown): string {
@@ -3521,6 +3635,26 @@ async function _handleInternal(
         };
       }
     }
+    // Friend/family chart packs written before the subject-name fix (or before a rename)
+    // carry another person's name. Keep serving the old reading, regenerate in the
+    // background, and tell the client to poll silently until the new one lands.
+    let refreshing: PackProgress | null = null;
+    if (
+      pack && isClientServablePack(pack) && body.ensure === true && !mayGenerate &&
+      chartProfileIdFromBody(body) && subjectName &&
+      !String(pack.fact_signature ?? "").includes(`subject:${subjectName}`)
+    ) {
+      try {
+        const progress = await kickBirthPackGeneration(adminSupabase, profile, bi, locale, dateStr);
+        if (progress.state === "ready") {
+          pack = await loadBirthPack(adminSupabase, profile, bi, locale, dateStr) ?? pack;
+        } else {
+          refreshing = progress;
+        }
+      } catch (e) {
+        console.warn("[birth_pack_get] subject refresh kick failed", e);
+      }
+    }
     if ((!pack || !isClientServablePack(pack)) && mayGenerate) {
       pack = await ensureBirthPack(adminSupabase, profile, bi, locale, dateStr);
     }
@@ -3586,6 +3720,7 @@ async function _handleInternal(
       locationLabel: profile.current_city ?? "India",
       birthInputId: bi.id,
       packVersion: BIRTH_PACK_VERSION,
+      ...(refreshing ? { refreshing } : {}),
       provider: pack.provider,
       model: pack.model,
       status: packStatus,
@@ -3990,7 +4125,7 @@ async function _handleInternal(
       birthInputId: bi?.id ?? null,
       date: dateStr,
       locationLabel: profile.current_city || "Current Location",
-      displayName: profile.display_name,
+      displayName: await resolveSubjectDisplayName(supabase, profile.id, profile.display_name, body),
       moonSign: rashiInfo,
       birthMoonSign: natalMoon?.sign ?? null,
       birthMoonNakshatra: natalMoon?.nakshatra ?? null,
@@ -4019,14 +4154,32 @@ async function _handleInternal(
   }
 
   if (action === "chat_session_list") {
-    const { data, error } = await supabase
+    const scope = await resolveChatScope(supabase, profile.id, body);
+    let query = supabase
       .from("chat_sessions")
-      .select("id, title, updated_at, language_code")
-      .eq("profile_id", profile.id)
-      .order("updated_at", { ascending: false })
-      .limit(24);
+      .select("id, title, updated_at, language_code, birth_input_id")
+      .eq("profile_id", profile.id);
+    if (scope.isFriend) {
+      query = query.eq("birth_input_id", scope.birthInputId ?? "00000000-0000-0000-0000-000000000000");
+    } else if (scope.friendBirthInputIds.length > 0) {
+      query = query.or(
+        `birth_input_id.is.null,birth_input_id.not.in.(${scope.friendBirthInputIds.join(",")})`,
+      );
+    }
+    let { data, error } = await query.order("updated_at", { ascending: false }).limit(24);
+    if (isMissingChatScopeColumn(error)) {
+      // Pre-migration window: friend charts have no history yet; "me" sees everything.
+      if (scope.isFriend) return { sessions: [], birthInputId: scope.birthInputId };
+      ({ data, error } = await supabase
+        .from("chat_sessions")
+        .select("id, title, updated_at, language_code")
+        .eq("profile_id", profile.id)
+        .order("updated_at", { ascending: false })
+        .limit(24) as unknown as { data: typeof data; error: typeof error });
+    }
     if (error) throw error;
     return {
+      birthInputId: scope.birthInputId,
       sessions: (data ?? []).map((row) => ({
         id: row.id,
         title: row.title,
@@ -4041,14 +4194,26 @@ async function _handleInternal(
     if (!sessionId) {
       throw new ActionError("missing_session_id", "session_id required", 400);
     }
-    const { data: session, error: sessionError } = await supabase
+    const scope = await resolveChatScope(supabase, profile.id, body);
+    let { data: session, error: sessionError } = await supabase
       .from("chat_sessions")
-      .select("id, title")
+      .select("id, title, birth_input_id")
       .eq("id", sessionId)
       .eq("profile_id", profile.id)
       .maybeSingle();
+    if (isMissingChatScopeColumn(sessionError)) {
+      ({ data: session, error: sessionError } = await supabase
+        .from("chat_sessions")
+        .select("id, title")
+        .eq("id", sessionId)
+        .eq("profile_id", profile.id)
+        .maybeSingle() as unknown as { data: typeof session; error: typeof sessionError });
+    }
     if (sessionError) throw sessionError;
-    if (!session) {
+    if (
+      !session ||
+      !chatSessionInScope((session as { birth_input_id?: string | null }).birth_input_id, scope)
+    ) {
       throw new ActionError("chat_session_not_found", "Chat session not found", 404);
     }
     const { data: messages, error: msgError } = await supabase
@@ -4072,13 +4237,6 @@ async function _handleInternal(
   }
 
   if (action === "ask") {
-    if (chartProfileIdFromBody(body)) {
-      throw new ActionError(
-        "ask_requires_own_chart",
-        "Switch to your chart to use Ask",
-        403,
-      );
-    }
     const locale = requestLocale(body, profile);
     const question = String(body.question ?? "").trim();
     if (question.length < 3) {
@@ -4098,31 +4256,58 @@ async function _handleInternal(
       access.isPlus,
     );
 
+    // Active chart (friend chart or own) decides both the reading and where the chat is stored.
+    const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
+    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+    const scope = await resolveChatScope(supabase, profile.id, body);
+    if (scope.isFriend && bi) scope.birthInputId = bi.id;
+
     const requestedSessionId = body.session_id == null ? "" : String(body.session_id);
     let sessionId = requestedSessionId;
     if (sessionId) {
-      const { data: session, error: sessionError } = await supabase
+      let { data: session, error: sessionError } = await supabase
         .from("chat_sessions")
-        .select("id")
+        .select("id, birth_input_id")
         .eq("id", sessionId)
         .eq("profile_id", profile.id)
         .maybeSingle();
+      if (isMissingChatScopeColumn(sessionError)) {
+        ({ data: session, error: sessionError } = await supabase
+          .from("chat_sessions")
+          .select("id")
+          .eq("id", sessionId)
+          .eq("profile_id", profile.id)
+          .maybeSingle() as unknown as { data: typeof session; error: typeof sessionError });
+      }
       if (sessionError) throw sessionError;
       if (!session) {
         throw new ActionError("chat_session_not_found", "Chat session not found", 404);
       }
-    } else {
-      const { data: session, error: sessionError } = await supabase
+      // A chat started on another chart never continues here: start a fresh one instead.
+      if (!chatSessionInScope((session as { birth_input_id?: string | null }).birth_input_id, scope)) {
+        sessionId = "";
+      }
+    }
+    if (!sessionId) {
+      const insertRow = {
+        profile_id: profile.id,
+        title: question.slice(0, 80),
+        language_code: locale,
+      };
+      let { data: session, error: sessionError } = await supabase
         .from("chat_sessions")
-        .insert({
-          profile_id: profile.id,
-          title: question.slice(0, 80),
-          language_code: locale,
-        })
+        .insert({ ...insertRow, birth_input_id: scope.birthInputId })
         .select("id")
         .single();
+      if (isMissingChatScopeColumn(sessionError)) {
+        ({ data: session, error: sessionError } = await supabase
+          .from("chat_sessions")
+          .insert(insertRow)
+          .select("id")
+          .single());
+      }
       if (sessionError) throw sessionError;
-      sessionId = session.id as string;
+      sessionId = session!.id as string;
     }
 
     const day = zonedNoonJsDate(targetDate, tz);
@@ -4142,8 +4327,6 @@ async function _handleInternal(
       label: w.label,
     }));
 
-    const rawBi = await getLatestBirthInput(supabase, profile.id);
-    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
     let currentLord = "";
     let currentSubLord = "";
     if (bi) {
@@ -4236,6 +4419,7 @@ async function _handleInternal(
 
     return {
       sessionId,
+      birthInputId: scope.birthInputId,
       answerId: savedAnswer.id,
       directAnswer: copy.direct_answer,
       bestTime: copy.best_time,
@@ -4277,7 +4461,7 @@ async function _handleInternal(
       throw new ActionError("location_required",
         "Select and save your current city in Profile to calculate its local timings.", 422);
     }
-    const bi = await getLatestBirthInput(supabase, profile.id);
+    const bi = await resolveBirthInputForRequest(supabase, profile.id, body);
     const natal = birthMoonDetails(bi, tz, locale);
     const compare = action === "purpose_compare";
     const length = compare

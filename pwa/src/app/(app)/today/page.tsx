@@ -15,6 +15,7 @@ import { PrimaryButton } from "@/components/editorial/primary-button";
 import { TodayTimingPanel } from "@/components/today/today-timing-panel";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
+import { isChildStage } from "@/lib/life-stage";
 import { todayInTimezone } from "@/lib/local-date";
 import type { TimingWindow, TodayPayload } from "@/lib/today-types";
 import { scrubList, scrubStaleTimes, windowsSummary } from "@/lib/window-text";
@@ -119,8 +120,18 @@ function DayNav({
 
 export default function TodayPage() {
   const { t, locale } = useLocale();
-  const { views, today, loading, error, pack, fetchDay, profileTimezone, activeChartProfileId } =
-    useAppData();
+  const {
+    views,
+    today,
+    loading,
+    error,
+    pack,
+    fetchDay,
+    profileTimezone,
+    activeChartProfileId,
+    activeLifeStage,
+  } = useAppData();
+  const childChart = isChildStage(activeLifeStage);
   const [outlookOpen, setOutlookOpen] = useState(false);
   const [offset, setOffset] = useState(0);
   const [other, setOther] = useState<{
@@ -320,9 +331,11 @@ export default function TodayPage() {
       ) : null}
 
       <PrimaryButton href="/timing">{t("today.checkTiming")}</PrimaryButton>
-      <Link href="/decode" className="block text-center text-sm text-gold-text">
-        {t("today.whyDecode")}
-      </Link>
+      {childChart ? null : (
+        <Link href="/decode" className="block text-center text-sm text-gold-text">
+          {t("today.whyDecode")}
+        </Link>
+      )}
     </div>
   );
 }

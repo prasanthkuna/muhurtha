@@ -2,7 +2,7 @@
 
 import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AskAnswerCard } from "@/components/ask/ask-answer-card";
 import { PageHeader } from "@/components/editorial/page-header";
 import { LoadingState } from "@/components/editorial/loading-state";
@@ -11,23 +11,44 @@ import { useLocale } from "@/context/locale-context";
 import { parseAskAnswer } from "@/lib/engine-parsers";
 import type { AskMessage } from "@/lib/types";
 
+type SessionRow = { id: string; title: string; updatedAt: string };
+type Thread = { messages: AskMessage[]; sessionId?: string; sessions: SessionRow[] };
+const EMPTY_THREAD: Thread = { messages: [], sessions: [] };
+/**
+ * Ask history per user + chart. Questions asked on a friend's chart live with that chart
+ * (engine stores them against its birth_input_id) and never show on yours, and vice versa.
+ * Module-level so switching charts or tabs keeps each chart's open thread.
+ */
+const askThreads = new Map<string, Thread>();
+
 function AskInner() {
   const params = useSearchParams();
   const seed = params.get("q") ?? "";
   const { t } = useLocale();
   const engineBody = useEngineBody();
-  const { views, loading, error } = useAppData();
-  const [messages, setMessages] = useState<AskMessage[]>([]);
+  const { views, loading, error, userId, activeChartProfileId } = useAppData();
+  const chartKey = `${userId ?? "anon"}:${activeChartProfileId ?? "self"}`;
+  const [threads, setThreads] = useState<Record<string, Thread>>(() =>
+    Object.fromEntries(askThreads),
+  );
+  const thread = threads[chartKey] ?? askThreads.get(chartKey) ?? EMPTY_THREAD;
+  const { messages, sessionId, sessions } = thread;
   const [input, setInput] = useState(seed);
   const [busy, setBusy] = useState(false);
-  const [sessionId, setSessionId] = useState<string | undefined>();
-  const [sessions, setSessions] = useState<
-    { id: string; title: string; updatedAt: string }[]
-  >([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  /** Updates one chart's thread; async results always land on the chart they were asked on. */
+  const updateThread = useCallback((key: string, fn: (t: Thread) => Thread) => {
+    setThreads((prev) => {
+      const next = fn(prev[key] ?? askThreads.get(key) ?? EMPTY_THREAD);
+      askThreads.set(key, next);
+      return { ...prev, [key]: next };
+    });
+  }, []);
 
   useEffect(() => {
     if (loading || !views) return;
+    const key = chartKey;
     void (async () => {
       try {
         const res = await fetch("/api/engine", {
@@ -39,21 +60,20 @@ function AskInner() {
         if (!res.ok) return;
         const rows = json.sessions;
         if (!Array.isArray(rows)) return;
-        setSessions(
-          rows
-            .filter((r): r is Record<string, unknown> => typeof r === "object" && r !== null)
-            .map((r) => ({
-              id: r.id?.toString() ?? "",
-              title: r.title?.toString() ?? "Chat",
-              updatedAt: r.updatedAt?.toString() ?? "",
-            }))
-            .filter((r) => r.id),
-        );
+        const parsed = rows
+          .filter((r): r is Record<string, unknown> => typeof r === "object" && r !== null)
+          .map((r) => ({
+            id: r.id?.toString() ?? "",
+            title: r.title?.toString() ?? "Chat",
+            updatedAt: r.updatedAt?.toString() ?? "",
+          }))
+          .filter((r) => r.id);
+        updateThread(key, (t) => ({ ...t, sessions: parsed }));
       } catch {
         /* ignore */
       }
     })();
-  }, [engineBody, loading, views, messages.length]);
+  }, [engineBody, loading, views, messages.length, chartKey, updateThread]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -71,8 +91,9 @@ function AskInner() {
     const q = text.trim();
     if (!q) return;
     setInput("");
+    const key = chartKey;
     const userMsg: AskMessage = { id: crypto.randomUUID(), role: "user", text: q };
-    setMessages((m) => [...m, userMsg]);
+    updateThread(key, (t) => ({ ...t, messages: [...t.messages, userMsg] }));
     setBusy(true);
 
     try {
@@ -93,23 +114,26 @@ function AskInner() {
           code === "free_ask_limit_reached"
             ? t("ask.limit")
             : json.error?.toString() ?? "Ask failed. Try again.";
-        setMessages((m) => [
-          ...m,
-          { id: crypto.randomUUID(), role: "assistant", text: errText },
-        ]);
+        updateThread(key, (t) => ({
+          ...t,
+          messages: [...t.messages, { id: crypto.randomUUID(), role: "assistant", text: errText }],
+        }));
         return;
       }
       const parsed = parseAskAnswer(json);
-      if (parsed.sessionId) setSessionId(parsed.sessionId);
-      setMessages((m) => [
-        ...m,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          text: parsed.directAnswer,
-          meta: parsed,
-        },
-      ]);
+      updateThread(key, (t) => ({
+        ...t,
+        sessionId: parsed.sessionId || t.sessionId,
+        messages: [
+          ...t.messages,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            text: parsed.directAnswer,
+            meta: parsed,
+          },
+        ],
+      }));
     } finally {
       setBusy(false);
     }
@@ -132,6 +156,7 @@ function AskInner() {
                 key={s.id}
                 type="button"
                 onClick={() => {
+                  const key = chartKey;
                   void (async () => {
                     const res = await fetch("/api/engine", {
                       method: "POST",
@@ -140,20 +165,18 @@ function AskInner() {
                     });
                     const json = (await res.json()) as Record<string, unknown>;
                     if (!res.ok) return;
-                    setSessionId(s.id);
                     const rows = json.messages;
                     if (!Array.isArray(rows)) return;
-                    setMessages(
-                      rows
-                        .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null)
-                        .map((m) => ({
-                          id: m.id?.toString() ?? crypto.randomUUID(),
-                          role: (m.role?.toString() === "user" ? "user" : "assistant") as
-                            | "user"
-                            | "assistant",
-                          text: m.text?.toString() ?? "",
-                        })),
-                    );
+                    const loaded: AskMessage[] = rows
+                      .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null)
+                      .map((m) => ({
+                        id: m.id?.toString() ?? crypto.randomUUID(),
+                        role: (m.role?.toString() === "user" ? "user" : "assistant") as
+                          | "user"
+                          | "assistant",
+                        text: m.text?.toString() ?? "",
+                      }));
+                    updateThread(key, (t) => ({ ...t, sessionId: s.id, messages: loaded }));
                   })();
                 }}
                 className="min-h-9 shrink-0 rounded-full border border-line bg-paper px-3 py-1.5 text-sm text-ink-secondary hover:border-gold-accent/50"

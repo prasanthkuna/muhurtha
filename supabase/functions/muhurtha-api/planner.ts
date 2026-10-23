@@ -385,6 +385,11 @@ function purposeLabel(purposeType: string, loc: AppLocale): string {
     legal_dispute: { en: "legal step", hi: "कानूनी कदम", te: "న్యాయ అడుగు" },
     spiritual_puja: { en: "puja", hi: "पूजा", te: "పూజ" },
     creative_public: { en: "public share", hi: "सार्वजनिक प्रस्तुति", te: "పబ్లిక్ షేర్" },
+    child_naming: { en: "naming ceremony", hi: "नामकरण", te: "నామకరణం" },
+    child_first_food: { en: "first food", hi: "अन्नप्राशन", te: "అన్నప్రాశన" },
+    child_first_haircut: { en: "first haircut", hi: "मुंडन", te: "పుట్టు వెంట్రుకలు" },
+    child_doctor_visit: { en: "doctor visit", hi: "डॉक्टर विज़िट", te: "డాక్టర్ దగ్గరికి" },
+    child_school_start: { en: "school start", hi: "स्कूल की शुरुआत", te: "బడి ప్రారంభం" },
   } as const;
   const row = map[purposeType as keyof typeof map];
   if (!row) return purposeType;

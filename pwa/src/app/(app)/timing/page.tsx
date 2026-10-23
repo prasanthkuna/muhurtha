@@ -15,6 +15,7 @@ import { parsePurposeCheck, type PurposeCheckResult } from "@/lib/engine-parsers
 import { todayInTimezone } from "@/lib/local-date";
 import { localizedPurposeLabel, localizedPurposeOptions } from "@/lib/purpose-labels";
 import { normalizePurposeType } from "@/lib/purpose-types";
+import { isChildStage } from "@/lib/life-stage";
 import { savePlan } from "@/lib/saved-plans";
 import { formatDisplayDate } from "@/lib/format-date";
 import { statusLabel } from "@/lib/timing-labels";
@@ -33,9 +34,10 @@ function TimingInner() {
   const [busy, setBusy] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const { t, locale } = useLocale();
-  const purposeOptions = localizedPurposeOptions(locale);
   const engineBody = useEngineBody();
-  const { views, loading, error, pack, profileTimezone } = useAppData();
+  const { views, loading, error, pack, profileTimezone, activeLifeStage } = useAppData();
+  const childChart = isChildStage(activeLifeStage);
+  const purposeOptions = localizedPurposeOptions(locale, activeLifeStage);
   const resultRef = useRef<HTMLDivElement>(null);
   const [scrollPending, setScrollPending] = useState(false);
   // Only scroll for checks the user asked for (button / candidate tap), not the silent
@@ -65,6 +67,17 @@ function TimingInner() {
     const p = normalizePurposeType(params.get("purpose"));
     if (p) setPurpose(p);
   }, [params]);
+
+  // Switching between an adult and a child chart swaps the purpose set: drop a selection
+  // that isn't offered for this chart (e.g. "Business launch" on a toddler's chart).
+  const purposeIds = purposeOptions.map((p) => p.id).join(",");
+  useEffect(() => {
+    if (purpose && !purposeIds.split(",").includes(purpose)) {
+      setPurpose("");
+      setResult(null);
+      setErrorMsg(null);
+    }
+  }, [purpose, purposeIds]);
 
   useEffect(() => {
     if (!targetDate && profileTimezone) {
@@ -171,6 +184,7 @@ function TimingInner() {
         </button>
       </div>
 
+      {childChart ? <p className="text-xs text-ink-tertiary">{t("timing.childHint")}</p> : null}
       <div className="flex flex-wrap gap-2">
         {purposeOptions.map((p) => (
           <button

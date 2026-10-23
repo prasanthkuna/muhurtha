@@ -1,8 +1,8 @@
 import type { BirthPackPayload } from "./types";
 import type { TodayPayload } from "./today-types";
 
-const PACK_PREFIX = "muh_engine_pack_v3_";
-const TODAY_PREFIX = "muh_engine_today_v3_";
+const PACK_PREFIX = "muh_engine_pack_v4_";
+const TODAY_PREFIX = "muh_engine_today_v4_";
 // Last reading stays renderable offline for a week; it is revalidated hourly when online.
 const PACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -157,7 +157,8 @@ export function clearEngineCache(opts?: { forgetUser?: boolean }) {
     }
   }
   for (const key of Object.keys(localStorage)) {
-    if (key.startsWith(PACK_PREFIX) || key.startsWith(TODAY_PREFIX)) {
+    // Also sweeps older cache versions (v3 and before).
+    if (key.startsWith("muh_engine_pack_v") || key.startsWith("muh_engine_today_v")) {
       localStorage.removeItem(key);
     }
   }
