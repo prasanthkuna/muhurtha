@@ -6,15 +6,21 @@ import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function SharePage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const engineBody = useEngineBody();
   const { views, loading, error, pack } = useAppData();
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+
+  // A preview is written in the language it was built in; rebuild after a switch.
+  useEffect(() => {
+    setPreview(null);
+    setCopyMsg(null);
+  }, [locale]);
 
   async function generate() {
     setBusy(true);

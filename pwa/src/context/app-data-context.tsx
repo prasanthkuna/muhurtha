@@ -41,6 +41,10 @@ type AppDataContextValue = {
   error: string | null;
   isPro: boolean;
   refresh: () => Promise<void>;
+  /** Day payload for any date (cached per user/locale/chart/date); used by Today's day browser. */
+  fetchDay: (date: string) => Promise<TodayPayload | null>;
+  /** Locale the currently loaded pack/today were produced in. */
+  dataLocale: string | null;
   activeChartProfileId: string | null;
   activeChartLabel: string | null;
   chartProfiles: ChartProfileSummary[];
@@ -121,8 +125,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [activeChartProfileId, setActiveChartProfileId] = useState<string | null>(null);
   const [activeChartLabel, setActiveChartLabel] = useState<string | null>(null);
   const [chartProfiles, setChartProfiles] = useState<ChartProfileSummary[]>([]);
+  const [dataLocale, setDataLocale] = useState<string | null>(null);
   const userIdRef = useRef<string | null>(null);
   const inflight = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  // Always the latest locale, so callbacks captured before a language switch (e.g. a
+  // refresh() closure held by Settings) can never reload the previous language.
+  const localeRef = useRef(locale);
+  // Monotonic load generation: only the newest load may write state, so a slow request in
+  // the old language cannot land after (and overwrite) the new language's data.
+  const genRef = useRef(0);
+  // "<locale>:<chart>" of the data currently on screen.
+  const dataKeyRef = useRef<string | null>(null);
+
+  useIsomorphicLayoutEffect(() => {
+    // Layout effects run before the load effect below, so load() always sees the new locale.
+    localeRef.current = locale;
+  }, [locale]);
 
   // Apply the cached snapshot before first paint (client only, so SSR markup matches).
   useIsomorphicLayoutEffect(() => {
@@ -136,23 +154,36 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (snap.pack) {
       setPack(snap.pack);
       setToday(snap.today);
+      setDataLocale(locale);
+      dataKeyRef.current = `${locale}:${readActiveChartId() ?? "self"}`;
       setLoading(false);
     }
   }, []);
 
   const reloadChartProfiles = useCallback(async () => {
     try {
-      const { res, json } = await postEngine({ action: "chart_profile_list", locale });
+      const { res, json } = await postEngine({
+        action: "chart_profile_list",
+        locale: localeRef.current,
+      });
       if (res.ok) setChartProfiles(parseChartProfileList(json));
     } catch {
       /* ignore */
     }
-  }, [locale]);
+  }, []);
 
   const load = useCallback(
     async (opts?: { silent?: boolean; force?: boolean }) => {
+      const locale = localeRef.current;
       const chartId = readActiveChartId();
+      const dataKey = `${locale}:${chartId ?? "self"}`;
+      const gen = ++genRef.current;
+      const live = () => gen === genRef.current;
       const cachedFor = (uid: string) => readCachedPackEntry(uid, locale, chartId);
+      const markData = () => {
+        dataKeyRef.current = dataKey;
+        setDataLocale(locale);
+      };
 
       let uid: string | null = null;
       try {
@@ -166,6 +197,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         // Local session read (no network); the engine verifies the token server-side.
         const { data: sessionData } = await supabase.auth.getSession();
         uid = sessionData.session?.user.id ?? null;
+        if (!live()) return;
 
         if (!sessionData.session || !uid) {
           userIdRef.current = null;
@@ -188,8 +220,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         const cachedEntry = opts?.force ? null : cachedFor(uid);
         const hasPack = Boolean(cachedEntry);
-        if (cachedEntry) setPack(cachedEntry.pack);
-        if (!opts?.silent && !hasPack) {
+        const switchedData = dataKeyRef.current !== dataKey;
+        if (cachedEntry) {
+          setPack(cachedEntry.pack);
+          markData();
+        } else if (switchedData) {
+          // Language or chart changed and nothing is cached for it: never keep showing the
+          // previous language's reading while the new one loads.
+          setPack(null);
+          setToday(null);
+        }
+        if ((!opts?.silent || switchedData) && !hasPack) {
           setLoading(true);
           setError(null);
         }
@@ -209,12 +250,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           const date = todayInTimezone(zone);
           const cached = opts?.force ? null : readCachedToday(uid!, locale, chartId, date);
           if (cached) {
-            setToday(cached);
+            if (live()) setToday(cached);
             return;
           }
           const { res, json } = await postEngine(
             engineExtras(locale, chartId, { action: "today_get", date }),
           );
+          if (!live()) return;
           if (res.ok) {
             const parsed = parseTodayPayload(json);
             setToday(parsed);
@@ -230,6 +272,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? postEngine(
               engineExtras(locale, chartId, { action: "birth_pack_get", may_generate: false }),
             ).then(({ res, json }) => {
+              if (!live()) return;
               if (!res.ok) {
                 const code = json.error_code?.toString() ?? "";
                 if (hasPack) return; // keep showing the cached reading
@@ -241,6 +284,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               }
               const normalized = normalizePackResponse(json);
               setPack(normalized);
+              markData();
               setError(null);
               writeCachedPack(uid!, locale, chartId, normalized);
             })
@@ -248,6 +292,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         const todayTask = fetchToday(tz).then(async () => {
           const fromProfile = await tzQuery.catch(() => null);
+          if (!live()) return;
           if (fromProfile && fromProfile !== tz) {
             tz = fromProfile;
             setProfileTimezone(fromProfile);
@@ -260,8 +305,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         });
 
         await Promise.all([packTask, todayTask]);
-        void reloadChartProfiles();
+        if (live()) void reloadChartProfiles();
       } catch (e) {
+        if (!live()) return;
         if (!uid || !cachedFor(uid)) {
           const offline = typeof navigator !== "undefined" && navigator.onLine === false;
           setError(
@@ -274,10 +320,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           setPack(null);
         }
       } finally {
-        setLoading(false);
+        if (live()) setLoading(false);
       }
     },
-    // profileTimezone intentionally omitted: it is read as a hint only.
+    // profileTimezone intentionally omitted: it is read as a hint only. `locale` stays a
+    // dependency so a language switch re-creates load and re-runs the load effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [locale, reloadChartProfiles],
   );
@@ -285,7 +332,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   /** Coalesce overlapping loads (mount + auth events + locale change). */
   const loadOnce = useCallback(
     (opts?: { silent?: boolean; force?: boolean }) => {
-      const key = `${locale}:${readActiveChartId() ?? "self"}`;
+      const key = `${localeRef.current}:${readActiveChartId() ?? "self"}`;
       if (inflight.current && inflight.current.key === key && !opts?.force) {
         return inflight.current.promise;
       }
@@ -295,7 +342,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       inflight.current = { key, promise };
       return promise;
     },
-    [load, locale],
+    [load],
+  );
+
+  const fetchDay = useCallback(
+    async (date: string): Promise<TodayPayload | null> => {
+      const uid = userIdRef.current;
+      const loc = localeRef.current;
+      const chartId = readActiveChartId();
+      if (uid) {
+        const cached = readCachedToday(uid, loc, chartId, date);
+        if (cached) return cached;
+      }
+      const { res, json } = await postEngine(
+        engineExtras(loc, chartId, { action: "today_get", date }),
+      );
+      if (!res.ok) {
+        throw new Error(json.error?.toString() ?? "Could not load this day");
+      }
+      const parsed = parseTodayPayload(json);
+      if (uid && parsed.date === date) writeCachedToday(uid, loc, chartId, parsed);
+      return parsed;
+    },
+    [],
   );
 
   const setActiveChartProfile = useCallback(
@@ -429,6 +498,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         clearEngineCache();
         await loadOnce({ force: true });
       },
+      fetchDay,
+      dataLocale,
       profileTimezone,
       userId,
       activeChartProfileId,
@@ -445,6 +516,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     loading,
     error,
     loadOnce,
+    fetchDay,
+    dataLocale,
     userId,
     activeChartProfileId,
     activeChartLabel,

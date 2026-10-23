@@ -146,9 +146,11 @@ export default function SettingsPage() {
     if (next === locale) return;
     setLangBusy(true);
     try {
+      // The data provider reloads every localized payload (pack, Today, chart list) as soon
+      // as the locale changes and ignores any in-flight request from the old language.
+      // Calling refresh() here used to reload with the *previous* locale captured in its
+      // closure, which left Today in Telugu after switching back to English.
       await setLocale(next);
-      clearEngineCache();
-      await refresh();
       if (notificationsEnabled()) {
         await syncTimingNotifications(today, next, profileTimezone);
       }
