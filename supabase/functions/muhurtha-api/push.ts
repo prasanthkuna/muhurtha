@@ -19,7 +19,8 @@ export type PushKind =
   | "chapter_change"
   | "child_milestone"
   | "friend_birthday"
-  | "weekly_outlook";
+  | "weekly_outlook"
+  | "reading_ready";
 export type PushPrefs = {
   daily: boolean;
   good: boolean;
@@ -75,6 +76,7 @@ const KIND_PRIORITY: Record<PushKind, number> = {
   rahu_heads_up: 4,
   good_window: 5,
   weekly_outlook: 6,
+  reading_ready: 0,
 };
 const DAILY_BRIEF_LOCAL = "06:45";
 const LEAD_MINUTES = 10;
@@ -535,6 +537,64 @@ export async function sendTestToProfile(
     const payload = testPayload(localeRaw ?? sub.locale);
     const r = await sendToSubscription(sub, payload, { ttl: 600, urgency: "high", topic: "muhtest" });
     await recordResult(admin, sub, `test:${Date.now()}`, "test", r);
+    results.push(r);
+  }
+  return results;
+}
+
+const READY_COPY: Record<PushLocale, { title: string; body: (who: string | null) => string; open: string }> = {
+  en: {
+    title: "Your reading is ready",
+    body: (who) => who ? `${who}'s reading is ready. Open it to see the chapter and today's timing.` : "Your chapter, today's card and timing are ready. Tap to open.",
+    open: "Open reading",
+  },
+  te: {
+    title: "మీ రీడింగ్ సిద్ధం",
+    body: (who) => who ? `${who} రీడింగ్ సిద్ధంగా ఉంది. అధ్యాయం, ఈరోజు సమయాలు చూడండి.` : "మీ జీవిత అధ్యాయం, ఈరోజు కార్డ్, మంచి సమయాలు సిద్ధం. తెరవండి.",
+    open: "తెరవండి",
+  },
+  hi: {
+    title: "आपकी रीडिंग तैयार है",
+    body: (who) => who ? `${who} की रीडिंग तैयार है। अध्याय और आज का समय देखें।` : "आपका जीवन अध्याय, आज का कार्ड और शुभ समय तैयार है। खोलें।",
+    open: "खोलें",
+  },
+};
+
+/** One-off "your reading is ready" alert after a background generation finishes. */
+export async function sendReadingReadyToProfile(
+  admin: SupabaseClient,
+  profileId: string,
+  readingId: string,
+  localeRaw: string | null | undefined,
+  subjectLabel: string | null,
+  url = "/today?src=push_ready",
+): Promise<SendResult[]> {
+  const { data, error } = await admin
+    .from("push_subscriptions")
+    .select("id, profile_id, endpoint, p256dh, auth, locale, timezone, prefs, failure_count")
+    .eq("profile_id", profileId)
+    .is("disabled_at", null);
+  if (error) throw error;
+  const subs = (data ?? []) as SubscriptionRow[];
+  const results: SendResult[] = [];
+  const key = `ready:${readingId}`;
+  for (const sub of subs) {
+    const { data: done } = await admin.from("push_deliveries").select("notification_key")
+      .eq("subscription_id", sub.id).eq("notification_key", key).maybeSingle();
+    if (done) continue;
+    const l = loc(localeRaw ?? sub.locale);
+    const c = READY_COPY[l];
+    const payload: NotificationPayload = {
+      ...basePayload("reading_ready", l, `muh-ready-${readingId.slice(0, 8)}`),
+      renotify: true,
+      title: c.title,
+      body: c.body(subjectLabel),
+      image: "/notifications/daily.png",
+      url,
+      actions: [{ action: "open", title: c.open, url }],
+    };
+    const r = await sendToSubscription(sub, payload, { ttl: 6 * 60 * 60, urgency: "high", topic: "muhready" });
+    await recordResult(admin, sub, key, "reading_ready", r);
     results.push(r);
   }
   return results;

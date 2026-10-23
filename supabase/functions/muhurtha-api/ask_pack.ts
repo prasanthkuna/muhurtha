@@ -80,7 +80,7 @@ function clock12(raw: string): string {
   return `${h}:${min} ${ap}`;
 }
 
-function formatAskWindow(
+export function formatAskWindow(
   window: Window,
   caution = false,
 ): string {

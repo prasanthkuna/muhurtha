@@ -1,6 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { handleRequest, pushChartMoments, sweepStalledBirthPacks, warmBirthPack } from "./engine.ts";
+import {
+  handleRequest,
+  migrateLegacyPacks,
+  pushChartMoments,
+  startGoldenReading,
+  sweepReadings,
+  sweepStalledBirthPacks,
+  warmBirthPack,
+} from "./engine.ts";
 import { smokeTestLocaleLlm } from "./locale_smoke.ts";
 import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
@@ -184,6 +192,34 @@ Deno.serve(async (req) => {
       const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
       const result = await sweepStalledBirthPacks(adminSupabase);
       if ((result.considered as number) > 0) console.log("[pack_sweep]", JSON.stringify(result));
+      return new Response(JSON.stringify(result), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    if (
+      body.action === "reading_sweep" || body.action === "reading_golden" ||
+      body.action === "reading_migrate_legacy"
+    ) {
+      // Internal reading v2 entry points: pg_cron sweep, OpenAI webhook relay, golden tests
+      // and the zero-LLM legacy migration. Shared cron secret or the service role only.
+      const cronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
+      const given = req.headers.get("x-push-cron-secret") ?? "";
+      if (!(cronSecret && given === cronSecret) && !isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+      const result = body.action === "reading_sweep"
+        ? await sweepReadings(adminSupabase, body)
+        : body.action === "reading_golden"
+        ? await startGoldenReading(adminSupabase, body)
+        : await migrateLegacyPacks(adminSupabase, body);
+      if (body.action !== "reading_sweep" || (result.considered as number) > 0) {
+        console.log(`[${body.action}]`, JSON.stringify(result).slice(0, 2000));
+      }
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
       });

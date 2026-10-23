@@ -164,3 +164,69 @@ export function evaluateDay(args: {
     support,caution,limitations,status,best_windows,caution_windows,rank,
   };
 }
+
+export type QuickDayFacts = {
+  date: string;
+  weekday: number;
+  tithi: string;
+  paksha: "shukla" | "krishna";
+  nakshatra: string;
+  yoga: string;
+  moonRashi: string;
+  tara: string | null;
+  taraSupport: -1 | 0 | 1 | null;
+  chandraHouse: number | null;
+  chandraSupport: -1 | 1 | null;
+  rank: number;
+  good: { start: string; end: string }[];
+  rahu: { start: string; end: string } | null;
+};
+
+/** Cheap sunrise facts for the reading packet (no transition search). */
+export function quickDayFacts(args: {
+  date: string; zone: string; latitude: number; longitude: number;
+  natalNakshatra?: string | null; natalRashi?: string | null;
+}): QuickDayFacts | null {
+  const day = DateTime.fromISO(args.date, { zone: args.zone });
+  if (!day.isValid) return null;
+  const sun = sunriseSunset(day.set({ hour: 12, minute: 0 }).toJSDate(), args.latitude, args.longitude);
+  if (!Number.isFinite(sun.sunrise.getTime()) || !Number.isFinite(sun.sunset.getTime())) return null;
+  const n = indices(sun.sunrise);
+  const weekday = day.weekday % 7;
+  const windows = goodAndCautionWindows(divideDaylight(sun, weekday), args.zone);
+  let rank = 0;
+  let tara: string | null = null;
+  let taraSupport: QuickDayFacts["taraSupport"] = null;
+  const natalNak = nameIndex(args.natalNakshatra, NAKSHATRAS);
+  if (natalNak >= 0) {
+    const ti = ((n.nakshatra - natalNak + 27) % 27) % 9;
+    tara = TARAS[ti]!;
+    taraSupport = [1, 3, 5, 7, 8].includes(ti) ? 1 : [2, 4, 6].includes(ti) ? -1 : 0;
+    rank += taraSupport;
+  }
+  let chandraHouse: number | null = null;
+  let chandraSupport: QuickDayFacts["chandraSupport"] = null;
+  const birthSign = nameIndex(args.natalRashi, RASHIS);
+  if (birthSign >= 0) {
+    chandraHouse = ((n.moonRashi - birthSign + 12) % 12) + 1;
+    chandraSupport = [1, 3, 6, 7, 10, 11].includes(chandraHouse) ? 1 : -1;
+    rank += chandraSupport;
+  }
+  const rahu = windows.caution.find((w) => w.label === "Rahu Kalam");
+  return {
+    date: args.date,
+    weekday,
+    tithi: tithiLabel(n.tithi),
+    paksha: n.tithi < 15 ? "shukla" : "krishna",
+    nakshatra: NAKSHATRAS[n.nakshatra] ?? "Unknown",
+    yoga: YOGAS[n.yoga] ?? "Unknown",
+    moonRashi: RASHIS[n.moonRashi] ?? "unknown",
+    tara,
+    taraSupport,
+    chandraHouse,
+    chandraSupport,
+    rank,
+    good: windows.good.map((w) => ({ start: w.start, end: w.end })),
+    rahu: rahu ? { start: rahu.start, end: rahu.end } : null,
+  };
+}

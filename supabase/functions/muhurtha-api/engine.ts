@@ -4,7 +4,39 @@ import { antardashaFallbackCopy, plainPeriodLabel } from "./copy.ts";
 import { resolveBirthPlace, resolveCoordinates } from "./geo_resolver.ts";
 import { attachNatalLuckToContent, buildNatalLuck } from "./natal_luck.ts";
 import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
-import { evaluateDay } from "./panchanga.ts";
+import { evaluateDay, quickDayFacts } from "./panchanga.ts";
+import {
+  ADULT_AREAS,
+  buildReadingView,
+  CHILD_AREAS,
+  legacyPackToV2,
+  READING_SCHEMA_VERSION,
+  sanitizeContent,
+  validateContent,
+  WEEKDAYS,
+  type V2ChapterFact,
+  type V2DayFact,
+  type V2Facts,
+  type V2PeriodFact,
+  type V2WeekdayFact,
+  type V2WindowFact,
+} from "./reading_v2.ts";
+import {
+  advanceJob,
+  findReading,
+  jobProgress,
+  latestJob,
+  logLlmCall,
+  startReading,
+  sweepReadingJobs,
+  type JobProgress,
+  type JobRow,
+  type ReadingRow,
+  type ReadyHook,
+} from "./reading_jobs.ts";
+import { openAiConfigured, readingModel } from "./openai_responses.ts";
+import { ASK_V2_PROMPT_VERSION, askWithLlm, normalizeQuestion, type AskContext, type AskLlmAnswer } from "./ask_v2.ts";
+import { sendReadingReadyToProfile } from "./push.ts";
 import {
   normalizePrefs,
   pushConfigured,
@@ -34,7 +66,7 @@ import {
   generatePurposeCopy,
 } from "./content_llm.ts";
 import { ASK_PROMPT_VERSION } from "./ask_llm.ts";
-import { normalizeAskTemplates, resolveAskFromPack } from "./ask_pack.ts";
+import { formatAskWindow, normalizeAskTemplates, resolveAskFromPack, type AskAnswerCopy } from "./ask_pack.ts";
 import {
   BIRTH_PACK_VERSION,
   type BirthIntelligencePackContent,
@@ -96,6 +128,9 @@ import {
 const ENGINE_V = "v5";
 const JOURNEY_LOOKBACK_YEARS = 15;
 const DEFAULT_LAT = 19.076;
+const BIRTH_EDIT_TYPO_MS = 15 * 60_000;
+const BIRTH_EDIT_LIMIT_30 = 2;
+const BIRTH_EDIT_LIMIT_365 = 5;
 const DEFAULT_LNG = 72.8777;
 const NARRATIVE_CACHE_VERSION = 12;
 const PACK_DAILY_DAYS = 30;
@@ -718,7 +753,7 @@ function buildPackPhasePlans(
   locale: AppLocale,
   refInstant: Date,
   kernel: PersonalizationKernel | undefined,
-): PhasePlan[] {
+): (PhasePlan & { startIso?: string; endIso?: string })[] {
   const { segments, nk } = computeTimeline(bi, profile.current_timezone ?? "Asia/Kolkata");
   if (nk === null || !segments.length) return [];
   const ads = allAntardashasFromMahadashas(segments);
@@ -756,7 +791,7 @@ function buildPackPhasePlans(
       idx,
       locale,
     );
-    return buildPhasePlan(seg, idx, locale, {
+    const plan = buildPhasePlan(seg, idx, locale, {
       now: refInstant,
       previous: idx > 0 ? deduped[idx - 1] ?? null : null,
       confidenceLabel: resolveEngineMode(bi) === "full_chart" ? "high" : "medium",
@@ -765,6 +800,7 @@ function buildPackPhasePlans(
       fallbackSentences: fallback.sentences,
       kernel,
     });
+    return Object.assign(plan, { startIso: seg.start.toISOString(), endIso: seg.end.toISOString() });
   });
 }
 
@@ -1064,6 +1100,7 @@ function isClientServablePack(
   row: BirthPackRow | null | undefined,
 ): row is BirthPackRow {
   if (!row) return false;
+  if (isV2Pack(row)) return row.status === "ready";
   if (row.status === "fallback") return false;
   if (!isAllowedBirthPackProvider(row.provider)) return false;
   if (row.status === "ready") return true;
@@ -1269,6 +1306,17 @@ async function loadBirthPack(
   dateStr: string,
 ): Promise<BirthPackRow | null> {
   if (!bi) return null;
+  if (readingPipeline() === "v2") {
+    const v2 = await loadV2Pack(supabase, profile, bi, locale, dateStr);
+    if (v2) {
+      attachNatalLuckToContent(
+        v2.content as Record<string, unknown>,
+        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        locale,
+      );
+      return v2;
+    }
+  }
   const best = await findBestExistingPack(supabase, profile.id, bi.id, locale);
   if (best) {
     attachNatalLuckToContent(
@@ -1568,6 +1616,30 @@ function fillLifeMapFutureGaps(
   return out;
 }
 
+const NOTIFY_FALLBACK: Record<AppLocale, Record<string, { title: string; body: string }>> = {
+  en: {
+    today_ready: { title: "Today's card is ready", body: "Open your timing card before the day gets noisy." },
+    good_time_reminder: { title: "Good window in 10 minutes", body: "Keep one important task ready for it." },
+    good_time_start: { title: "Good time starts now", body: "Use it for the task that matters most today." },
+    caution_time_reminder: { title: "Caution window in 10 minutes", body: "Plan to go lighter: a caution interval opens soon." },
+    caution_start: { title: "Go lighter now", body: "Avoid forcing a new start in this window." },
+  },
+  te: {
+    today_ready: { title: "ఈరోజు కార్డ్ సిద్ధం", body: "రోజు హడావిడి మొదలయ్యే ముందు మీ సమయ కార్డ్ చూడండి." },
+    good_time_reminder: { title: "10 నిమిషాల్లో మంచి సమయం", body: "ఒక ముఖ్యమైన పనిని దానికోసం సిద్ధంగా ఉంచండి." },
+    good_time_start: { title: "మంచి సమయం ఇప్పుడు", body: "ఈరోజు ముఖ్యమైన పనికి దీన్ని వాడండి." },
+    caution_time_reminder: { title: "10 నిమిషాల్లో జాగ్రత్త సమయం", body: "కొత్త మొదలుపెట్టడాలు కాసేపు ఆపండి." },
+    caution_start: { title: "ఇప్పుడు నెమ్మదిగా", body: "ఈ సమయంలో కొత్త పనులను బలవంతంగా మొదలుపెట్టకండి." },
+  },
+  hi: {
+    today_ready: { title: "आज का कार्ड तैयार है", body: "दिन की भागदौड़ से पहले अपना समय कार्ड देखें।" },
+    good_time_reminder: { title: "10 मिनट में शुभ समय", body: "एक ज़रूरी काम इसके लिए तैयार रखें।" },
+    good_time_start: { title: "शुभ समय अभी शुरू", body: "आज के सबसे ज़रूरी काम के लिए इसका उपयोग करें।" },
+    caution_time_reminder: { title: "10 मिनट में सावधानी का समय", body: "कुछ देर नई शुरुआत टालें।" },
+    caution_start: { title: "अब हल्के चलें", body: "इस समय में कोई नई शुरुआत ज़बरदस्ती न करें।" },
+  },
+};
+
 async function persistNotificationSchedule(
   supabase: SupabaseClient,
   pack: BirthPackRow,
@@ -1576,102 +1648,76 @@ async function persistNotificationSchedule(
   locale: AppLocale,
   timing: DailyTimingFact[],
 ) {
-  const notifications = pack.content.notification_copy;
+  const notifications = (pack.content.notification_copy ?? {}) as Record<string, { title?: unknown; body?: unknown } | undefined>;
+  const fb = NOTIFY_FALLBACK[locale] ?? NOTIFY_FALLBACK.en;
+  const copy = (key: string) => ({
+    title: safeString(notifications?.[key]?.title) || fb[key].title,
+    body: safeString(notifications?.[key]?.body) || fb[key].body,
+  });
+  // v2 readings live in public.readings; the legacy FK only points at birth_intelligence_packs.
+  const packId = isV2Pack(pack) ? null : pack.id;
+  const zone = profile.current_timezone ?? "Asia/Kolkata";
+  const nowIso = new Date().toISOString();
   const notificationRows = timing.slice(0, 7).flatMap((day) => {
-    const date = DateTime.fromISO(day.date, {
-      zone: profile.current_timezone ?? "Asia/Kolkata",
-    });
-    const todayReady = notifications?.today_ready;
+    const date = DateTime.fromISO(day.date, { zone });
+    const base = { profile_id: profile.id, birth_input_id: bi.id, pack_id: packId, locale, updated_at: nowIso };
     const rows: Record<string, unknown>[] = [{
-      profile_id: profile.id,
-      birth_input_id: bi.id,
-      pack_id: pack.id,
+      ...base,
       notification_key: `today-ready:${day.date}`,
       notification_type: "today_ready",
       scheduled_at: date.set({ hour: 6, minute: 30 }).toUTC().toISO(),
-      locale,
-      title: safeString(todayReady?.title) || "Today's card is ready",
-      body: safeString(todayReady?.body) || "Open your timing card before the day gets noisy.",
+      ...copy("today_ready"),
       deep_link: "muhurtha://today",
       payload: { date: day.date },
-      updated_at: new Date().toISOString(),
     }];
     const goodFirst = day.good[0];
     if (goodFirst) {
-      const zone = profile.current_timezone ?? "Asia/Kolkata";
       const start = DateTime.fromISO(`${day.date}T${goodFirst.start}`, { zone });
       const reminder = start.minus({ minutes: 10 });
       if (reminder > DateTime.now().setZone(zone)) {
         rows.push({
-          profile_id: profile.id,
-          birth_input_id: bi.id,
-          pack_id: pack.id,
+          ...base,
           notification_key: `good-reminder:${day.date}:${goodFirst.start}`,
           notification_type: "good_time_reminder",
           scheduled_at: reminder.toUTC().toISO(),
-          locale,
-          title: safeString(notifications?.good_time_reminder?.title) ||
-            "Good window in 10 minutes",
-          body: safeString(notifications?.good_time_reminder?.body) ||
-            "Get ready — a supportive window opens soon.",
-          deep_link: "muhurtha://today",
+          ...copy("good_time_reminder"),
+          deep_link: "muhurtha://timing",
           payload: { date: day.date, window: goodFirst, minutes_before: 10 },
-          updated_at: new Date().toISOString(),
         });
       }
       rows.push({
-        profile_id: profile.id,
-        birth_input_id: bi.id,
-        pack_id: pack.id,
+        ...base,
         notification_key: `good-start:${day.date}:${goodFirst.start}`,
         notification_type: "good_time_start",
         scheduled_at: start.toUTC().toISO(),
-        locale,
-        title: safeString(notifications?.good_time_start?.title) || "Good time starts now",
-        body: safeString(notifications?.good_time_start?.body) ||
-          "Use this window for one clean action.",
-        deep_link: "muhurtha://today",
+        ...copy("good_time_start"),
+        deep_link: "muhurtha://timing",
         payload: { date: day.date, window: goodFirst },
-        updated_at: new Date().toISOString(),
       });
     }
     const cautionFirst = day.caution[0];
     if (cautionFirst) {
-      const zone = profile.current_timezone ?? "Asia/Kolkata";
       const start = DateTime.fromISO(`${day.date}T${cautionFirst.start}`, { zone });
       const reminder = start.minus({ minutes: 10 });
       if (reminder > DateTime.now().setZone(zone)) {
         rows.push({
-          profile_id: profile.id,
-          birth_input_id: bi.id,
-          pack_id: pack.id,
+          ...base,
           notification_key: `caution-reminder:${day.date}:${cautionFirst.start}`,
           notification_type: "caution_time_reminder",
           scheduled_at: reminder.toUTC().toISO(),
-          locale,
-          title: safeString(notifications?.caution_time_reminder?.title) ||
-            "Caution window in 10 minutes",
-          body: safeString(notifications?.caution_time_reminder?.body) ||
-            "Plan to go lighter — a caution interval opens soon.",
+          ...copy("caution_time_reminder"),
           deep_link: "muhurtha://today",
           payload: { date: day.date, window: cautionFirst, minutes_before: 10 },
-          updated_at: new Date().toISOString(),
         });
       }
       rows.push({
-        profile_id: profile.id,
-        birth_input_id: bi.id,
-        pack_id: pack.id,
+        ...base,
         notification_key: `caution-start:${day.date}:${cautionFirst.start}`,
         notification_type: "caution_start",
         scheduled_at: start.toUTC().toISO(),
-        locale,
-        title: safeString(notifications?.caution_start?.title) || "Go lighter now",
-        body: safeString(notifications?.caution_start?.body) ||
-          "Avoid forcing a new start in this window.",
+        ...copy("caution_start"),
         deep_link: "muhurtha://today",
         payload: { date: day.date, window: cautionFirst },
-        updated_at: new Date().toISOString(),
       });
     }
     return rows;
@@ -2175,7 +2221,7 @@ const PACK_KICK_PHASES = 2;
 /** Do not re-kick a generating row that was touched this recently. */
 const PACK_KICK_DEBOUNCE_MS = 4_000;
 
-type PackProgress = { state: "started" | "generating" | "queued" | "ready"; done: number; total: number };
+type PackProgress = { state: "started" | "generating" | "queued" | "ready" | "failed"; done: number; total: number };
 
 /**
  * Non-blocking generation driver for the client poll loop: starts (or nudges) phased pack
@@ -2188,7 +2234,12 @@ async function kickBirthPackGeneration(
   bi: BioRow,
   locale: AppLocale,
   dateStr: string,
+  v2opts?: { fromClient?: boolean; retry?: boolean },
 ): Promise<PackProgress> {
+  if (readingPipeline() === "v2") {
+    const r = await ensureV2Reading(supabase, profile, bi, locale, dateStr, v2opts ?? {});
+    return v2ProgressToPack(r.pack ? null : r.progress);
+  }
   const total = BIRTH_PACK_PHASE_ORDER.length;
   const subjectName = await chartSubjectName(supabase, profile, bi);
   const ctx = buildBirthPackContext(supabase, profile, bi, locale, dateStr, subjectName);
@@ -2451,6 +2502,17 @@ async function ensureBirthPack(
   dateStr: string,
 ): Promise<BirthPackRow | null> {
   if (!bi) return null;
+  if (readingPipeline() === "v2") {
+    const r = await ensureV2Reading(supabase, profile, bi, locale, dateStr);
+    if (r.pack) {
+      attachNatalLuckToContent(
+        r.pack.content as Record<string, unknown>,
+        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        locale,
+      );
+    }
+    return r.pack;
+  }
   const subjectName = await chartSubjectName(supabase, profile, bi);
   const continuationCtx = buildBirthPackContext(supabase, profile, bi, locale, dateStr, subjectName);
   const { factSignature, expiresOn, timing, packQualityExpected } = continuationCtx;
@@ -2837,6 +2899,667 @@ function lockedTeaser(locale: AppLocale) {
   return "Full detail for this phase unlocks with Pro.";
 }
 
+// ============================================================================
+// Reading v2 (single strict-schema call). Behind READING_PIPELINE=v2.
+// ============================================================================
+
+function readingPipeline(): "legacy" | "v2" {
+  return (Deno.env.get("READING_PIPELINE") ?? "legacy").trim().toLowerCase() === "v2" ? "v2" : "legacy";
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Stable fingerprint of the birth details a reading was written for. */
+async function birthHashFor(bi: BioRow, subjectName: string | null): Promise<string> {
+  const n = (v: unknown, dp = 4) => (v == null || v === "" ? "" : Number(v).toFixed(dp));
+  return (await sha256Hex([
+    bi.date_of_birth,
+    bi.exact_birth_time ?? "",
+    bi.time_bucket ?? "",
+    bi.birth_input_mode ?? "",
+    (bi.janma_nakshatra ?? "").toLowerCase(),
+    bi.nakshatra_pada ?? "",
+    n(bi.birth_lat),
+    n(bi.birth_lng),
+    bi.birth_timezone ?? "",
+    subjectName ? `subject:${subjectName.trim().toLowerCase()}` : "self",
+  ].join("|"))).slice(0, 32);
+}
+
+const WEEKDAY_LORDS = ["sun", "moon", "mars", "mercury", "jupiter", "venus", "saturn"];
+const NOTABLE_TITHI = /(Ekadashi|Purnima|Amavasya|Chaturthi|Ashtami)/;
+
+function partOfDay(hhmm: string): string {
+  const h = Number(hhmm.slice(0, 2));
+  if (h < 8) return "early morning";
+  if (h < 11) return "morning";
+  if (h < 14) return "midday";
+  if (h < 17) return "afternoon";
+  return "evening";
+}
+
+function buildReadingFacts(
+  profile: ProfRow,
+  bi: BioRow,
+  locale: AppLocale,
+  dateStr: string,
+  subjectName: string | null,
+): V2Facts {
+  const tz = profile.current_timezone ?? "Asia/Kolkata";
+  const refInstant = parseDateAsUtcInstant(dateStr, tz);
+  const { segments } = computeTimeline(bi, tz);
+  const lords = segments.length ? vimshottariLordsAt(segments, refInstant) : null;
+  const kernel = buildKernelForBirthInput(bi, profile, locale, refInstant, lords?.mdLord, lords?.adLord);
+  const plans = buildPackPhasePlans(bi, profile, locale, refInstant, kernel);
+  const natal = birthMoonDetails(bi, tz, locale);
+  const age = calculateAge(bi.date_of_birth);
+  const isChild = Number.isFinite(age) && age < 13;
+  const lat = Number(profile.current_lat ?? DEFAULT_LAT);
+  const lng = Number(profile.current_lng ?? DEFAULT_LNG);
+  const start = DateTime.fromISO(dateStr, { zone: tz });
+
+  const quick = Array.from({ length: 64 }, (_, i) =>
+    quickDayFacts({
+      date: start.plus({ days: i }).toISODate()!,
+      zone: tz,
+      latitude: lat,
+      longitude: lng,
+      natalNakshatra: natal?.nakshatra ?? bi.janma_nakshatra ?? null,
+      natalRashi: natal?.sign.key ?? null,
+    })
+  ).filter((d): d is NonNullable<typeof d> => d != null);
+
+  const windowsOf = (d: (typeof quick)[number]): V2WindowFact[] => [
+    ...d.good.slice(0, 3).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, part: partOfDay(w.start) })),
+    ...(d.rahu ? [{ id: "c1", kind: "caution" as const, part: partOfDay(d.rahu.start) }] : []),
+  ];
+  const tone = (rank: number): V2DayFact["day_tone"] => rank >= 1 ? "supportive" : rank <= -1 ? "careful" : "mixed";
+  const days: V2DayFact[] = quick.slice(0, 30).map((d) => ({
+    date: d.date,
+    weekday: WEEKDAYS[d.weekday],
+    tithi: d.tithi,
+    nakshatra: d.nakshatra,
+    yoga: d.yoga,
+    moon_sign: d.moonRashi,
+    tara: d.tara,
+    day_tone: tone(d.rank),
+    windows: windowsOf(d),
+  }));
+  const weekdays: V2WeekdayFact[] = WEEKDAYS.map((wd, idx) => {
+    const d = quick.find((q) => q.weekday === idx)!;
+    return { weekday: wd, day_lord: WEEKDAY_LORDS[idx], windows: windowsOf(d) };
+  });
+
+  const chapterAt = (iso: string): number | null => {
+    const t = Date.parse(iso);
+    const p = plans.find((pl) => pl.startIso && pl.endIso && Date.parse(pl.startIso) <= t && t < Date.parse(pl.endIso));
+    return p ? p.id : null;
+  };
+  const periodFrom = (key: string, label: string, list: typeof quick): V2PeriodFact => ({
+    period_key: key,
+    label,
+    supportive_days: list.filter((d) => d.rank >= 1).length,
+    careful_days: list.filter((d) => d.rank <= -1).length,
+    notable: list.filter((d) => NOTABLE_TITHI.test(d.tithi))
+      .map((d) => `${d.tithi} (${WEEKDAYS[d.weekday]})`).slice(0, 4),
+    chapter_id: list[0] ? chapterAt(DateTime.fromISO(list[0].date, { zone: tz }).toUTC().toISO()!) : null,
+  });
+  const weeks: V2PeriodFact[] = Array.from({ length: 5 }, (_, i) => {
+    const ws = start.startOf("week").plus({ weeks: i });
+    const key = ws.toISODate()!;
+    const list = quick.filter((d) => d.date >= key && d.date < ws.plus({ weeks: 1 }).toISODate()!);
+    return periodFrom(key, `${ws.toFormat("d LLL")} – ${ws.plus({ days: 6 }).toFormat("d LLL")}`, list);
+  });
+  const months: V2PeriodFact[] = Array.from({ length: 2 }, (_, i) => {
+    const ms = start.startOf("month").plus({ months: i });
+    const key = ms.toFormat("yyyy-MM");
+    return periodFrom(key, ms.toFormat("LLLL yyyy"), quick.filter((d) => d.date.startsWith(key)));
+  });
+  const chapters: V2ChapterFact[] = plans.map((p) => ({
+    chapter_id: p.id,
+    period: p.periodLabel,
+    start_iso: p.startIso ?? null,
+    end_iso: p.endIso ?? null,
+    md: p.mahadashaLord,
+    ad: p.antardashaLord,
+    tense: p.tense,
+    domains: p.activeDomains.slice(0, 4),
+    support: p.supportThemes.slice(0, 3),
+    pressure: p.pressureThemes.slice(0, 3),
+    pulse: p.phasePulse,
+    transition: p.transitionNote,
+    evidence: p.evidenceLine,
+    lenses: (p.domainLenses ?? []).slice(0, 3),
+  }));
+  const arch = kernel?.natal.archetype;
+  const intent = profile.onboarding_intent ?? {};
+  return {
+    schema_version: 2,
+    locale: locale as V2Facts["locale"],
+    generation_date: dateStr,
+    timezone: tz,
+    is_child: isChild,
+    age: Number.isFinite(age) ? age : null,
+    life_stage: kernel?.lifeStage ?? (isChild ? "child" : "adult"),
+    subject: { name: subjectName || profile.display_name || null, is_account_owner: !subjectName },
+    natal: {
+      moon_sign: natal?.sign.key ?? null,
+      nakshatra: natal?.nakshatra ?? bi.janma_nakshatra ?? null,
+      pada: natal?.pada ?? bi.nakshatra_pada ?? null,
+      sun_sign: kernel?.natal.sunSign ?? null,
+      birth_time_known: bi.exact_birth_time != null,
+      archetype: arch
+        ? {
+          core: arch.core,
+          strength: arch.strength,
+          shadow: arch.shadow,
+          work_style: arch.workStyle,
+          relationship_style: arch.relationshipStyle,
+          stress_pattern: arch.stressPattern,
+          reset_style: arch.resetStyle,
+        }
+        : null,
+      signals: kernel?.natal.signals?.slice(0, 6) ?? [],
+      current_period: kernel?.period.line ?? null,
+      focus: subjectName ? null : (intent as Record<string, unknown>).focus_areas ?? (intent as Record<string, unknown>).focus ?? null,
+    },
+    current_chapter_id: plans.find((p) => p.tense === "current")?.id ?? null,
+    chapters,
+    days,
+    weekdays,
+    weeks,
+    months,
+    area_ids: isChild ? [...CHILD_AREAS] : [...ADULT_AREAS],
+  };
+}
+
+function readingToPack(r: ReadingRow, profile: ProfRow, dateStr: string): BirthPackRow {
+  const tz = profile.current_timezone ?? "Asia/Kolkata";
+  const view = buildReadingView(r.content!, r.facts!, { dateStr, tz, locale: r.locale });
+  return {
+    id: r.id,
+    content: view as unknown as BirthIntelligencePackContent,
+    provider: r.source === "migrated" ? "migrated" : (r.provider ?? "openai"),
+    model: r.model ?? "",
+    status: "ready",
+    fact_signature: `v2:${r.birth_hash}`,
+    generated_for_date: r.generated_for_date ?? dateStr,
+    expires_on: null,
+  };
+}
+
+function isV2Pack(pack: BirthPackRow | null | undefined): boolean {
+  return Boolean(pack?.fact_signature?.startsWith("v2:"));
+}
+
+async function loadV2Pack(
+  admin: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow,
+  locale: AppLocale,
+  dateStr: string,
+): Promise<BirthPackRow | null> {
+  const subject = await chartSubjectName(admin, profile, bi);
+  const hash = await birthHashFor(bi, subject);
+  const r = await findReading(admin, bi.id, locale, hash);
+  if (!r || r.status !== "ready" || !r.content || !r.facts) return null;
+  return readingToPack(r, profile, dateStr);
+}
+
+type V2Progress = JobProgress;
+
+/** Reading-ready hook: schedule localized notifications and send the "ready" push. */
+const onReadingReady: ReadyHook = async (admin, reading, job) => {
+  const { data: profile } = await admin.from("profiles").select(
+    "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code, explanation_mode, onboarding_intent",
+  ).eq("id", reading.profile_id).maybeSingle();
+  if (!profile) return;
+  const prof = profile as ProfRow;
+  const bi = await getBirthInput(admin, reading.birth_input_id, reading.profile_id).catch(() => null);
+  if (!bi) return;
+  const tz = prof.current_timezone ?? "Asia/Kolkata";
+  const dateStr = todayInTimezone(tz);
+  const pack = readingToPack(reading, prof, dateStr);
+  try {
+    await persistNotificationSchedule(admin, pack, prof, bi, reading.locale as AppLocale, dailyTimingFacts(prof, dateStr, 7, tz));
+  } catch (e) {
+    console.warn("[reading] notification schedule failed", errorMessage(e));
+  }
+  const clientSeen = job.client_seen_at ? Date.parse(job.client_seen_at) : 0;
+  if (job.notify && !job.notified_at && Date.now() - clientSeen > 25_000) {
+    const subject = await chartSubjectName(admin, prof, bi);
+    const url = subject ? "/today?src=push_ready&chart=1" : "/today?src=push_ready";
+    const res = await sendReadingReadyToProfile(admin, prof.id, reading.id, reading.locale, subject, url)
+      .catch((e) => {
+        console.warn("[reading] ready push failed", errorMessage(e));
+        return [];
+      });
+    await admin.from("generation_jobs").update({ notified_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", job.id);
+    console.log("[reading] ready push", JSON.stringify({ job: job.id, sent: res.filter((r) => r.ok).length }));
+  }
+};
+
+/**
+ * v2 entry: return the ready reading, or start/advance its generation and report progress.
+ * Never generates twice for the same birth details + language.
+ */
+async function ensureV2Reading(
+  admin: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow,
+  locale: AppLocale,
+  dateStr: string,
+  opts: { fromClient?: boolean; retry?: boolean; notify?: boolean } = {},
+): Promise<{ pack: BirthPackRow | null; progress: V2Progress | null }> {
+  const subject = await chartSubjectName(admin, profile, bi);
+  const hash = await birthHashFor(bi, subject);
+  let reading = await findReading(admin, bi.id, locale, hash);
+  if (reading?.status === "ready" && reading.content && reading.facts) {
+    return { pack: readingToPack(reading, profile, dateStr), progress: null };
+  }
+  let job: JobRow | null = null;
+  if (!reading) {
+    if (!opts.retry) {
+      // Don't silently loop on a chart that keeps failing; the user retries explicitly.
+      const { data: failed } = await admin.from("readings").select("id, created_at, updated_at, status, locale, birth_hash, profile_id, birth_input_id, schema_version, source, provider, model, prompt_version, generated_for_date, ready_at")
+        .eq("birth_input_id", bi.id).eq("locale", locale).eq("birth_hash", hash).eq("status", "failed")
+        .gt("updated_at", new Date(Date.now() - 15 * 60_000).toISOString())
+        .order("updated_at", { ascending: false }).limit(1).maybeSingle();
+      if (failed) {
+        const fr = failed as unknown as ReadingRow;
+        return { pack: null, progress: jobProgress(fr, await latestJob(admin, fr.id)) };
+      }
+    }
+    if (!openAiConfigured()) throw new ActionError("llm_unavailable", "Reading service is not configured", 503);
+    const facts = buildReadingFacts(profile, bi, locale, dateStr, subject);
+    const started = await startReading(admin, {
+      profileId: profile.id,
+      birthInputId: bi.id,
+      locale: locale as ReadingRow["locale"],
+      birthHash: hash,
+      facts,
+      notify: opts.notify,
+    });
+    reading = started.reading;
+    job = started.job;
+    if (started.created) {
+      await logAppEvent(admin, profile.id, "reading", "info", "reading_v2_started", undefined, {
+        reading_id: reading.id, locale, job_id: job?.id,
+      });
+    }
+  } else {
+    job = await latestJob(admin, reading.id);
+  }
+  if (job) job = await advanceJob(admin, job, { fromClient: opts.fromClient, onReady: onReadingReady });
+  if (job?.status === "succeeded") {
+    const fresh = await findReading(admin, bi.id, locale, hash);
+    if (fresh?.status === "ready") return { pack: readingToPack(fresh, profile, dateStr), progress: null };
+  }
+  const { data: meta } = await admin.from("readings").select("id, status, locale, created_at").eq("id", reading.id).maybeSingle();
+  return { pack: null, progress: jobProgress({ ...reading, ...(meta ?? {}) } as ReadingRow, job) };
+}
+
+function v2ProgressToPack(p: V2Progress | null): PackProgress & Record<string, unknown> {
+  if (!p) return { state: "ready", done: 100, total: 100 };
+  return {
+    ...p,
+    state: p.state === "failed" ? "failed" : p.state === "ready" ? "ready" : p.state === "queued" ? "queued" : "generating",
+    done: p.pct,
+    total: 100,
+  } as PackProgress & Record<string, unknown>;
+}
+
+/** Internal: start a golden-test reading for an existing profile/birth input (service path). */
+export async function startGoldenReading(
+  admin: SupabaseClient,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const profileId = String(body.profile_id ?? "");
+  const birthInputId = String(body.birth_input_id ?? "");
+  const locale = normalizeLocale(String(body.locale ?? "en"));
+  const { data: profile } = await admin.from("profiles").select(
+    "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code, explanation_mode, onboarding_intent",
+  ).eq("id", profileId).maybeSingle();
+  if (!profile) throw new ActionError("profile_not_found", "Profile not found", 404);
+  const bi = await withBirthPlacePrecision(await getBirthInput(admin, birthInputId, profileId));
+  if (!bi) throw new ActionError("birth_input_missing", "No birth input", 404);
+  const prof = profile as ProfRow;
+  const dateStr = (body.date as string) ?? todayInTimezone(prof.current_timezone ?? "Asia/Kolkata");
+  if (body.dry_run === true) {
+    const subject = await chartSubjectName(admin, prof, bi);
+    const facts = buildReadingFacts(prof, bi, locale, dateStr, subject);
+    const { buildReadingSchema, buildSystemPrompt, buildUserPrompt } = await import("./reading_v2.ts");
+    return {
+      facts,
+      system: buildSystemPrompt(facts),
+      user_chars: buildUserPrompt(facts).length,
+      schema_chars: JSON.stringify(buildReadingSchema(facts, { withLengths: true })).length,
+    };
+  }
+  const r = await ensureV2Reading(admin, prof, bi, locale, dateStr, { retry: body.retry === true, notify: false });
+  return { ready: Boolean(r.pack), progress: r.progress, reading_id: r.pack?.id ?? r.progress?.reading_id ?? null };
+}
+
+export async function sweepReadings(admin: SupabaseClient, body: Record<string, unknown>) {
+  return await sweepReadingJobs(admin, onReadingReady, {
+    responseId: typeof body.response_id === "string" ? body.response_id : undefined,
+  });
+}
+
+/** Zero-LLM migration of ready legacy packs into v2 readings (source = migrated). */
+export async function migrateLegacyPacks(
+  admin: SupabaseClient,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { data: packs, error } = await admin.from("birth_intelligence_packs")
+    .select("id, profile_id, birth_input_id, locale, provider, model, content, generated_for_date, status")
+    .eq("pack_version", BIRTH_PACK_VERSION).eq("status", "ready")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const seen = new Set<string>();
+  const out: Record<string, unknown>[] = [];
+  for (const p of (packs ?? []) as Record<string, unknown>[]) {
+    const key = `${p.birth_input_id}:${p.locale}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      const { data: profile } = await admin.from("profiles").select(
+        "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code, explanation_mode, onboarding_intent",
+      ).eq("id", p.profile_id as string).maybeSingle();
+      if (!profile) continue;
+      const prof = profile as ProfRow;
+      const bi = await withBirthPlacePrecision(await getBirthInput(admin, p.birth_input_id as string, prof.id));
+      if (!bi) continue;
+      const locale = normalizeLocale(String(p.locale));
+      const subject = await chartSubjectName(admin, prof, bi);
+      const hash = await birthHashFor(bi, subject);
+      const existing = await findReading(admin, bi.id, locale, hash, { withContent: false });
+      if (existing) {
+        out.push({ pack: p.id, skipped: `exists:${existing.status}`, reading: existing.id });
+        continue;
+      }
+      const dateStr = String(p.generated_for_date ?? todayInTimezone(prof.current_timezone ?? "Asia/Kolkata"));
+      const facts = buildReadingFacts(prof, bi, locale, dateStr, subject);
+      const content = sanitizeContent(legacyPackToV2(p.content as Record<string, unknown>, facts), facts);
+      const validation = validateContent(content, facts);
+      if (body.dry_run === true) {
+        out.push({ pack: p.id, locale, dry_run: true, fatal: validation.fatal, flagged: validation.flags.length, days: content.days.length });
+        continue;
+      }
+      const { data: row, error: insErr } = await admin.from("readings").insert({
+        profile_id: prof.id,
+        birth_input_id: bi.id,
+        locale,
+        schema_version: READING_SCHEMA_VERSION,
+        birth_hash: hash,
+        status: "ready",
+        content,
+        facts,
+        source: "migrated",
+        provider: "migrated",
+        model: String(p.model ?? ""),
+        prompt_version: "legacy:" + BIRTH_PACK_VERSION,
+        legacy_pack_id: p.id,
+        generated_for_date: dateStr,
+        validation: { ...validation, original_provider: p.provider },
+        ready_at: new Date().toISOString(),
+      }).select("id").single();
+      if (insErr) throw insErr;
+      out.push({ pack: p.id, locale, reading: row?.id, fatal: validation.fatal, flagged: validation.flags.length });
+    } catch (e) {
+      out.push({ pack: p.id, error: errorMessage(e) });
+    }
+  }
+  return { migrated: out };
+}
+
+const TIMING_COPY: Record<AppLocale, {
+  headline: Record<string, string>;
+  summaryIntro: string;
+  actionLine: string;
+  generalFactors: string;
+  selectedCity: string;
+  tarabala: string;
+  chandrabala: string;
+  supportive: string;
+  mixed: string;
+  janmaMixed: string;
+  noWindow: string;
+  lines: Record<string, string>;
+}> = {
+  en: {
+    headline: {
+      limited_assessment: "General traditional timing factors",
+      matched: "Supportive traditional factors",
+      not_matched: "Several traditional cautions",
+      partly_matched: "Mixed traditional factors",
+    },
+    summaryIntro: "This is a traditional Panchanga comparison, not an outcome prediction.",
+    actionLine: "Consider real-world availability, preparation and professional advice first.",
+    generalFactors: "General location-based traditional factors",
+    selectedCity: "Selected city",
+    tarabala: "Tarabala",
+    chandrabala: "Chandrabala",
+    supportive: "traditionally supportive",
+    mixed: "traditionally mixed",
+    janmaMixed: "Tarabala: Janma (mixed)",
+    noWindow: "No assessed general daytime window",
+    lines: {},
+  },
+  te: {
+    headline: {
+      limited_assessment: "సాధారణ సాంప్రదాయ సమయ అంశాలు",
+      matched: "అనుకూలమైన సాంప్రదాయ అంశాలు",
+      not_matched: "కొన్ని సాంప్రదాయ జాగ్రత్తలు",
+      partly_matched: "మిశ్రమ సాంప్రదాయ అంశాలు",
+    },
+    summaryIntro: "ఇది సాంప్రదాయ పంచాంగ పోలిక మాత్రమే, ఫలితాన్ని ఊహించడం కాదు.",
+    actionLine: "ముందుగా అందుబాటు, సిద్ధత, నిపుణుల సలహాను పరిగణించండి.",
+    generalFactors: "స్థలం ఆధారిత సాధారణ సాంప్రదాయ అంశాలు",
+    selectedCity: "ఎంచుకున్న నగరం",
+    tarabala: "తారాబలం",
+    chandrabala: "చంద్రబలం",
+    supportive: "సాంప్రదాయంగా అనుకూలం",
+    mixed: "సాంప్రదాయంగా మిశ్రమం",
+    janmaMixed: "తారాబలం: జన్మ (మిశ్రమం)",
+    noWindow: "అంచనా వేసిన పగటి మంచి సమయం లేదు",
+    lines: {
+      "Preliminary traditional Panchanga factors; not a verified activity-specific Muhurta.":
+        "ప్రాథమిక సాంప్రదాయ పంచాంగ అంశాలు; ఇది పని-ప్రత్యేక ముహూర్తం కాదు.",
+      "General daylight windows are not individualized favourable outcomes.":
+        "సాధారణ పగటి సమయాలు వ్యక్తిగత శుభ ఫలితాలకు హామీ కావు.",
+      "Birth Nakshatra is unavailable; Tarabala was not assessed.":
+        "జన్మ నక్షత్రం లేదు; తారాబలం చూడలేదు.",
+      "Natal Rashi is unavailable; Chandrabala was not assessed.":
+        "జన్మ రాశి లేదు; చంద్రబలం చూడలేదు.",
+      "A specialist Muhurta ruleset is required for formal ceremonies and binding decisions.":
+        "శుభకార్యాలు, కీలక నిర్ణయాలకు ప్రత్యేక ముహూర్త నియమాలు అవసరం.",
+      "For the ceremony itself, confirm the final Muhurta with your family priest.":
+        "వేడుక ముహూర్తాన్ని మీ కుటుంబ పురోహితుడితో నిర్ధారించుకోండి.",
+      "Never delay a vaccination or medical care for timing; use this only to pick a calmer slot within your doctor's schedule.":
+        "సమయం కోసం టీకా లేదా వైద్యాన్ని ఎప్పుడూ ఆలస్యం చేయకండి; డాక్టర్ ఇచ్చిన సమయాల్లో ప్రశాంతమైనదాన్ని ఎంచుకోవడానికి మాత్రమే వాడండి.",
+    },
+  },
+  hi: {
+    headline: {
+      limited_assessment: "सामान्य पारंपरिक समय कारक",
+      matched: "अनुकूल पारंपरिक कारक",
+      not_matched: "कई पारंपरिक सावधानियाँ",
+      partly_matched: "मिश्रित पारंपरिक कारक",
+    },
+    summaryIntro: "यह पारंपरिक पंचांग तुलना है, परिणाम की भविष्यवाणी नहीं।",
+    actionLine: "पहले उपलब्धता, तैयारी और विशेषज्ञ सलाह पर विचार करें।",
+    generalFactors: "स्थान आधारित सामान्य पारंपरिक कारक",
+    selectedCity: "चुना हुआ शहर",
+    tarabala: "ताराबल",
+    chandrabala: "चंद्रबल",
+    supportive: "पारंपरिक रूप से अनुकूल",
+    mixed: "पारंपरिक रूप से मिश्रित",
+    janmaMixed: "ताराबल: जन्म (मिश्रित)",
+    noWindow: "दिन में कोई आकलित शुभ समय नहीं",
+    lines: {
+      "Preliminary traditional Panchanga factors; not a verified activity-specific Muhurta.":
+        "प्रारंभिक पारंपरिक पंचांग कारक; यह कार्य-विशेष मुहूर्त नहीं है।",
+      "General daylight windows are not individualized favourable outcomes.":
+        "सामान्य दिन के समय व्यक्तिगत शुभ परिणाम की गारंटी नहीं हैं।",
+      "Birth Nakshatra is unavailable; Tarabala was not assessed.":
+        "जन्म नक्षत्र उपलब्ध नहीं; ताराबल नहीं देखा गया।",
+      "Natal Rashi is unavailable; Chandrabala was not assessed.":
+        "जन्म राशि उपलब्ध नहीं; चंद्रबल नहीं देखा गया।",
+      "A specialist Muhurta ruleset is required for formal ceremonies and binding decisions.":
+        "संस्कारों और बड़े निर्णयों के लिए विशेष मुहूर्त नियम ज़रूरी हैं।",
+      "For the ceremony itself, confirm the final Muhurta with your family priest.":
+        "समारोह का अंतिम मुहूर्त अपने कुल पुरोहित से पक्का करें।",
+      "Never delay a vaccination or medical care for timing; use this only to pick a calmer slot within your doctor's schedule.":
+        "समय के लिए टीका या इलाज कभी न टालें; इसे केवल डॉक्टर के समय में शांत स्लॉट चुनने के लिए उपयोग करें।",
+    },
+  },
+};
+
+/** Localize the engine's fixed English Panchanga reason/limitation lines. */
+function localizeTimingLine(line: string, locale: AppLocale): string {
+  if (locale === "en") return line;
+  const c = TIMING_COPY[locale];
+  if (c.lines[line]) return c.lines[line];
+  if (line === "Tarabala: Janma (mixed)") return c.janmaMixed;
+  if (line === "No assessed general daytime window") return c.noWindow;
+  let m = /^Tarabala: (.+)$/.exec(line);
+  if (m) return `${c.tarabala}: ${m[1]}`;
+  m = /^Chandrabala: traditionally (supportive|mixed)$/.exec(line);
+  if (m) return `${c.chandrabala}: ${m[1] === "supportive" ? c.supportive : c.mixed}`;
+  return line;
+}
+
+function askLlmEnabled(): boolean {
+  const mode = (Deno.env.get("ASK_MODE") ?? "").trim().toLowerCase();
+  if (mode === "template") return false;
+  return openAiConfigured() && (mode === "llm" || readingPipeline() === "v2");
+}
+
+async function recentChatHistory(
+  supabase: SupabaseClient,
+  sessionId: string,
+  profileId: string,
+): Promise<{ role: string; content: string }[]> {
+  const { data } = await supabase.from("chat_messages").select("role, content, created_at")
+    .eq("session_id", sessionId).eq("profile_id", profileId)
+    .order("created_at", { ascending: false }).limit(6);
+  return ((data ?? []) as { role: string; content: string }[]).reverse()
+    .map((m) => ({ role: m.role, content: String(m.content ?? "") }));
+}
+
+async function findCachedAsk(
+  admin: SupabaseClient,
+  profileId: string,
+  cacheKey: string,
+): Promise<{ answer: AskAnswerCopy; meta: Record<string, unknown> } | null> {
+  const since = DateTime.now().setZone("Asia/Kolkata").startOf("day").toUTC().toISO()!;
+  const { data } = await admin.from("chat_messages").select("payload")
+    .eq("profile_id", profileId).eq("role", "assistant")
+    .eq("payload->>cache_key", cacheKey).gte("created_at", since)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const payload = (data as { payload?: Record<string, unknown> } | null)?.payload;
+  if (!payload?.llm || !payload.answer) return null;
+  return { answer: payload.answer as AskAnswerCopy, meta: payload.llm as Record<string, unknown> };
+}
+
+function buildAskContext(
+  pack: BirthPackRow,
+  locale: AppLocale,
+  date: string,
+  good: { start: string; end: string; label: string }[],
+  caution: { start: string; end: string; label: string }[],
+  bi: BioRow | null,
+  profile: ProfRow,
+  subjectName: string | null,
+): AskContext {
+  const c = pack.content as Record<string, unknown>;
+  const me = (c.me_profile ?? {}) as Record<string, unknown>;
+  const phases = asArray<Record<string, unknown>>(c.journey_phases);
+  const facts = asArray<Record<string, unknown>>(c.journey_phase_facts);
+  const cur = phases.find((p) =>
+    safeString(p.tense) === "current" ||
+    safeString(facts.find((f) => Number(f.sortOrder) === Number(p.sortOrder))?.tense) === "current"
+  );
+  const cards = asArray<Record<string, unknown>>(c.today_cards);
+  const card = cards.find((x) => safeString(x.key) === date);
+  const age = bi ? calculateAge(bi.date_of_birth) : 30;
+  const upcoming = cards.filter((x) => safeString(x.key) > date).slice(0, 7).map((x) => ({
+    date: safeString(x.key),
+    weekday: DateTime.fromISO(safeString(x.key)).toFormat("ccc"),
+    tone: safeString(x.tone) || undefined,
+    title: safeString(x.title),
+  }));
+  return {
+    locale: locale as AskContext["locale"],
+    subject: { name: subjectName ?? profile.display_name ?? null, is_account_owner: !subjectName, is_child: age < 13 },
+    date,
+    profile: {
+      title: safeString(me.title),
+      summary: safeString(me.summary),
+      strengths: asArray<string>(me.strengths).slice(0, 3),
+      watchouts: asArray<string>(me.watchouts).slice(0, 3),
+    },
+    chapter: cur
+      ? {
+        title: safeString(cur.title),
+        highlight: safeString(cur.highlight),
+        body: asArray<string>(cur.sentences).join(" ").slice(0, 700),
+        period: safeString(cur.periodLabel),
+        lords: [safeString(cur.mahadashaLord), safeString(cur.antardashaLord)].filter(Boolean).join("–"),
+      }
+      : null,
+    today: card
+      ? {
+        title: safeString(card.title),
+        line: safeString(card.one_line),
+        body: safeString(card.body),
+        do: asArray<string>(card.better_for).slice(0, 3),
+        avoid: asArray<string>(card.be_careful).slice(0, 3),
+      }
+      : null,
+    upcoming,
+    windows: [
+      ...good.slice(0, 2).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, start: w.start, end: w.end })),
+      ...caution.slice(0, 1).map((w) => ({ id: "c1", kind: "caution" as const, start: w.start, end: w.end })),
+    ],
+  };
+}
+
+const RAHU_LABEL: Record<AppLocale, string> = { en: "Rahu Kalam", te: "రాహు కాలం", hi: "राहु काल" };
+
+function composeAskCopy(
+  a: AskLlmAnswer,
+  fallback: AskAnswerCopy,
+  good: { start: string; end: string; label: string }[],
+  caution: { start: string; end: string; label: string }[],
+  locale: AppLocale,
+): AskAnswerCopy {
+  const prefix = locale === "te"
+    ? { good: "మంచి సమయం", caution: "జాగ్రత్త సమయం" }
+    : locale === "hi"
+    ? { good: "अच्छा समय", caution: "सावधानी समय" }
+    : { good: "Good time", caution: "Caution time" };
+  const pick = a.best_window === "g2" ? good[1] ?? good[0] : a.best_window === "g1" ? good[0] : null;
+  const c = a.caution_window === "c1" ? caution[0] : null;
+  const strip = (t: string, max: number) => safeString(t).replace(/\b\d{1,2}[:.]\d{2}\s*(am|pm)?/gi, "").slice(0, max);
+  return {
+    direct_answer: strip(a.direct_answer, 700) || fallback.direct_answer,
+    best_time: pick ? `${prefix.good}: ${formatAskWindow(pick)}` : fallback.best_time,
+    caution_time: c
+      ? `${prefix.caution}: ${formatAskWindow({ ...c, label: RAHU_LABEL[locale] ?? c.label }, true)}`
+      : fallback.caution_time,
+    better_option: strip(a.better_option, 200) || fallback.better_option,
+    simple_why: strip(a.simple_why, 300) || fallback.simple_why,
+    action_line: strip(a.action_line, 200) || fallback.action_line,
+    share_hook: strip(a.share_hook, 140) || fallback.share_hook,
+  };
+}
+
 function applyAccessMask(
   content: Record<string, unknown>,
   locale: AppLocale,
@@ -2886,6 +3609,49 @@ function applyAccessMask(
     out.monthly_cards = (out.monthly_cards as Record<string, unknown>[]).map(
       (row) => ({ ...row, body: teaser, pro_locked: true }),
     );
+  }
+
+  // Life chapters: Free sees the current chapter and the next one; the rest are Pro.
+  // Masked server-side so locked text never reaches the client.
+  if (Array.isArray(out.journey_phases)) {
+    const facts = Array.isArray(out.journey_phase_facts)
+      ? out.journey_phase_facts as Record<string, unknown>[]
+      : [];
+    const tenseOf = (row: Record<string, unknown>) =>
+      safeString(row.tense) ||
+      safeString(facts.find((f) => Number(f.sortOrder) === Number(row.sortOrder))?.tense);
+    const phases = [...(out.journey_phases as Record<string, unknown>[])];
+    const order = phases.map((row, idx) => ({ idx, sort: Number(row.sortOrder ?? idx), tense: tenseOf(row) }))
+      .sort((a, b) => a.sort - b.sort);
+    const currentPos = order.findIndex((o) => o.tense === "current");
+    const unlocked = new Set<number>();
+    if (currentPos >= 0) {
+      unlocked.add(order[currentPos].idx);
+      if (order[currentPos + 1]) unlocked.add(order[currentPos + 1].idx);
+    } else {
+      const firstFuture = order.find((o) => o.tense === "future");
+      if (firstFuture) unlocked.add(firstFuture.idx);
+    }
+    out.journey_phases = phases.map((row, idx) =>
+      unlocked.has(idx)
+        ? { ...row, proLocked: false }
+        : {
+          ...row,
+          proLocked: true,
+          highlight: teaser,
+          sentences: [],
+          evidenceLine: "",
+          shareHook: "",
+          transitionNote: "",
+        }
+    );
+  }
+  if (tier === "free" && out.horizons && typeof out.horizons === "object") {
+    const h = { ...(out.horizons as Record<string, unknown>) };
+    if (h.month && typeof h.month === "object") {
+      h.month = { ...(h.month as Record<string, unknown>), body: teaser, caution: "", pro_locked: true };
+    }
+    out.horizons = h;
   }
 
   if (Array.isArray(out.likely_life_events)) {
@@ -3945,6 +4711,169 @@ async function _handleInternal(
     };
   }
 
+  if (action === "birth_edit") {
+    // Own birth details only (friend charts are edited via chart_profile_save).
+    const profile = requireProfile(prof, action);
+    const { data: own, error: ownErr } = await adminSupabase.from("birth_inputs")
+      .select("id, created_at, source, date_of_birth, exact_birth_time, time_bucket, birth_place, birth_lat, birth_lng, birth_timezone, birth_input_mode, janma_nakshatra, nakshatra_pada")
+      .eq("profile_id", profile.id).or("source.is.null,source.neq.chart_profile")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (ownErr) throw ownErr;
+    if (!own) throw new ActionError("birth_input_missing", "No birth input", 409);
+    const access = await getSubscriptionAccess(supabase, profile.id);
+    const createdMs = Date.parse(String(own.created_at));
+    const typoEndsAt = new Date(createdMs + BIRTH_EDIT_TYPO_MS);
+    const withinTypo = Date.now() < typoEndsAt.getTime();
+    const since30 = new Date(Date.now() - 30 * 86400_000).toISOString();
+    const since365 = new Date(Date.now() - 365 * 86400_000).toISOString();
+    const { data: versions } = await adminSupabase.from("birth_input_versions")
+      .select("created_at, reason").eq("birth_input_id", own.id).eq("reason", "birth_edit")
+      .gte("created_at", since365);
+    const used365 = (versions ?? []).length;
+    const used30 = (versions ?? []).filter((v) => String(v.created_at) >= since30).length;
+    const limits = {
+      isPro: access.isPro,
+      withinTypoWindow: withinTypo,
+      typoWindowEndsAt: typoEndsAt.toISOString(),
+      used30,
+      used365,
+      limit30: BIRTH_EDIT_LIMIT_30,
+      limit365: BIRTH_EDIT_LIMIT_365,
+      allowed: withinTypo || (access.isPro && used30 < BIRTH_EDIT_LIMIT_30 && used365 < BIRTH_EDIT_LIMIT_365),
+      reason: withinTypo
+        ? "typo_window"
+        : !access.isPro
+        ? "pro_required"
+        : used30 >= BIRTH_EDIT_LIMIT_30
+        ? "limit_30"
+        : used365 >= BIRTH_EDIT_LIMIT_365
+        ? "limit_365"
+        : "ok",
+      current: {
+        date_of_birth: own.date_of_birth,
+        exact_birth_time: own.exact_birth_time,
+        time_bucket: own.time_bucket,
+        birth_place: own.birth_place,
+        birth_lat: own.birth_lat,
+        birth_lng: own.birth_lng,
+        birth_timezone: own.birth_timezone,
+        janma_nakshatra: own.janma_nakshatra,
+        birth_input_mode: own.birth_input_mode,
+      },
+    };
+    if (body.check === true) return { limits };
+    if (!limits.allowed) {
+      const code = limits.reason === "pro_required" ? "pro_required_birth_edit" : "birth_edit_limit_reached";
+      throw new ActionError(
+        code,
+        limits.reason === "pro_required"
+          ? "Editing birth details is part of Pro."
+          : "You've reached the birth-detail edit limit (2 per 30 days, 5 per year).",
+        limits.reason === "pro_required" ? 403 : 429,
+      );
+    }
+    const dob = String(body.date_of_birth ?? own.date_of_birth).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || !DateTime.fromISO(dob).isValid || DateTime.fromISO(dob) > DateTime.now()) {
+      throw new ActionError("invalid_date_of_birth", "Enter a valid date of birth", 400);
+    }
+    const exact = body.exact_birth_time === undefined
+      ? own.exact_birth_time
+      : (safeString(body.exact_birth_time) || null);
+    if (exact && !/^\d{1,2}:\d{2}(:\d{2})?$/.test(exact)) {
+      throw new ActionError("invalid_birth_time", "Enter a valid birth time", 400);
+    }
+    const bucket = exact ? null : (body.time_bucket === undefined ? own.time_bucket : (safeString(body.time_bucket) || null));
+    let place = body.birth_place === undefined ? own.birth_place : (safeString(body.birth_place) || null);
+    let lat = body.birth_lat != null ? Number(body.birth_lat) : (body.birth_place === undefined ? own.birth_lat : null);
+    let lng = body.birth_lng != null ? Number(body.birth_lng) : (body.birth_place === undefined ? own.birth_lng : null);
+    let btz = typeof body.birth_timezone === "string" ? body.birth_timezone : (body.birth_place === undefined ? own.birth_timezone : null);
+    if (place && (lat == null || lng == null)) {
+      const resolved = await resolveBirthPlace(place);
+      if (!resolved) throw new ActionError("birth_place_unresolved", "We couldn't find that place", 400);
+      place = resolved.resolvedLabel ?? place;
+      lat = resolved.lat;
+      lng = resolved.lng;
+      btz = resolved.timezone;
+    }
+    const userNak = safeString(body.janma_nakshatra) || null;
+    const hasExact = Boolean(exact);
+    const hasBucket = Boolean(bucket && bucket !== "unknown");
+    const mode = hasExact ? "exact_time" : hasBucket && userNak ? "time_bucket_plus_nakshatra" : hasBucket ? "time_bucket" : userNak ? "nakshatra_only" : "unknown";
+    const patch: Record<string, unknown> = {
+      date_of_birth: dob,
+      exact_birth_time: exact ?? "",
+      time_bucket: bucket ?? "",
+      birth_place: place ?? "",
+      birth_timezone: btz ?? "",
+      birth_input_mode: mode,
+      janma_nakshatra: userNak ?? "",
+      nakshatra_pada: "",
+    };
+    if (lat != null && lng != null) {
+      patch.birth_lat = lat;
+      patch.birth_lng = lng;
+    }
+    const norm = (v: Record<string, unknown>) => JSON.stringify([
+      String(v.date_of_birth ?? ""),
+      String(v.exact_birth_time ?? "").slice(0, 5),
+      String(v.time_bucket ?? ""),
+      String(v.birth_place ?? ""),
+      v.birth_lat == null || v.birth_lat === "" ? "" : Number(v.birth_lat).toFixed(4),
+      v.birth_lng == null || v.birth_lng === "" ? "" : Number(v.birth_lng).toFixed(4),
+      mode.includes("nakshatra") || String(v.birth_input_mode ?? "").includes("nakshatra")
+        ? String(v.janma_nakshatra ?? "").toLowerCase()
+        : "",
+    ]);
+    const changed = norm({ ...patch, janma_nakshatra: userNak ?? "" }) !== norm(own as Record<string, unknown>);
+    if (!changed) return { ok: true, changed: false, limits };
+    const { error: applyErr } = await adminSupabase.rpc("birth_edit_apply", {
+      p_birth_input_id: own.id,
+      p_patch: patch,
+      p_reason: withinTypo ? "typo_window" : "birth_edit",
+    });
+    if (applyErr) throw applyErr;
+    // Re-derive the janma nakshatra from the new birth moment (same as chart_initialize).
+    const fresh = await getBirthInput(adminSupabase, own.id, profile.id);
+    const btzResolved = resolveBirthZone(fresh, profile.current_timezone ?? "Asia/Kolkata");
+    const moonUtc = birthInstantUtc(fresh, btzResolved);
+    const moonLon = moonUtc != null ? moonSiderealLongitudeDeg(moonUtc) : null;
+    const meta = siderealMetaFromNameOrMoon(fresh.janma_nakshatra, fresh.nakshatra_pada, moonLon);
+    if (meta && (!fresh.janma_nakshatra || moonLon != null)) {
+      await adminSupabase.from("birth_inputs").update({
+        janma_nakshatra: meta.name,
+        nakshatra_pada: meta.pada,
+        updated_at: new Date().toISOString(),
+      }).eq("id", own.id);
+    }
+    // Old readings are replaced (Ask chats are kept); pending alerts are rebuilt with the new reading.
+    const nowIso = new Date().toISOString();
+    await adminSupabase.from("readings").update({ status: "superseded", updated_at: nowIso })
+      .eq("birth_input_id", own.id).in("status", ["ready", "generating"]);
+    await adminSupabase.from("notification_schedule").delete()
+      .eq("birth_input_id", own.id).gt("scheduled_at", nowIso);
+    await logAppEvent(adminSupabase, profile.id, "birth_edit", "info", "birth_details_edited", undefined, {
+      reason: withinTypo ? "typo_window" : "birth_edit",
+      used30: used30 + (withinTypo ? 0 : 1),
+    });
+    const locale = requestLocale(body, profile);
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
+    const bi2 = await withBirthPlacePrecision(await getBirthInput(adminSupabase, own.id, profile.id));
+    let progress: unknown = null;
+    if (bi2 && readingPipeline() === "v2") {
+      const r = await ensureV2Reading(adminSupabase, profile, bi2, locale, todayInTimezone(tz), { fromClient: true, retry: true });
+      progress = r.pack ? { state: "ready" } : r.progress;
+    } else if (bi2) {
+      progress = await kickBirthPackGeneration(adminSupabase, profile, bi2, locale, todayInTimezone(tz));
+    }
+    return {
+      ok: true,
+      changed: true,
+      birthInputId: own.id,
+      progress,
+      limits: { ...limits, used30: used30 + (withinTypo ? 0 : 1), used365: used365 + (withinTypo ? 0 : 1) },
+    };
+  }
+
   if (action === "chart_profile_delete") {
     const profile = requireProfile(prof, action);
     const chartProfileId = chartProfileIdFromBody(body);
@@ -4019,7 +4948,10 @@ async function _handleInternal(
     if ((!pack || !isClientServablePack(pack)) && body.ensure === true && !mayGenerate) {
       // Background generation for the client poll loop (partner/friend charts and any
       // reading that was never generated): never blocks the request.
-      const progress = await kickBirthPackGeneration(adminSupabase, profile, bi, locale, dateStr);
+      const progress = await kickBirthPackGeneration(adminSupabase, profile, bi, locale, dateStr, {
+        fromClient: true,
+        retry: body.retry === true,
+      });
       if (progress.state === "ready") {
         pack = await loadBirthPack(adminSupabase, profile, bi, locale, dateStr);
       }
@@ -4042,7 +4974,7 @@ async function _handleInternal(
     // background, and tell the client to poll silently until the new one lands.
     let refreshing: PackProgress | null = null;
     if (
-      pack && isClientServablePack(pack) && body.ensure === true && !mayGenerate &&
+      pack && isClientServablePack(pack) && !isV2Pack(pack) && body.ensure === true && !mayGenerate &&
       chartProfileIdFromBody(body) && subjectName &&
       !String(pack.fact_signature ?? "").includes(`subject:${subjectName}`)
     ) {
@@ -4752,8 +5684,11 @@ async function _handleInternal(
         currentSubLord = current?.adLord ?? "";
       }
     }
-    // Ask uses pack templates + live timing windows — no per-question LLM call.
     const pack = await loadBirthPack(adminSupabase, profile, bi, locale, targetDate);
+    // Last 3 turns of this chat (read before the new question is stored).
+    const history = askLlmEnabled() && requestedSessionId && sessionId === requestedSessionId
+      ? await recentChatHistory(supabase, sessionId, profile.id)
+      : [];
 
     const { error: userMessageError } = await supabase.from("chat_messages").insert({
       session_id: sessionId,
@@ -4764,20 +5699,66 @@ async function _handleInternal(
     });
     if (userMessageError) throw userMessageError;
 
-    const copy = resolveAskFromPack(
+    let copy = resolveAskFromPack(
       pack?.content,
       question,
       locale,
       goodWindows,
       cautionWindows,
     );
+    // Real AI answer grounded in the reading + live windows; the template above is the
+    // fallback when the model is unavailable (quota is refunded then).
+    let askLlm: Record<string, unknown> | null = null;
+    let askCacheKey: string | null = null;
+    if (askLlmEnabled() && pack) {
+      askCacheKey = await sha256Hex([bi?.id ?? "none", locale, targetDate, normalizeQuestion(question)].join("|"));
+      const cached = await findCachedAsk(adminSupabase, profile.id, askCacheKey);
+      if (cached) {
+        copy = cached.answer;
+        askLlm = { ...cached.meta, cached: true };
+        await releaseQuota(adminSupabase, profile.id, "ask", askQuotaResult.key);
+      } else {
+        try {
+          const ctx = buildAskContext(pack, locale, targetDate, good, caution, bi, profile, scope.isFriend ? (await chartSubjectName(adminSupabase, profile, bi!)) : null);
+          const r = await askWithLlm(question, ctx, history);
+          copy = composeAskCopy(r.answer, copy, good, caution, locale);
+          const cost = await logLlmCall(adminSupabase, {
+            job_id: null, profile_id: profile.id, purpose: "ask", model: r.model, response_id: r.resp.id,
+            locale, status: "completed", usage: r.resp.usage, latency_ms: r.latencyMs, meta: { topic: r.answer.topic },
+          });
+          askLlm = {
+            model: r.model,
+            response_id: r.resp.id,
+            topic: r.answer.topic,
+            suggested_date: r.answer.suggested_date || null,
+            cost_usd: cost,
+            latency_ms: r.latencyMs,
+          };
+        } catch (e) {
+          await logLlmCall(adminSupabase, {
+            job_id: null, profile_id: profile.id, purpose: "ask", model: readingModel(), locale,
+            status: "error", error: errorMessage(e).slice(0, 300),
+          }).catch(() => 0);
+          await releaseQuota(adminSupabase, profile.id, "ask", askQuotaResult.key);
+          askQuota.remaining = askQuota.remaining == null ? null : askQuota.remaining + 1;
+        }
+      }
+    }
     const hadPackAnswer = Boolean(
       pack?.content &&
         (normalizeAskTemplates(pack.content, locale).length > 0 ||
           safeString(pack.content.ask_knowledge?.compact_summary) ||
           safeString((pack.content.ask_knowledge as Record<string, unknown> | undefined)?.body)),
     );
-    const provenance = hadPackAnswer && pack
+    const provenance = askLlm && pack
+      ? buildProvenance({
+        promptVersion: ASK_V2_PROMPT_VERSION,
+        provider: "openai",
+        model: String(askLlm.model ?? readingModel()),
+        source: "llm",
+        factSignature: askCacheKey ?? "",
+      })
+      : hadPackAnswer && pack
       ? buildProvenance({
         promptVersion: BIRTH_PACK_VERSION,
         provider: pack.provider,
@@ -4806,6 +5787,8 @@ async function _handleInternal(
     const assistantPayload = {
       answer: copy,
       provenance,
+      ...(askCacheKey ? { cache_key: askCacheKey } : {}),
+      ...(askLlm ? { llm: askLlm } : {}),
       context: {
         goodWindows,
         cautionWindows,
@@ -4846,6 +5829,8 @@ async function _handleInternal(
       goodWindows,
       cautionWindows,
       provenance,
+      suggestedDate: askLlm?.suggested_date ?? null,
+      aiAnswer: Boolean(askLlm),
       locale,
       askAccess: {
         planCode: askQuota.planCode,
@@ -4915,17 +5900,9 @@ async function _handleInternal(
     );
     const selected = compare ? sorted[0]! : evaluations[0]!;
     const status = selected.status;
-    const headline = status === "limited_assessment"
-      ? "General traditional timing factors"
-      : status === "matched"
-      ? "Supportive traditional factors"
-      : status === "not_matched"
-      ? "Several traditional cautions"
-      : "Mixed traditional factors";
-    const summary =
-      "This is a traditional Panchanga comparison, not an outcome prediction. " +
-      selected.tithi.value + "; " + selected.nakshatra.value +
-      "; " + selected.yoga.value + ".";
+    const TC = TIMING_COPY[locale] ?? TIMING_COPY.en;
+    const headline = TC.headline[status] ?? TC.headline.partly_matched;
+    const summary = `${TC.summaryIntro} ${selected.tithi.value}; ${selected.nakshatra.value}; ${selected.yoga.value}.`;
     const lords = bi ? computeTimeline(bi, tz) : null;
     const at = zonedNoonJsDate(selected.date, tz);
     const period = lords?.segments.length
@@ -4940,13 +5917,13 @@ async function _handleInternal(
     const candidates = compare ? sorted.slice(0, 5) : [];
     const better_options = candidates.slice(1).map(e=>({
       label:e.date,
-      detail:[...e.support,...e.caution].slice(0,2).join("; ") ||
-        "General location-based traditional factors",
+      detail:[...e.support,...e.caution].slice(0,2).map((l) => localizeTimingLine(l, locale)).join("; ") ||
+        TC.generalFactors,
     }));
     return {
       id:crypto.randomUUID(),status,headline,summary,
-      action_line: "Consider real-world availability, preparation and professional advice first.",
-      timing_note: selected.limitations.join(" "),
+      action_line: TC.actionLine,
+      timing_note: selected.limitations.map((l) => localizeTimingLine(l, locale)).join(" "),
       shareHook: plan.shareHook,
       best_windows:selected.best_windows,
       caution_windows:selected.caution_windows,
@@ -4959,11 +5936,11 @@ async function _handleInternal(
         ...(selected.tarabala ? [selected.tarabala] : []),
         ...(selected.chandrabala ? [selected.chandrabala] : []),
       ],
-      supportingFactors:selected.support,
-      cautionFactors:selected.caution,
-      limitations:selected.limitations,
+      supportingFactors:selected.support.map((l) => localizeTimingLine(l, locale)),
+      cautionFactors:selected.caution.map((l) => localizeTimingLine(l, locale)),
+      limitations:selected.limitations.map((l) => localizeTimingLine(l, locale)),
       targetDate:selected.date, timezone:tz,
-      locationLabel:profile.current_city ?? "Selected city",
+      locationLabel:profile.current_city ?? TC.selectedCity,
       method:selected.method,
       candidateDates:candidates.map(e=>({
         date:e.date,status:e.status,
