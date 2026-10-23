@@ -13,6 +13,7 @@ import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
 import { runWarmup } from "./warmup.ts";
 import { dispatchDuePush } from "./push.ts";
+import { ensurePlan, type PlanCode, PRO_PLANS, razorpayConfig } from "./razorpay.ts";
 import type { AppLocale } from "./vedic_labels.ts";
 
 const cors: Record<string, string> = {
@@ -200,6 +201,32 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (body.action === "billing_ensure_plans") {
+      // Idempotent: find or create the Razorpay plans for the configured key mode (billing_plans).
+      const cronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
+      const given = req.headers.get("x-push-cron-secret") ?? "";
+      if (!(cronSecret && given === cronSecret) && !isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const cfg = razorpayConfig();
+      if (!cfg) {
+        return new Response(JSON.stringify({ error: "payments_unavailable" }), {
+          status: 503,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+      const plans: Record<string, string> = {};
+      for (const code of Object.keys(PRO_PLANS) as PlanCode[]) {
+        plans[code] = await ensurePlan(adminSupabase, cfg, code);
+      }
+      return new Response(JSON.stringify({ mode: cfg.mode, plans }), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
     if (body.action === "push_dispatch") {
       // Called by pg_cron every 5 minutes (shared secret) or manually with the service role.
       const cronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
