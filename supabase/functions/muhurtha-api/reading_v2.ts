@@ -677,6 +677,13 @@ function dayCard(key: string, d: V2DayCopy, source: "day" | "weekday", tone?: st
   };
 }
 
+/** Older te/hi facts carried English engine phrases; never surface them on te/hi screens. */
+const NATIVE_VIEW = /[\u0900-\u097F\u0C00-\u0C7F]/;
+function nativeView(loc: string, xs: string[] | undefined): string[] {
+  const list = xs ?? [];
+  return loc === "en" ? list : list.filter((s) => NATIVE_VIEW.test(s));
+}
+
 /** Build the content object today's PWA and engine readers understand. */
 export function buildReadingView(c: V2Content, facts: V2Facts, opts: ViewOptions): Record<string, unknown> {
   const now = DateTime.fromISO(opts.dateStr, { zone: opts.tz }).set({ hour: 12 }).toMillis();
@@ -719,8 +726,8 @@ export function buildReadingView(c: V2Content, facts: V2Facts, opts: ViewOptions
       sentences,
       evidenceLine: f.evidence,
       transitionNote: f.transition,
-      focusAreas: f.domains,
-      pressureThemes: f.pressure,
+      focusAreas: nativeView(facts.locale, f.domains),
+      pressureThemes: nativeView(facts.locale, f.pressure),
       domainLenses: f.lenses,
       shareHook: ch.share_line,
       tense,

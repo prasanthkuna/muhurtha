@@ -65,6 +65,15 @@ export type PurposePlanner = {
   betterOptionSeed?: string;
 };
 
+// Engine phrase banks (archetypes, life-area signals/cautions) are English. In te/hi the
+// screens must never show them raw, so keep only items written in the reader's script.
+const NATIVE_SCRIPT = /[\u0900-\u097F\u0C00-\u0C7F]/;
+
+function nativeOnly(loc: AppLocale, values: (string | null | undefined | false)[]): string[] {
+  const list = compact(values);
+  return loc === "en" ? list : list.filter((s) => NATIVE_SCRIPT.test(s));
+}
+
 function compact<T>(values: (T | null | undefined | false)[]): T[] {
   return values.filter(Boolean) as T[];
 }
@@ -261,17 +270,17 @@ export function buildPhasePlan(
     mahadashaLord: seg.mdLord,
     antardashaLord: seg.adLord,
     tense,
-    activeDomains: compact([
+    activeDomains: nativeOnly(loc, [
       ...domainLabels.slice(0, 3),
       ...blendActionBias(ad.areas, md.areas),
     ]).slice(0, 4),
-    supportThemes: compact([
+    supportThemes: nativeOnly(loc, [
       opts.kernel?.natal.archetype.strength,
       ad.mood[0],
       md.mood[0],
       md.areas[1],
     ]).slice(0, 4),
-    pressureThemes: compact([
+    pressureThemes: nativeOnly(loc, [
       opts.kernel?.natal.archetype.stressPattern,
       ...blendCautionBias(ad.mood, md.mood),
     ]).slice(0, 3),
@@ -301,27 +310,27 @@ export function buildTodayPlan(
   const md = lordFlavor(mdLord || "Saturn", loc);
   const ad = lordFlavor(adLord || mdLord || "Moon", loc);
   const domainLabels = kernelDomainLabels(kernel, scope);
-  const activeDomains = compact([
+  const activeDomains = nativeOnly(loc, [
     ...domainLabels.slice(0, scope === "today" ? 3 : 4),
     ...blendActionBias(ad.areas, md.areas),
   ]).slice(0, scope === "today" ? 4 : 5);
-  const supportThemes = compact([
+  const supportThemes = nativeOnly(loc, [
     kernel?.natal.archetype.strength,
     kernel?.period.line,
     ad.mood[0],
     md.mood[0],
     ad.areas[1],
   ]).slice(0, 5);
-  const pressureThemes = compact([
+  const pressureThemes = nativeOnly(loc, [
     ...kernelCautions(kernel, scope),
     ...blendCautionBias(ad.mood, md.mood),
   ]).slice(0, 4);
-  const actionBias = compact([
+  const actionBias = nativeOnly(loc, [
     ...kernelActions(kernel, scope),
     ...activeDomains,
   ]).slice(0, scope === "today" ? 2 : 3);
   const cautionBias = pressureThemes.slice(0, 2);
-  const dailyTexture = compact([
+  const dailyTexture = nativeOnly(loc, [
     kernel?.natal.archetype.workStyle,
     ad.areas[0],
     ad.mood[0],
@@ -409,13 +418,13 @@ export function buildPurposePlan(
   const ad = lordFlavor(adLord || mdLord || "Moon", loc);
   const label = purposeLabel(purposeType, loc);
   const purposeLens = kernel?.purposeLenses[purposeType];
-  const support = compact([
+  const support = nativeOnly(loc, [
     ...(purposeLens?.supportSignals ?? []),
     ad.areas[0],
     ad.mood[0],
     md.areas[0],
   ]).slice(0, 5);
-  const caution = compact([
+  const caution = nativeOnly(loc, [
     ...(purposeLens?.cautionSignals ?? []),
     ad.mood[1] ?? ad.mood[0],
     md.mood[1] ?? md.mood[0],

@@ -1,5 +1,7 @@
 import { OrbitBackdrop } from "@/components/celestial/orbit-backdrop";
 import { GrahaMedallion } from "@/components/celestial/lord-medallion";
+import { useLocale } from "@/context/locale-context";
+import { grahaName } from "@/design-system/graha";
 import type { ChapterView } from "@/lib/types";
 
 export function ChapterHeroCard({
@@ -9,9 +11,10 @@ export function ChapterHeroCard({
   chapter: ChapterView;
   currentLabel?: string;
 }) {
+  const { locale } = useLocale();
   const sub =
     chapter.mahadashaLord && chapter.antardashaLord
-      ? `${chapter.mahadashaLord} · ${chapter.antardashaLord}`
+      ? `${grahaName(chapter.mahadashaLord, locale)} · ${grahaName(chapter.antardashaLord, locale)}`
       : chapter.phasePulse || undefined;
 
   return (

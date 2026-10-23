@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/editorial/page-header";
 import { WhyLink, WhySheet } from "@/components/explainer/why-sheet";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
+import { grahaName } from "@/design-system/graha";
 import { explainerForGraha } from "@/lib/jyotish-explainers";
 import { formatPeriod } from "@/lib/format-date";
 import { ShareCardButton } from "@/components/share/share-button";
@@ -86,7 +87,7 @@ export default function LifeChapterPage() {
           build={() => ({
             title: chapter.title,
             value: formatPeriod(chapter.periodLabel, chapter.periodStart, chapter.periodEnd, locale),
-            subtitle: [chapter.mahadashaLord, chapter.antardashaLord].filter(Boolean).join(" · ") || undefined,
+            subtitle: [chapter.mahadashaLord, chapter.antardashaLord].filter(Boolean).map((l) => grahaName(l, locale)).join(" · ") || undefined,
             body: clip(chapter.highlight || chapter.shareHook || (chapter.proLocked ? "" : chapter.body), 230),
             chips: chapter.focusAreas.filter((x) => x.length <= 28).slice(0, 2),
             glyph: grahaGlyph(chapter.mahadashaLord),
@@ -120,7 +121,7 @@ export default function LifeChapterPage() {
           <p className="mt-2 text-ink-secondary">{chapter.evidenceLine}</p>
           <div className="mt-2 flex items-center gap-2">
             <p className="text-xs text-ink-tertiary">
-              {chapter.mahadashaLord} · {chapter.antardashaLord}
+              {grahaName(chapter.mahadashaLord, locale)} · {grahaName(chapter.antardashaLord, locale)}
             </p>
             {lordExplainer ? <WhyLink onClick={() => setWhyOpen(true)} /> : null}
           </div>

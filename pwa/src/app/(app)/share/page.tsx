@@ -7,6 +7,7 @@ import { ShareCardButton } from "@/components/share/share-button";
 import { Glyph } from "@/components/ui/glyph";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
+import { grahaName } from "@/design-system/graha";
 import { formatPeriod } from "@/lib/format-date";
 import { formatWindowRange } from "@/lib/format-time";
 import { clip, grahaGlyph, rashiGlyph } from "@/lib/share/builders";
@@ -63,7 +64,7 @@ export default function SharePage() {
       build: () => ({
         title: chapter.title,
         value: formatPeriod(chapter.periodLabel, chapter.periodStart, chapter.periodEnd, locale),
-        subtitle: [chapter.mahadashaLord, chapter.antardashaLord].filter(Boolean).join(" · ") || undefined,
+        subtitle: [chapter.mahadashaLord, chapter.antardashaLord].filter(Boolean).map((l) => grahaName(l, locale)).join(" · ") || undefined,
         body: clip(chapter.highlight || chapter.shareHook, 230),
         glyph: grahaGlyph(chapter.mahadashaLord),
       }),
