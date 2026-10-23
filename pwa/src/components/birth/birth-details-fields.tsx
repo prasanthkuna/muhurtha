@@ -26,6 +26,7 @@ export function BirthDetailsFields({
   nameLabel,
   showCurrentPlace = true,
   syncBirthFromCurrent = true,
+  detectBirthPlace = true,
 }: {
   values: BirthDetailsValues;
   onChange: (patch: Partial<BirthDetailsValues>) => void;
@@ -33,6 +34,8 @@ export function BirthDetailsFields({
   nameLabel?: string;
   showCurrentPlace?: boolean;
   syncBirthFromCurrent?: boolean;
+  /** Off for partner/friend forms: never auto-detect (or offer) the owner's location. */
+  detectBirthPlace?: boolean;
 }) {
   const { t } = useLocale();
   const [birthUnlinked, setBirthUnlinked] = useState(false);
@@ -83,7 +86,8 @@ export function BirthDetailsFields({
           setBirthUnlinked(true);
           onChange({ birthPlace });
         }}
-        autoDetect={!showCurrentPlace}
+        autoDetect={!showCurrentPlace && detectBirthPlace}
+        allowDetect={detectBirthPlace}
       />
 
       {showCurrentPlace && syncBirthFromCurrent && !birthUnlinked ? (

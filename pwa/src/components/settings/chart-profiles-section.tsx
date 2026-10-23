@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2, Users } from "@/components/celestial/muh-icon";
 import {
   BirthDetailsFields,
@@ -9,6 +9,7 @@ import {
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
+import { chartBirthLine, initialOf } from "@/lib/chart-profiles";
 import { resolveBirthInputMode } from "@/lib/onboarding/engine-resolution";
 
 const emptyPartner: BirthDetailsValues = {
@@ -23,7 +24,7 @@ const emptyPartner: BirthDetailsValues = {
 };
 
 export function ChartProfilesSection() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const {
     chartProfiles,
     activeChartProfileId,
@@ -36,6 +37,22 @@ export function ChartProfilesSection() {
   const [values, setValues] = useState<BirthDetailsValues>(emptyPartner);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // Deep link from the profile switcher ("Add someone" → /settings#add-chart).
+  useEffect(() => {
+    const openFromHash = () => {
+      if (window.location.hash === "#add-chart") {
+        setOpen(true);
+        window.setTimeout(
+          () => document.getElementById("charts")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          50,
+        );
+      }
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, []);
 
   async function onSave() {
     if (!values.displayName.trim() || !values.dateOfBirth || !values.birthPlace) {
@@ -75,6 +92,7 @@ export function ChartProfilesSection() {
       });
       setOpen(false);
       setValues(emptyPartner);
+      setMsg(`${t("chart.added")} ${t("chart.preparingShort")}`);
     } catch (e) {
       const text = e instanceof Error ? e.message : t("chart.incomplete");
       setMsg(text.includes("limit") ? t("chart.limit") : text);
@@ -84,7 +102,7 @@ export function ChartProfilesSection() {
   }
 
   return (
-    <section className="space-y-3">
+    <section id="charts" className="scroll-mt-4 space-y-3">
       <div className="flex items-center gap-2">
         <Users className="h-4 w-4 text-gold-text" aria-hidden />
         <h2 className="text-sm font-semibold text-gold-text">{t("chart.sectionTitle")}</h2>
@@ -115,22 +133,34 @@ export function ChartProfilesSection() {
         >
           <button
             type="button"
-            className="min-h-10 flex-1 text-left text-sm font-medium text-ink"
+            className="flex min-h-10 flex-1 items-center gap-3 text-left text-sm font-medium text-ink"
             onClick={() => void setActiveChartProfile(p.id, p.label)}
+            aria-pressed={activeChartProfileId === p.id}
           >
-            {p.label}
-            {p.dateOfBirth ? (
-              <span className="mt-0.5 block text-xs font-normal text-ink-tertiary">
-                {p.dateOfBirth}
-                {p.birthPlace ? ` · ${p.birthPlace}` : ""}
-              </span>
-            ) : null}
+            <span
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gold-wash text-xs font-semibold text-gold-text"
+              aria-hidden
+            >
+              {initialOf(p.label)}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate">{p.label}</span>
+              {p.dateOfBirth ? (
+                <span className="mt-0.5 block text-xs font-normal text-ink-tertiary">
+                  {chartBirthLine(p, locale, t)}
+                </span>
+              ) : null}
+            </span>
           </button>
           <button
             type="button"
             className="rounded-lg p-2 text-warning-ink hover:bg-warning-wash/40"
-            aria-label={t("common.delete")}
-            onClick={() => void deleteChartProfile(p.id)}
+            aria-label={`${t("common.delete")} ${p.label}`}
+            onClick={() => {
+              if (window.confirm(`${t("chart.confirmDelete")} ${p.label}?`)) {
+                void deleteChartProfile(p.id);
+              }
+            }}
           >
             <Trash2 className="h-4 w-4" aria-hidden />
           </button>
@@ -159,9 +189,15 @@ export function ChartProfilesSection() {
             nameLabel={t("chart.name")}
             showCurrentPlace={false}
             syncBirthFromCurrent={false}
+            detectBirthPlace={false}
           />
           <div className="flex gap-2">
-            <PrimaryButton type="button" className="flex-1" onClick={() => void onSave()}>
+            <PrimaryButton
+              type="button"
+              className="flex-1"
+              onClick={() => void onSave()}
+              disabled={busy}
+            >
               {busy ? t("chart.saving") : t("chart.addButton")}
             </PrimaryButton>
             <button

@@ -9,6 +9,7 @@ import { localPlaceHints } from "@/lib/location/place-hints";
 import {
   detectCurrentPlace,
   geolocationErrorMessage,
+  mergePlaces,
   searchPlaces,
   type ResolvedPlace,
 } from "@/lib/location/resolved-place";
@@ -21,12 +22,15 @@ export function LocationPicker({
   value,
   onChange,
   autoDetect = false,
+  allowDetect = true,
   className,
 }: {
   label: string;
   value: ResolvedPlace | null;
   onChange: (place: ResolvedPlace) => void;
   autoDetect?: boolean;
+  /** Hide "detect my location" (e.g. a friend's birth place is not where you are now). */
+  allowDetect?: boolean;
   className?: string;
 }) {
   const { t } = useLocale();
@@ -68,7 +72,7 @@ export function LocationPicker({
   }, [onChange]);
 
   useEffect(() => {
-    if (!mounted || !autoDetect || value || detectStarted.current) return;
+    if (!mounted || !autoDetect || !allowDetect || value || detectStarted.current) return;
     detectStarted.current = true;
     // Auto-detect at most once per browser session; afterwards the user taps Detect.
     try {
@@ -78,7 +82,7 @@ export function LocationPicker({
       /* private mode: still detect once for this mount */
     }
     void detect();
-  }, [mounted, autoDetect, value, detect]);
+  }, [mounted, autoDetect, allowDetect, value, detect]);
 
   useEffect(() => {
     if (!sheetOpen) return;
@@ -90,7 +94,7 @@ export function LocationPicker({
       return;
     }
 
-    setResults(localPlaceHints(q, 8));
+    setResults(mergePlaces(localPlaceHints(q, 8), [], 8));
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       abortRef.current?.abort();
@@ -102,12 +106,12 @@ export function LocationPicker({
         try {
           const rows = await searchPlaces(q, 8, ac.signal);
           if (ac.signal.aborted) return;
-          setResults(rows);
+          setResults(mergePlaces(rows, [], 8));
         } catch (e) {
           if (ac.signal.aborted) return;
           const instant = localPlaceHints(q, 8);
           if (instant.length > 0) {
-            setResults(instant);
+            setResults(mergePlaces(instant, [], 8));
             setError(null);
           } else {
             setResults([]);
@@ -193,6 +197,7 @@ export function LocationPicker({
               enterKeyHint="search"
             />
           </div>
+          {allowDetect ? (
           <button
             type="button"
             onClick={() => void detect()}
@@ -206,6 +211,7 @@ export function LocationPicker({
             )}
             {busy ? t("settings.detecting") : t("settings.detectLocation")}
           </button>
+          ) : null}
           <ul
             id={listId}
             className="min-h-[8rem] flex-1 overflow-y-auto px-2 py-2"
@@ -277,6 +283,7 @@ export function LocationPicker({
         </button>
       </MuhField>
 
+      {allowDetect ? (
       <button
         type="button"
         onClick={() => void detect()}
@@ -286,6 +293,7 @@ export function LocationPicker({
         <Navigation className="h-4 w-4" aria-hidden />
         {busy ? t("settings.detecting") : t("settings.detectLocation")}
       </button>
+      ) : null}
 
       {error && !sheetOpen ? (
         <p className="text-sm text-warning-ink" role="alert">

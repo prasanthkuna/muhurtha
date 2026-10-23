@@ -31,13 +31,22 @@ function mapRow(data: Record<string, unknown>, fallbackLabel: string): ResolvedP
   return { label, lat, lng, timezone };
 }
 
-function mergePlaces(primary: ResolvedPlace[], extra: ResolvedPlace[], limit: number): ResolvedPlace[] {
-  const seen = new Set<string>();
+function normLabel(label: string): string {
+  return label.toLowerCase().replace(/\s+/g, " ").replace(/\s*,\s*/g, ",").trim();
+}
+
+/** Merge + dedupe: geocoders often return the same city several times with tiny coordinate
+ * differences, which showed up as identical "Hyderabad, Telangana" rows. */
+export function mergePlaces(primary: ResolvedPlace[], extra: ResolvedPlace[], limit: number): ResolvedPlace[] {
+  const seenLabels = new Set<string>();
+  const seenCoords = new Set<string>();
   const out: ResolvedPlace[] = [];
   for (const p of [...primary, ...extra]) {
-    const key = `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const label = normLabel(p.label);
+    const coord = `${p.lat.toFixed(2)},${p.lng.toFixed(2)}`;
+    if (seenLabels.has(label) || seenCoords.has(coord)) continue;
+    seenLabels.add(label);
+    seenCoords.add(coord);
     out.push(p);
     if (out.length >= limit) break;
   }

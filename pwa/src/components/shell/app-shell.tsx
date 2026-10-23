@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { PageTransition } from "@/components/motion/page-transition";
 import { ChartProfileBanner } from "@/components/shell/chart-profile-banner";
+import { ProfileSwitcher } from "@/components/shell/profile-switcher";
 import { cn } from "@/components/ui/cn";
 import { useLocale } from "@/context/locale-context";
 import { Settings } from "@/components/celestial/muh-icon";
@@ -59,9 +60,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas text-ink">
       <header className="flex items-center justify-between px-5 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">
-          Muhūrta
-        </span>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">
+            Muhūrta
+          </span>
+          <ProfileSwitcher />
+        </div>
         <Link
           href="/settings"
           className="flex h-10 w-10 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-paper hover:text-gold-text"

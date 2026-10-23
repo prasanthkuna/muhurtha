@@ -1,3 +1,7 @@
+import { formatDisplayDate } from "./format-date";
+import { formatWindowClock } from "./format-time";
+import type { AppLocale } from "./locale";
+
 export type ChartProfileSummary = {
   id: string;
   label: string;
@@ -5,6 +9,8 @@ export type ChartProfileSummary = {
   dateOfBirth?: string;
   birthPlace?: string;
   nakshatra?: string;
+  exactBirthTime?: string;
+  timeBucket?: string;
 };
 
 export function parseChartProfileList(json: Record<string, unknown>): ChartProfileSummary[] {
@@ -23,6 +29,8 @@ export function parseChartProfileList(json: Record<string, unknown>): ChartProfi
         dateOfBirth: birthMap?.date_of_birth?.toString()?.slice(0, 10),
         birthPlace: birthMap?.birth_place?.toString(),
         nakshatra: birthMap?.janma_nakshatra?.toString(),
+        exactBirthTime: birthMap?.exact_birth_time?.toString() || undefined,
+        timeBucket: birthMap?.time_bucket?.toString() || undefined,
       };
     })
     .filter((p) => p.id && p.label);
@@ -37,3 +45,26 @@ export const TIME_BUCKETS = [
   { value: "late_night", key: "bucket.lateNight" },
   { value: "unknown", key: "bucket.unknown" },
 ] as const;
+
+/** "20 May 2025 · 11:46 PM · Hyderabad" (time bucket label when no exact time). */
+export function chartBirthLine(
+  p: Pick<ChartProfileSummary, "dateOfBirth" | "exactBirthTime" | "timeBucket" | "birthPlace">,
+  locale: AppLocale,
+  t: (key: string) => string,
+): string {
+  const parts: string[] = [];
+  if (p.dateOfBirth) parts.push(formatDisplayDate(p.dateOfBirth, locale, { weekday: false }));
+  if (p.exactBirthTime) {
+    parts.push(formatWindowClock(p.exactBirthTime.slice(0, 5)));
+  } else if (p.timeBucket) {
+    const bucket = TIME_BUCKETS.find((b) => b.value === p.timeBucket);
+    if (bucket) parts.push(t(bucket.key));
+  }
+  if (p.birthPlace) parts.push(p.birthPlace.split(",")[0]!.trim());
+  return parts.join(" · ");
+}
+
+export function initialOf(label: string | null | undefined): string {
+  const ch = (label ?? "").trim().charAt(0);
+  return ch ? ch.toLocaleUpperCase() : "?";
+}
