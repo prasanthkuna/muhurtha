@@ -37,7 +37,7 @@ export default function ContactPage() {
       </section>
       <section>
         <h2>Account deletion</h2>
-        <p>You can request deletion of your account and data at <a className="text-gold-text" href="https://muhurta-legal.vercel.app/delete-account">muhurta-legal.vercel.app/delete-account</a> or by email.</p>
+        <p>You can request deletion of your account and data at <a className="text-gold-text" href="/delete-account">our delete account page</a> or by email.</p>
       </section>
     </PolicyPage>
   );

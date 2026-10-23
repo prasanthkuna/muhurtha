@@ -15,8 +15,8 @@ export function PolicyPage({ title, intro, children }: { title: string; intro?: 
         <Link href="/pricing" className="hover:text-gold-text">Pricing</Link>
         <Link href="/refund" className="hover:text-gold-text">Refund &amp; cancellation</Link>
         <Link href="/contact" className="hover:text-gold-text">Contact</Link>
-        <a href="https://muhurta-legal.vercel.app/terms" className="hover:text-gold-text">Terms</a>
-        <a href="https://muhurta-legal.vercel.app/privacy" className="hover:text-gold-text">Privacy</a>
+        <Link href="/terms" className="hover:text-gold-text">Terms</Link>
+        <Link href="/privacy" className="hover:text-gold-text">Privacy</Link>
       </nav>
       <h1 className="mt-8 font-serif text-3xl leading-tight">{title}</h1>
       <p className="mt-1 text-xs text-ink-tertiary">Last updated: {POLICY_UPDATED}</p>

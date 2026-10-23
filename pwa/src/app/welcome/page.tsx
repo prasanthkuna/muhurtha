@@ -78,8 +78,8 @@ export default function WelcomePage() {
           <a href="/pricing" className="hover:text-gold-text">Pricing</a>
           <a href="/refund" className="hover:text-gold-text">Refunds</a>
           <a href="/contact" className="hover:text-gold-text">Contact</a>
-          <a href="https://muhurta-legal.vercel.app/terms" className="hover:text-gold-text">Terms</a>
-          <a href="https://muhurta-legal.vercel.app/privacy" className="hover:text-gold-text">Privacy</a>
+          <a href="/terms" className="hover:text-gold-text">Terms</a>
+          <a href="/privacy" className="hover:text-gold-text">Privacy</a>
         </nav>
       </div>
     </div>

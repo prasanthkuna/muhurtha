@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
@@ -15,6 +15,9 @@ export default function AuthPage() {
   const urlErrorDesc = params.get("error_description");
 
   const [busy, setBusy] = useState(false);
+  const [showEmail, setShowEmail] = useState(() => params.get("method") === "email");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(() => {
     if (urlErrorDesc) return decodeURIComponent(urlErrorDesc);
     if (urlError === "provider_not_enabled") {
@@ -68,6 +71,27 @@ export default function AuthPage() {
     }
   }
 
+  async function signInWithEmail(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!email.trim() || !password) return;
+    setBusy(true);
+    setError(null);
+    const supabase = createClient();
+    if (!supabase) {
+      setError("Add Supabase keys to .env.local.");
+      setBusy(false);
+      return;
+    }
+    const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (err) {
+      setError(err.message === "Invalid login credentials" ? "That email and password don't match." : err.message);
+      setBusy(false);
+      return;
+    }
+    const dest = await resolveInitialAppPath(supabase, nextPath.startsWith("/") ? nextPath : "/today");
+    router.replace(dest);
+  }
+
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(3rem,env(safe-area-inset-top))]">
       <Link href="/welcome" className="text-sm text-gold-text">
@@ -82,11 +106,61 @@ export default function AuthPage() {
         <OAuthButtons onGoogle={() => void signInWithGoogle()} busy={busy} />
       </div>
 
+      {showEmail ? (
+        <form onSubmit={(e) => void signInWithEmail(e)} className="mt-6 space-y-3" aria-label="Sign in with email">
+          <label className="block text-sm text-ink-secondary">
+            Email
+            <input
+              type="email"
+              name="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-line bg-paper px-4 py-3 text-ink outline-none focus:border-gold-text"
+            />
+          </label>
+          <label className="block text-sm text-ink-secondary">
+            Password
+            <input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-line bg-paper px-4 py-3 text-ink outline-none focus:border-gold-text"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-xl bg-ink px-4 py-3 font-medium text-paper disabled:opacity-60"
+          >
+            {busy ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowEmail(true)}
+          className="mt-5 self-center text-sm text-ink-secondary underline underline-offset-4 hover:text-gold-text"
+        >
+          Sign in with email
+        </button>
+      )}
+
       {error ? (
         <p className="mt-4 text-sm text-warning-ink" role="alert">
           {error}
         </p>
       ) : null}
+
+      <p className="mt-auto pt-10 text-center text-xs text-ink-tertiary">
+        By continuing you agree to our{" "}
+        <Link href="/terms" className="underline underline-offset-2">Terms</Link> and{" "}
+        <Link href="/privacy" className="underline underline-offset-2">Privacy Policy</Link>.
+      </p>
     </div>
   );
 }

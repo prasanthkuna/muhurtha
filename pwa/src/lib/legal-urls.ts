@@ -1,11 +1,9 @@
-const siteBase =
-  process.env.NEXT_PUBLIC_LEGAL_SITE_URL ?? "https://muhurta-legal.vercel.app";
-
+/** Legal pages are served by the PWA itself (public, no sign-in). */
 export const LegalUrls = {
-  privacy: `${siteBase}/privacy`,
-  terms: `${siteBase}/terms`,
-  deleteAccount: `${siteBase}/delete-account`,
-  home: siteBase,
+  privacy: "/privacy",
+  terms: "/terms",
+  deleteAccount: "/delete-account",
+  home: "/",
   supportEmail: "prasanthkuna@gmail.com",
 };
 
