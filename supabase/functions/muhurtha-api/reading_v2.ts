@@ -9,7 +9,7 @@
 import { DateTime } from "luxon";
 
 export const READING_SCHEMA_VERSION = 2;
-export const READING_PROMPT_VERSION = "reading-v2.1";
+export const READING_PROMPT_VERSION = "reading-v2.2";
 
 export type ReadingLocale = "en" | "te" | "hi";
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
@@ -303,7 +303,8 @@ export function buildSystemPrompt(facts: V2Facts): string {
   return [
     `You write a personal Vedic-astrology reading for the Muhurta app. Write EVERYTHING in ${lang}.` +
     (facts.locale === "en" ? "" : ` Write natively in ${lang} (not a translation); everyday words, not Sanskrit-heavy. Common English words like 'Pro' are fine, but sentences must be in ${lang} script.`),
-    "Voice: warm, specific, practical, calm. Short sentences. Second person ('you') for the account owner; for another person use their name.",
+    "Voice: warm, specific, practical, calm. Short sentences. Second person ('you') for the account owner; for another person use their name." +
+    (facts.locale === "hi" ? " Hindi: always the respectful aap form (karein, rakhein), never tum/tu forms." : facts.locale === "te" ? " Telugu: always the respectful meeru form, never informal forms." : ""),
     "Rules:",
     "1. The engine owns all facts. Never write clock times, durations in hours, years, dates, ages or planet/graha names in days, weekdays, weeks, months or push. Planet names are allowed only inside chapters and profile, and only when they help.",
     "2. Every day must read differently: use that day's tithi, nakshatra, yoga, moon sign, tara and day_tone to choose a different angle, title and chips. Never reuse a title, opening phrase or chip across days. Do not mention the weekday name in day titles.",
