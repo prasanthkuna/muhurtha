@@ -5,6 +5,7 @@ import { smokeTestLocaleLlm } from "./locale_smoke.ts";
 import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
 import { runWarmup } from "./warmup.ts";
+import { dispatchDuePush } from "./push.ts";
 import type { AppLocale } from "./vedic_labels.ts";
 
 const cors: Record<string, string> = {
@@ -165,6 +166,24 @@ Deno.serve(async (req) => {
             : undefined,
         },
       );
+      return new Response(JSON.stringify(result), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    if (body.action === "push_dispatch") {
+      // Called by pg_cron every 5 minutes (shared secret) or manually with the service role.
+      const cronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
+      const given = req.headers.get("x-push-cron-secret") ?? "";
+      if (!(cronSecret && given === cronSecret) && !isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+      const result = await dispatchDuePush(adminSupabase);
+      if (result.considered > 0) console.log("[push_dispatch]", JSON.stringify(result));
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
       });

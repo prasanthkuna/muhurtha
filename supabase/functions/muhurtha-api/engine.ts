@@ -6,6 +6,12 @@ import { attachNatalLuckToContent, buildNatalLuck } from "./natal_luck.ts";
 import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
 import { evaluateDay } from "./panchanga.ts";
 import {
+  normalizePrefs,
+  pushConfigured,
+  sendTestToProfile,
+  vapidPublicKey,
+} from "./push.ts";
+import {
   allAntardashasFromMahadashas,
   type AdSegment,
   type MdSegment,
@@ -3273,6 +3279,10 @@ async function _handleInternal(
     );
   }
 
+  if (action.startsWith("push_")) {
+    return await handlePushAction(action, body, prof, adminSupabase);
+  }
+
   if (action === "birth_place_search") {
     const query = String(body.query ?? body.place ?? "").trim();
     const limit = Math.min(10, Math.max(1, Number(body.limit) || 8));
@@ -5049,4 +5059,108 @@ export async function warmBirthPack(
       : [],
     provider: pack?.provider ?? null,
   };
+}
+
+
+/** Web Push: config, subscribe/unsubscribe, status and a test send for the signed-in user. */
+async function handlePushAction(
+  action: string,
+  body: Record<string, unknown>,
+  prof: ProfRow | null,
+  admin: SupabaseClient,
+): Promise<unknown> {
+  if (action === "push_config") {
+    return { configured: pushConfigured(), publicKey: vapidPublicKey() };
+  }
+  if (!prof) throw new ActionError("profile_missing", "Profile not found", 404);
+
+  if (action === "push_subscribe") {
+    const sub = (body.subscription ?? {}) as Record<string, unknown>;
+    const keys = (sub.keys ?? {}) as Record<string, unknown>;
+    const endpoint = String(sub.endpoint ?? "").trim();
+    const p256dh = String(keys.p256dh ?? "").trim();
+    const auth = String(keys.auth ?? "").trim();
+    if (!/^https:\/\//.test(endpoint) || endpoint.length > 1000 || !p256dh || !auth) {
+      throw new ActionError("invalid_subscription", "Invalid push subscription", 400);
+    }
+    const now = new Date().toISOString();
+    const locale = ["en", "te", "hi"].includes(String(body.locale)) ? String(body.locale) : "en";
+    const { data, error } = await admin.from("push_subscriptions").upsert({
+      profile_id: prof.id,
+      endpoint,
+      p256dh,
+      auth,
+      locale,
+      timezone: String(body.timezone ?? prof.current_timezone ?? "Asia/Kolkata").slice(0, 64),
+      user_agent: String(body.user_agent ?? "").slice(0, 300) || null,
+      prefs: normalizePrefs(body.prefs),
+      disabled_at: null,
+      failure_count: 0,
+      updated_at: now,
+    }, { onConflict: "endpoint" }).select("id").single();
+    if (error) throw error;
+    return { subscribed: true, id: data.id };
+  }
+
+  if (action === "push_unsubscribe") {
+    const endpoint = String(body.endpoint ?? "").trim();
+    if (endpoint) {
+      await admin.from("push_subscriptions").delete().eq("profile_id", prof.id).eq("endpoint", endpoint);
+    }
+    return { subscribed: false };
+  }
+
+  if (action === "push_status") {
+    const endpoint = String(body.endpoint ?? "").trim();
+    const { data, error } = await admin
+      .from("push_subscriptions")
+      .select("id, endpoint, created_at, last_success_at, last_status, last_error, disabled_at, prefs, locale")
+      .eq("profile_id", prof.id)
+      .order("updated_at", { ascending: false })
+      .limit(10);
+    if (error) throw error;
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const mine = endpoint ? rows.find((r) => r.endpoint === endpoint) : undefined;
+    const { data: lastOk } = await admin
+      .from("push_deliveries")
+      .select("sent_at, kind")
+      .eq("profile_id", prof.id)
+      .eq("ok", true)
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return {
+      configured: pushConfigured(),
+      publicKey: vapidPublicKey(),
+      thisDevice: mine
+        ? {
+          active: !mine.disabled_at,
+          lastSuccessAt: mine.last_success_at ?? null,
+          lastStatus: mine.last_status ?? null,
+          lastError: mine.last_error ?? null,
+          prefs: normalizePrefs(mine.prefs),
+        }
+        : null,
+      devices: rows.filter((r) => !r.disabled_at).length,
+      lastDeliveredAt: lastOk?.sent_at ?? null,
+      lastDeliveredKind: lastOk?.kind ?? null,
+    };
+  }
+
+  if (action === "push_test") {
+    if (!pushConfigured()) {
+      throw new ActionError("push_not_configured", "Push is not configured on the server", 503);
+    }
+    const results = await sendTestToProfile(admin, prof.id, String(body.locale ?? ""));
+    await logAppEvent(admin, prof.id, "push", results.some((r) => r.ok) ? "info" : "warn", "push_test", undefined, {
+      results: results.map((r) => ({ host: r.host, status: r.status, ok: r.ok, error: r.error })),
+    });
+    return {
+      sent: results.filter((r) => r.ok).length,
+      total: results.length,
+      results: results.map((r) => ({ ok: r.ok, status: r.status, host: r.host, error: r.error ?? null })),
+    };
+  }
+
+  throw new ActionError("unknown_action", `Unknown action ${action}`, 400);
 }

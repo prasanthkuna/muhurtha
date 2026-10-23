@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { formatDisplayDate } from "@/lib/format-date";
 import {
-  Bell,
-  BellOff,
   Bookmark,
   Languages,
   LogOut,
@@ -27,12 +25,7 @@ import type { ResolvedPlace } from "@/lib/location/resolved-place";
 import { saveProfileCurrentPlace } from "@/lib/onboarding/save-onboarding";
 import { loadBirthProfileResult, type BirthProfileSummary } from "@/lib/profile-bundle";
 import { createClient } from "@/lib/supabase/client";
-import {
-  notificationsEnabled,
-  requestNotificationPermission,
-  setNotificationsEnabled,
-  syncTimingNotifications,
-} from "@/lib/timing-notifications";
+import { PushSection } from "@/components/settings/push-section";
 
 function Section({
   title,
@@ -70,7 +63,7 @@ type BirthState = "loading" | "ok" | "missing" | "error";
 
 export default function SettingsPage() {
   const { t, locale, setLocale } = useLocale();
-  const { isPro, refresh, today, profileTimezone, pack } = useAppData();
+  const { isPro, refresh, today, pack } = useAppData();
   const [email, setEmail] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
   const [birth, setBirth] = useState<BirthProfileSummary | null>(null);
@@ -78,8 +71,6 @@ export default function SettingsPage() {
   const [birthError, setBirthError] = useState<string | null>(null);
   const [currentPlace, setCurrentPlace] = useState<ResolvedPlace | null>(null);
   const [locationMsg, setLocationMsg] = useState<string | null>(null);
-  const [alertsOn, setAlertsOn] = useState(false);
-  const [alertsMsg, setAlertsMsg] = useState<string | null>(null);
   const [langBusy, setLangBusy] = useState(false);
   const [refreshBusy, setRefreshBusy] = useState(false);
 
@@ -113,7 +104,6 @@ export default function SettingsPage() {
   }, [t]);
 
   useEffect(() => {
-    setAlertsOn(notificationsEnabled());
     void (async () => {
       const supabase = createClient();
       if (!supabase) return;
@@ -151,9 +141,6 @@ export default function SettingsPage() {
       // Calling refresh() here used to reload with the *previous* locale captured in its
       // closure, which left Today in Telugu after switching back to English.
       await setLocale(next);
-      if (notificationsEnabled()) {
-        await syncTimingNotifications(today, next, profileTimezone);
-      }
     } finally {
       setLangBusy(false);
     }
@@ -168,31 +155,12 @@ export default function SettingsPage() {
       await saveProfileCurrentPlace(supabase, place);
       clearEngineCache();
       await refresh();
-      if (notificationsEnabled()) {
-        await syncTimingNotifications(today, locale, profileTimezone);
-      }
       setLocationMsg(t("settings.locationSaved"));
     } catch (e) {
       setLocationMsg(e instanceof Error ? e.message : t("onboarding.geoFailed"));
     }
   }
 
-  async function toggleAlerts() {
-    setAlertsMsg(null);
-    if (alertsOn) {
-      setNotificationsEnabled(false);
-      setAlertsOn(false);
-      return;
-    }
-    const ok = await requestNotificationPermission();
-    if (!ok) {
-      setAlertsMsg(t("settings.permissionRequired"));
-      return;
-    }
-    setNotificationsEnabled(true);
-    setAlertsOn(true);
-    await syncTimingNotifications(today, locale, profileTimezone);
-  }
 
   const displayName =
     birth?.displayName || pack?.displayName || email?.split("@")[0] || t("common.you");
@@ -312,13 +280,7 @@ export default function SettingsPage() {
       </Section>
 
       <Section title={t("settings.alertsTitle")}>
-        <p className="px-1 text-sm text-ink-secondary">{t("settings.alertsHint")}</p>
-        <SettingsRow
-          onClick={() => void toggleAlerts()}
-          icon={alertsOn ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
-          title={alertsOn ? t("settings.alertsOn") : t("settings.alertsOff")}
-        />
-        {alertsMsg ? <p className="px-1 text-sm text-warning-ink">{alertsMsg}</p> : null}
+        <PushSection />
       </Section>
 
       <Section title={t("settings.moreTitle")}>
