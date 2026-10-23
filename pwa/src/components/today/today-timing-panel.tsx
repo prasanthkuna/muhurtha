@@ -8,11 +8,13 @@ import { formatWindowRange } from "@/lib/format-time";
 import type { TimingWindow } from "@/lib/today-types";
 
 export function TodayTimingPanel({
+  isToday = true,
   goodWindows,
   cautionWindows,
   betterFor,
   beCareful,
 }: {
+  isToday?: boolean;
   goodWindows: TimingWindow[];
   cautionWindows: TimingWindow[];
   betterFor: string[];
@@ -27,7 +29,7 @@ export function TodayTimingPanel({
     <section className="space-y-4 rounded-2xl border border-line bg-paper px-4 py-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">
-          {t("today.clockTitle")}
+          {isToday ? t("today.clockTitle") : t("today.clockTitleDay")}
         </p>
       </div>
 
@@ -35,7 +37,7 @@ export function TodayTimingPanel({
         <div className="space-y-3">
           {nextGood ? (
             <div>
-              <p className="mb-2 text-xs font-semibold text-success-ink">{t("today.nextGood")}</p>
+              <p className="mb-2 text-xs font-semibold text-success-ink">{isToday ? t("today.nextGood") : t("today.firstGood")}</p>
               <WindowTimePill window={nextGood} tone="good" />
               {nextGood.whyItWorks ? (
                 <p className="mt-2 text-xs leading-relaxed text-ink-tertiary">{nextGood.whyItWorks}</p>
@@ -44,7 +46,7 @@ export function TodayTimingPanel({
           ) : null}
           {nextCaution ? (
             <div>
-              <p className="mb-2 text-xs font-semibold text-warning-ink">{t("today.nextCaution")}</p>
+              <p className="mb-2 text-xs font-semibold text-warning-ink">{isToday ? t("today.nextCaution") : t("today.firstCaution")}</p>
               <WindowTimePill window={nextCaution} tone="caution" />
             </div>
           ) : null}
@@ -81,7 +83,11 @@ export function TodayTimingPanel({
       {(goodWindows.length > 1 || cautionWindows.length > 0) && (
         <>
           <DisclosureButton open={expanded} onToggle={() => setExpanded((v) => !v)}>
-            {expanded ? t("today.hideTimeline") : t("today.showTimeline")}
+            {expanded
+              ? t("today.hideTimeline")
+              : isToday
+                ? t("today.showTimeline")
+                : t("today.showTimelineDay")}
           </DisclosureButton>
           {expanded ? (
             <div className="space-y-4">

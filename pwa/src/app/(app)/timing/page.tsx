@@ -37,15 +37,28 @@ function TimingInner() {
   const { views, loading, error, pack, profileTimezone } = useAppData();
   const resultRef = useRef<HTMLDivElement>(null);
   const [scrollPending, setScrollPending] = useState(false);
+  // Only scroll for checks the user asked for (button / candidate tap), not the silent
+  // auto-check on page open or after a language change.
+  const scrollWantedRef = useRef(false);
 
   useEffect(() => {
     if (!result || !scrollPending) return;
     setScrollPending(false);
     // Bring the answer into view instead of leaving it below the fold.
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     window.requestAnimationFrame(() =>
-      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      resultRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }),
     );
   }, [result, scrollPending]);
+
+  // Results are localized: drop a stale Find-a-date result when the language changes
+  // (check mode re-runs on its own because engineBody changes with the locale).
+  const lastLocale = useRef(locale);
+  useEffect(() => {
+    if (lastLocale.current === locale) return;
+    lastLocale.current = locale;
+    if (mode === "find") setResult(null);
+  }, [locale, mode]);
 
   useEffect(() => {
     const p = normalizePurposeType(params.get("purpose"));
@@ -88,7 +101,8 @@ function TimingInner() {
         throw new Error(msg);
       }
       setResult(parsePurposeCheck(json));
-      setScrollPending(true);
+      if (scrollWantedRef.current) setScrollPending(true);
+      scrollWantedRef.current = false;
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Check failed");
     } finally {
@@ -208,7 +222,10 @@ function TimingInner() {
       {!purpose ? <p className="text-sm text-ink-secondary">{t("ui.pickPurpose")}</p> : null}
 
       <PrimaryButton
-        onClick={() => void runCheck()}
+        onClick={() => {
+          scrollWantedRef.current = true;
+          void runCheck();
+        }}
         disabled={!purpose || busy}
         className={!purpose ? "pointer-events-none opacity-50" : undefined}
       >
@@ -242,6 +259,7 @@ function TimingInner() {
                       type="button"
                       onClick={() => {
                         // Check that specific day (auto-runs via the check-mode effect).
+                        scrollWantedRef.current = true;
                         setMode("check");
                         setResult(null);
                         setTargetDate(c.date);
