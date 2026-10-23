@@ -4391,7 +4391,10 @@ async function _handleInternal(
     const saved = normalizeLocale(String(profile.language_code ?? "en"));
     if (next === saved) return { languageCode: saved, changed: false };
     const access = await getSubscriptionAccess(supabase, profile.id);
-    if (!access.isPro) {
+    // Before the first birth chart is saved (onboarding) the language is free to pick.
+    const { count: birthCount } = await adminSupabase.from("birth_inputs")
+      .select("id", { count: "exact", head: true }).eq("profile_id", profile.id);
+    if (!access.isPro && (birthCount ?? 0) > 0) {
       throw new ActionError(
         "pro_required_language",
         "Changing the language is part of Pro. Your reading stays in your current language.",

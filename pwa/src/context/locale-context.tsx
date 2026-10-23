@@ -13,6 +13,7 @@ import {
 import { LOCALE_STORAGE_KEY, normalizeLocale, type AppLocale } from "@/lib/locale";
 import { t as translate } from "@/lib/messages";
 import { createClient } from "@/lib/supabase/client";
+import { setServerLanguage } from "@/lib/billing";
 
 type LocaleContextValue = {
   locale: AppLocale;
@@ -71,19 +72,18 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   }, [locale]);
 
   const setLocale = useCallback(async (next: AppLocale) => {
-    setLocaleState(next);
-    localStorage.setItem(LOCALE_STORAGE_KEY, next);
+    // The saved profile language only changes through the server (language_set), which
+    // enforces Pro after onboarding; the database refuses direct client writes.
     const supabase = createClient();
     if (supabase) {
       const { data } = await supabase.auth.getSession();
-      const uid = data.session?.user.id;
-      if (uid) {
-        await supabase
-          .from("profiles")
-          .update({ language_code: next, updated_at: new Date().toISOString() })
-          .eq("user_id", uid);
+      if (data.session?.user.id) {
+        const server = await setServerLanguage(next).catch(() => ({ ok: false, proRequired: false }));
+        if (!server.ok && server.proRequired) return;
       }
     }
+    setLocaleState(next);
+    localStorage.setItem(LOCALE_STORAGE_KEY, next);
   }, []);
 
   const value = useMemo(
