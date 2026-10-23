@@ -11,6 +11,7 @@ import { PrimaryButton } from "@/components/editorial/primary-button";
 import { PurposeResultCard } from "@/components/timing/purpose-result-card";
 import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
+import { usePaywall } from "@/context/paywall-context";
 import { parsePurposeCheck, type PurposeCheckResult } from "@/lib/engine-parsers";
 import { todayInTimezone } from "@/lib/local-date";
 import { localizedPurposeLabel, localizedPurposeOptions } from "@/lib/purpose-labels";
@@ -34,6 +35,7 @@ function TimingInner() {
   const [busy, setBusy] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const { t, locale } = useLocale();
+  const { openPaywall } = usePaywall();
   const engineBody = useEngineBody();
   const { views, loading, error, pack, profileTimezone, activeLifeStage } = useAppData();
   const childChart = isChildStage(activeLifeStage);
@@ -112,6 +114,13 @@ function TimingInner() {
         if (code === "location_required") {
           throw new Error(t("timing.locationRequired"));
         }
+        if (code === "timing_limit_reached") {
+          // Only interrupt with the paywall for checks the user asked for, not the silent
+          // auto-check when the page opens.
+          if (scrollWantedRef.current || mode === "find") openPaywall("timing");
+          scrollWantedRef.current = false;
+          throw new Error(t(mode === "find" ? "billing.findLimit" : "billing.timingLimit"));
+        }
         throw new Error(msg);
       }
       setResult(parsePurposeCheck(json));
@@ -122,7 +131,7 @@ function TimingInner() {
     } finally {
       setBusy(false);
     }
-  }, [purpose, mode, targetDate, compareDays, engineBody, t, profileTimezone]);
+  }, [purpose, mode, targetDate, compareDays, engineBody, t, profileTimezone, openPaywall]);
 
   useEffect(() => {
     if (!purpose || loading || !views || mode !== "check") return;
@@ -254,6 +263,16 @@ function TimingInner() {
             <Link href="/settings" className="mt-3 inline-block text-sm text-gold-text">
               {t("common.settings")} →
             </Link>
+          ) : null}
+          {errorMsg === t("billing.timingLimit") || errorMsg === t("billing.findLimit") ? (
+            <button
+              type="button"
+              data-testid="timing-upgrade"
+              onClick={() => openPaywall("timing")}
+              className="mt-3 inline-flex min-h-10 items-center rounded-full bg-gold-button px-4 text-sm font-semibold text-ink"
+            >
+              {t("billing.upgradeShort")} · ₹99
+            </button>
           ) : null}
         </ProseBlock>
       ) : null}

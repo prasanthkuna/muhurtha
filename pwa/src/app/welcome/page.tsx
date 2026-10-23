@@ -74,6 +74,13 @@ export default function WelcomePage() {
         <p className="mt-4 text-center text-xs text-ink-tertiary">
           Traditional Jyotish guidance — not medical, legal or financial advice.
         </p>
+        <nav className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-ink-tertiary">
+          <a href="/pricing" className="hover:text-gold-text">Pricing</a>
+          <a href="/refund" className="hover:text-gold-text">Refunds</a>
+          <a href="/contact" className="hover:text-gold-text">Contact</a>
+          <a href="https://muhurta-legal.vercel.app/terms" className="hover:text-gold-text">Terms</a>
+          <a href="https://muhurta-legal.vercel.app/privacy" className="hover:text-gold-text">Privacy</a>
+        </nav>
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Users } from "@/components/celestial/muh-icon";
+import { Lock, Plus, Trash2, Users } from "@/components/celestial/muh-icon";
+import { usePaywall } from "@/context/paywall-context";
 import {
   BirthDetailsFields,
   type BirthDetailsValues,
@@ -31,7 +32,12 @@ export function ChartProfilesSection() {
     setActiveChartProfile,
     saveChartProfile,
     deleteChartProfile,
+    isPro,
+    access,
+    pack,
   } = useAppData();
+  const accessKnown = Boolean(access) || Boolean(pack);
+  const { openPaywall } = usePaywall();
 
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<BirthDetailsValues>(emptyPartner);
@@ -42,6 +48,10 @@ export function ChartProfilesSection() {
   useEffect(() => {
     const openFromHash = () => {
       if (window.location.hash === "#add-chart") {
+        if (!isPro) {
+          if (accessKnown) openPaywall("charts");
+          return;
+        }
         setOpen(true);
         window.setTimeout(
           () => document.getElementById("charts")?.scrollIntoView({ behavior: "smooth", block: "start" }),
@@ -52,7 +62,7 @@ export function ChartProfilesSection() {
     openFromHash();
     window.addEventListener("hashchange", openFromHash);
     return () => window.removeEventListener("hashchange", openFromHash);
-  }, []);
+  }, [isPro, accessKnown, openPaywall]);
 
   async function onSave() {
     if (!values.displayName.trim() || !values.dateOfBirth || !values.birthPlace) {
@@ -95,7 +105,12 @@ export function ChartProfilesSection() {
       setMsg(`${t("chart.added")} ${t("chart.preparingShort")}`);
     } catch (e) {
       const text = e instanceof Error ? e.message : t("chart.incomplete");
-      setMsg(text.includes("limit") ? t("chart.limit") : text);
+      if (text.includes("part of Pro")) {
+        setOpen(false);
+        openPaywall("charts");
+      } else {
+        setMsg(text.includes("limit") ? t("chart.limit") : text);
+      }
     } finally {
       setBusy(false);
     }
@@ -174,11 +189,17 @@ export function ChartProfilesSection() {
       {!open ? (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          data-testid="add-chart"
+          onClick={() => (isPro ? setOpen(true) : openPaywall("charts"))}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gold-accent/40 bg-gold-wash/20 py-3 text-sm font-medium text-gold-text hover:bg-gold-wash/40"
         >
-          <Plus className="h-4 w-4" aria-hidden />
+          {isPro ? <Plus className="h-4 w-4" aria-hidden /> : <Lock className="h-4 w-4" aria-hidden />}
           {t("chart.addTitle")}
+          {!isPro ? (
+            <span className="rounded-full bg-gold-button px-1.5 py-0.5 text-[10px] font-bold uppercase text-ink">
+              {t("billing.badge")}
+            </span>
+          ) : null}
         </button>
       ) : (
         <div className="space-y-3 rounded-2xl border border-line bg-paper p-4">

@@ -72,6 +72,16 @@ import {
 import { buildShareCard } from "./share_copy.ts";
 import { verifyRevenueCatSubscription } from "./revenuecat_verify.ts";
 import {
+  applySubscriptionEntity,
+  ensurePlan,
+  isPlanCode,
+  PRO_PLANS,
+  razorpayConfig,
+  type RazorpaySubscriptionEntity,
+  rzp,
+  verifyCheckoutSignature,
+} from "./razorpay.ts";
+import {
   type AppLocale,
   normalizeLocale,
   rashiDisplay,
@@ -91,7 +101,12 @@ const NARRATIVE_CACHE_VERSION = 12;
 const PACK_DAILY_DAYS = 30;
 const PACK_WEEKLY_WEEKS = 8;
 const PACK_MONTHLY_MONTHS = 12;
-const FREE_ASKS_PER_DAY = 1;
+/** Daily limits (IST calendar day). Pro Ask is a fair-use cap, not a sales limit. */
+const LIMITS = {
+  free: { ask: 3, timing_check: 3, timing_find: 3 },
+  pro: { ask: 30, timing_check: null, timing_find: null },
+} as const;
+type QuotaFeature = "ask" | "timing_check" | "timing_find";
 const PACK_GENERATION_STALE_MS = 10 * 60 * 1000;
 /** Empty `{}` generating rows reclaim after this — unblocks stuck LLM tasks. */
 const PACK_GENERATION_EMPTY_STALE_MS = 3 * 60 * 1000;
@@ -2627,22 +2642,65 @@ type SubscriptionAccess = {
   tier: AccessTier;
   isPlus: boolean;
   isPro: boolean;
+  provider: string | null;
+  status: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  planInterval: string | null;
+};
+
+type SubRow = {
+  plan_code: string | null;
+  status: string | null;
+  provider: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end?: boolean | null;
+  plan_interval?: string | null;
+  updated_at?: string | null;
+};
+
+/** Same rule as public.is_pro(): active/trialing in period, cancelled but paid-through, or
+ * past_due inside a 3-day grace. 'plus' is a legacy alias of Pro (single Pro tier). */
+function subscriptionGrantsPro(row: SubRow, nowMs = Date.now()): boolean {
+  const code = String(row.plan_code ?? "").toLowerCase();
+  if (code !== "pro" && code !== "plus") return false;
+  const status = String(row.status ?? "").toLowerCase();
+  const end = row.current_period_end ? Date.parse(row.current_period_end) : NaN;
+  if (status === "active" || status === "trialing") return !Number.isFinite(end) || end >= nowMs;
+  if (status === "cancelled") return Number.isFinite(end) && end >= nowMs;
+  if (status === "past_due") return Number.isFinite(end) && end + 3 * 86_400_000 >= nowMs;
+  return false;
+}
+
+const FREE_ACCESS: SubscriptionAccess = {
+  planCode: "free",
+  tier: "free",
+  isPlus: false,
+  isPro: false,
+  provider: null,
+  status: null,
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+  planInterval: null,
 };
 
 async function getSubscriptionAccess(
   supabase: SupabaseClient,
   profileId: string,
 ): Promise<SubscriptionAccess> {
-  const nowIso = new Date().toISOString();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("subscriptions")
-    .select("plan_code, status, current_period_end")
+    .select("plan_code, status, provider, current_period_end, cancel_at_period_end, plan_interval, updated_at")
     .eq("profile_id", profileId)
-    .in("status", ["trialing", "active"])
-    .or(`current_period_end.is.null,current_period_end.gte.${nowIso}`)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(20);
+  if (error && /cancel_at_period_end|plan_interval/.test(error.message ?? "")) {
+    // Billing migration not applied yet: fall back to the original columns.
+    ({ data, error } = await supabase
+      .from("subscriptions")
+      .select("plan_code, status, provider, current_period_end, updated_at")
+      .eq("profile_id", profileId)
+      .limit(20) as unknown as { data: typeof data; error: typeof error });
+  }
   if (error) {
     await logAppEvent(
       supabase,
@@ -2653,47 +2711,54 @@ async function getSubscriptionAccess(
       undefined,
       { error: error.message },
     );
-    return {
-      planCode: "free",
-      tier: "free",
-      isPlus: false,
-      isPro: false,
-    };
+    return { ...FREE_ACCESS };
   }
-  const planCode = String(data?.plan_code ?? "free").toLowerCase();
-  const tier: AccessTier = planCode === "pro"
-    ? "pro"
-    : planCode === "plus"
-    ? "plus"
-    : "free";
+  const rows = (data ?? []) as SubRow[];
+  const granting = rows.filter((r) => subscriptionGrantsPro(r)).sort((a, b) => {
+    const ea = a.current_period_end ? Date.parse(a.current_period_end) : Infinity;
+    const eb = b.current_period_end ? Date.parse(b.current_period_end) : Infinity;
+    return eb - ea;
+  });
+  const best = granting[0];
+  if (!best) return { ...FREE_ACCESS };
   return {
-    planCode,
-    tier,
-    isPlus: tier === "plus" || tier === "pro",
-    isPro: tier === "pro",
+    planCode: "pro",
+    tier: "pro",
+    isPlus: true,
+    isPro: true,
+    provider: best.provider ?? null,
+    status: best.status ?? null,
+    currentPeriodEnd: best.current_period_end ?? null,
+    cancelAtPeriodEnd: Boolean(best.cancel_at_period_end) || best.status === "cancelled",
+    planInterval: best.plan_interval ?? null,
   };
 }
 
 function buildAccessPayload(access: SubscriptionAccess) {
+  const limits = access.isPro ? LIMITS.pro : LIMITS.free;
   return {
     isPro: access.isPro,
     isPlus: access.isPlus,
     planCode: access.planCode,
+    tier: access.isPro ? "pro" : "free",
+    provider: access.provider,
+    status: access.status,
+    currentPeriodEnd: access.currentPeriodEnd,
+    cancelAtPeriodEnd: access.cancelAtPeriodEnd,
+    planInterval: access.planInterval,
+    limits: {
+      askPerDay: limits.ask,
+      timingChecksPerDay: limits.timing_check,
+      findDatePerDay: limits.timing_find,
+      familyCharts: access.isPro,
+      languageSwitch: access.isPro,
+    },
   };
 }
 
-function notificationAllowed(tier: AccessTier, notificationType: string): boolean {
-  if (tier === "pro") return true;
-  if (tier === "plus") {
-    return [
-      "today_ready",
-      "good_time_start",
-      "good_time_reminder",
-      "caution_start",
-      "caution_time_reminder",
-    ].includes(notificationType);
-  }
-  return notificationType === "today_ready";
+/** Notifications (daily brief and timing alerts) are free for everyone. */
+function notificationAllowed(_tier: AccessTier, _notificationType: string): boolean {
+  return true;
 }
 
 function lockedTeaser(locale: AppLocale) {
@@ -2768,38 +2833,68 @@ function applyAccessMask(
   return out;
 }
 
-async function consumeAskQuota(
-  supabase: SupabaseClient,
+type QuotaResult = {
+  allowed: boolean;
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  repeat?: boolean;
+  key?: string;
+};
+
+/** Atomic per-IST-day quota (public.consume_quota). Repeating a usage key is free. */
+async function consumeQuota(
+  admin: SupabaseClient,
   profileId: string,
-  usageDate: string,
-  isPlus: boolean,
+  feature: QuotaFeature,
+  isPro: boolean,
+  key?: string,
+): Promise<QuotaResult> {
+  const limit = (isPro ? LIMITS.pro : LIMITS.free)[feature];
+  const { data, error } = await admin.rpc("consume_quota", {
+    p_profile_id: profileId,
+    p_feature: feature,
+    p_key: key ?? null,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  const r = (data ?? {}) as Record<string, unknown>;
+  return {
+    allowed: r.allowed === true,
+    used: Number(r.used ?? 0),
+    limit: r.limit == null ? null : Number(r.limit),
+    remaining: r.remaining == null ? null : Number(r.remaining),
+    repeat: r.repeat === true,
+    key: typeof r.key === "string" ? r.key : undefined,
+  };
+}
+
+async function releaseQuota(
+  admin: SupabaseClient,
+  profileId: string,
+  feature: QuotaFeature,
+  key: string | undefined,
 ) {
-  if (isPlus) return { planCode: "plus", remaining: null as number | null };
-  const { data: row, error: readError } = await supabase
-    .from("ask_usage")
-    .select("ask_count")
-    .eq("profile_id", profileId)
-    .eq("usage_date", usageDate)
-    .maybeSingle();
-  if (readError) throw readError;
-  const current = Number(row?.ask_count ?? 0);
-  if (current >= FREE_ASKS_PER_DAY) {
-    throw new ActionError(
-      "free_ask_limit_reached",
-      "Free plan includes 1 Ask per day. Upgrade to Plus for unlimited questions.",
-      429,
-    );
+  if (!key) return;
+  try {
+    await admin.rpc("release_quota", { p_profile_id: profileId, p_feature: feature, p_key: key });
+  } catch {
+    /* best effort */
   }
-  const { error: writeError } = await supabase.from("ask_usage").upsert({
-    profile_id: profileId,
-    usage_date: usageDate,
-    plan_code: "free",
-    ask_count: current + 1,
-    llm_count: 0,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "profile_id,usage_date" });
-  if (writeError) throw writeError;
-  return { planCode: "free", remaining: Math.max(0, FREE_ASKS_PER_DAY - current - 1) };
+}
+
+async function usageToday(admin: SupabaseClient, profileId: string) {
+  const today = DateTime.now().setZone("Asia/Kolkata").toISODate();
+  const { data } = await admin
+    .from("usage_events")
+    .select("feature")
+    .eq("profile_id", profileId)
+    .eq("usage_date", today);
+  const counts: Record<string, number> = { ask: 0, timing_check: 0, timing_find: 0 };
+  for (const row of (data ?? []) as { feature: string }[]) {
+    counts[row.feature] = (counts[row.feature] ?? 0) + 1;
+  }
+  return { date: today, ...counts };
 }
 
 const LOG_PII_KEYS = new Set([
@@ -3245,7 +3340,7 @@ export async function handleRequest(
   }
 
   try {
-    return await _handleInternal(supabase, prof, body, loggingSupabase);
+    return await _handleInternal(supabase, prof, body, loggingSupabase, user);
   } catch (e) {
     const msg = errorMessage(e);
     const stack = e instanceof Error ? e.stack : "";
@@ -3261,8 +3356,20 @@ async function _handleInternal(
   prof: ProfRow | null,
   body: Record<string, unknown>,
   adminSupabase: SupabaseClient = supabase,
+  user?: User,
 ): Promise<unknown> {
   const action = body.action as string;
+
+  // Language is Pro after onboarding: switching regenerates the whole reading (LLM cost).
+  // A Free account always gets content in its saved language, whatever the client asks for.
+  if (prof && typeof body.locale === "string" && body.locale) {
+    const asked = normalizeLocale(body.locale);
+    const saved = normalizeLocale(String(prof.language_code ?? "en"));
+    if (asked !== saved) {
+      const access = await getSubscriptionAccess(supabase, prof.id);
+      if (!access.isPro) body.locale = saved;
+    }
+  }
 
   const DEPRECATED_ACTIONS = new Set([
     "quick_proof_generate",
@@ -3427,6 +3534,217 @@ async function _handleInternal(
     return { access: buildAccessPayload(access) };
   }
 
+  if (action === "billing_status") {
+    const access = await getSubscriptionAccess(supabase, profile.id);
+    const cfg = razorpayConfig();
+    return {
+      access: buildAccessPayload(access),
+      usage: await usageToday(adminSupabase, profile.id),
+      languageCode: normalizeLocale(String(profile.language_code ?? "en")),
+      payments: {
+        enabled: Boolean(cfg),
+        provider: "razorpay",
+        mode: cfg?.mode ?? null,
+        plans: (Object.keys(PRO_PLANS) as (keyof typeof PRO_PLANS)[]).map((code) => ({
+          code,
+          period: PRO_PLANS[code].period,
+          amountPaise: PRO_PLANS[code].amountPaise,
+          currency: "INR",
+        })),
+      },
+    };
+  }
+
+  if (action === "language_set") {
+    const next = normalizeLocale(String(body.language_code ?? body.locale_target ?? ""));
+    const saved = normalizeLocale(String(profile.language_code ?? "en"));
+    if (next === saved) return { languageCode: saved, changed: false };
+    const access = await getSubscriptionAccess(supabase, profile.id);
+    if (!access.isPro) {
+      throw new ActionError(
+        "pro_required_language",
+        "Changing the language is part of Pro. Your reading stays in your current language.",
+        403,
+      );
+    }
+    const { error } = await adminSupabase
+      .from("profiles")
+      .update({ language_code: next, updated_at: new Date().toISOString() })
+      .eq("id", profile.id);
+    if (error) throw error;
+    return { languageCode: next, changed: true, access: buildAccessPayload(access) };
+  }
+
+  if (action === "billing_create_subscription") {
+    const cfg = razorpayConfig();
+    if (!cfg) {
+      throw new ActionError("payments_unavailable", "Payments are opening soon.", 503);
+    }
+    const planCode = body.plan_code;
+    if (!isPlanCode(planCode)) {
+      throw new ActionError("invalid_plan", "Choose monthly or yearly", 400);
+    }
+    const access = await getSubscriptionAccess(supabase, profile.id);
+    if (access.isPro && !access.cancelAtPeriodEnd) {
+      throw new ActionError("already_pro", "You already have Pro.", 409);
+    }
+    const plan = PRO_PLANS[planCode];
+    const planId = await ensurePlan(adminSupabase, cfg, planCode);
+
+    // Reuse a checkout started in the last 30 minutes for the same plan (no duplicate mandates).
+    const since = new Date(Date.now() - 30 * 60_000).toISOString();
+    const { data: recent } = await adminSupabase
+      .from("subscriptions")
+      .select("provider_subscription_id, provider_plan_id, status, created_at")
+      .eq("profile_id", profile.id)
+      .eq("provider", "razorpay")
+      .eq("status", "free")
+      .eq("provider_plan_id", planId)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let subscriptionId = recent?.provider_subscription_id as string | undefined;
+    if (subscriptionId) {
+      try {
+        const live = await rzp<RazorpaySubscriptionEntity>(
+          cfg, "GET", `/subscriptions/${subscriptionId}`,
+        );
+        if ((live.status ?? "") !== "created") subscriptionId = undefined;
+      } catch {
+        subscriptionId = undefined;
+      }
+    }
+    if (!subscriptionId) {
+      const created = await rzp<RazorpaySubscriptionEntity>(cfg, "POST", "/subscriptions", {
+        plan_id: planId,
+        total_count: plan.totalCount,
+        quantity: 1,
+        customer_notify: 1,
+        notes: { profile_id: profile.id, plan_code: planCode, app: "muhurta-pwa" },
+      });
+      subscriptionId = created.id;
+      const { error: subErr } = await adminSupabase.from("subscriptions").insert({
+        profile_id: profile.id,
+        plan_code: "pro",
+        status: "free",
+        provider: "razorpay",
+        provider_subscription_id: subscriptionId,
+        provider_plan_id: planId,
+        plan_interval: plan.period,
+        amount_paise: plan.amountPaise,
+        entitlement: { source: "checkout_created", razorpay_status: created.status ?? "created" },
+        updated_at: new Date().toISOString(),
+      });
+      if (subErr) throw subErr;
+    }
+    return {
+      keyId: cfg.keyId,
+      mode: cfg.mode,
+      subscriptionId,
+      planCode,
+      amountPaise: plan.amountPaise,
+      name: "Muhūrta Pro",
+      prefill: {
+        email: user?.email ?? undefined,
+        contact: user?.phone ? `+${String(user.phone).replace(/^\+/, "")}` : undefined,
+        name: profile.display_name ?? undefined,
+      },
+    };
+  }
+
+  if (action === "billing_verify") {
+    const cfg = razorpayConfig();
+    if (!cfg) throw new ActionError("payments_unavailable", "Payments are opening soon.", 503);
+    const paymentId = String(body.razorpay_payment_id ?? "");
+    const subscriptionId = String(body.razorpay_subscription_id ?? "");
+    const signature = String(body.razorpay_signature ?? "");
+    const { data: own } = await adminSupabase
+      .from("subscriptions")
+      .select("id")
+      .eq("profile_id", profile.id)
+      .eq("provider", "razorpay")
+      .eq("provider_subscription_id", subscriptionId)
+      .maybeSingle();
+    if (!own) throw new ActionError("subscription_not_found", "Subscription not found", 404);
+    const valid = await verifyCheckoutSignature(paymentId, subscriptionId, signature, cfg.keySecret);
+    if (!valid) throw new ActionError("invalid_signature", "Payment could not be verified", 400);
+    const entity = await rzp<RazorpaySubscriptionEntity>(
+      cfg, "GET", `/subscriptions/${subscriptionId}`,
+    );
+    // Signature proves the payment went through; Razorpay may still report "created" for a
+    // moment, so treat a verified checkout as active until the webhook brings the snapshot.
+    const snapshot: RazorpaySubscriptionEntity = {
+      ...entity,
+      status: ["created", "authenticated", ""].includes(String(entity.status ?? ""))
+        ? "active"
+        : entity.status,
+    };
+    await applySubscriptionEntity(adminSupabase, snapshot, {
+      source: "checkout_verified",
+      profileId: profile.id,
+      eventAt: new Date(Date.now() - 1000).toISOString(),
+    });
+    await adminSupabase.from("payment_events").insert({
+      provider: "razorpay",
+      event_id: `checkout:${paymentId}`,
+      event_type: "checkout.verified",
+      profile_id: profile.id,
+      provider_subscription_id: subscriptionId,
+      provider_payment_id: paymentId,
+      payload: { status: entity.status ?? null },
+      processed_at: new Date().toISOString(),
+    });
+    const access = await getSubscriptionAccess(supabase, profile.id);
+    return { ok: true, access: buildAccessPayload(access) };
+  }
+
+  if (action === "billing_cancel") {
+    const cfg = razorpayConfig();
+    const access = await getSubscriptionAccess(supabase, profile.id);
+    if (!access.isPro) throw new ActionError("not_subscribed", "No active plan", 400);
+    if (access.provider !== "razorpay") {
+      throw new ActionError(
+        "manage_elsewhere",
+        access.provider === "revenuecat" || access.provider === "play"
+          ? "This plan is billed by Google Play. Cancel it in Play Store > Payments & subscriptions."
+          : "This plan was granted manually and does not renew.",
+        400,
+      );
+    }
+    if (!cfg) throw new ActionError("payments_unavailable", "Payments are unavailable.", 503);
+    const { data: row } = await adminSupabase
+      .from("subscriptions")
+      .select("provider_subscription_id")
+      .eq("profile_id", profile.id)
+      .eq("provider", "razorpay")
+      .in("status", ["active", "trialing", "past_due"])
+      .order("current_period_end", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    const subId = row?.provider_subscription_id as string | undefined;
+    if (!subId) throw new ActionError("not_subscribed", "No renewing plan", 400);
+    let entity: RazorpaySubscriptionEntity;
+    try {
+      entity = await rzp<RazorpaySubscriptionEntity>(cfg, "POST", `/subscriptions/${subId}/cancel`, {
+        cancel_at_cycle_end: 1,
+      });
+    } catch (_e) {
+      // Some mandates cannot schedule a cycle-end cancel: cancel now, keep paid-through access.
+      entity = await rzp<RazorpaySubscriptionEntity>(cfg, "POST", `/subscriptions/${subId}/cancel`, {
+        cancel_at_cycle_end: 0,
+      });
+    }
+    const keepEnd = access.currentPeriodEnd;
+    await applySubscriptionEntity(adminSupabase, {
+      ...entity,
+      current_end: entity.current_end ?? (keepEnd ? Math.floor(Date.parse(keepEnd) / 1000) : null),
+    }, { source: "user_cancel", profileId: profile.id, cancelAtPeriodEnd: true });
+    const after = await getSubscriptionAccess(supabase, profile.id);
+    return { ok: true, access: buildAccessPayload(after) };
+  }
+
   if (action === "chart_profile_list") {
     const profile = requireProfile(prof, action);
     const { data, error } = await supabase
@@ -3458,6 +3776,14 @@ async function _handleInternal(
     const limit = await getChartProfileLimit(supabase, profile.id);
     const chartProfileId = chartProfileIdFromBody(body);
     if (!chartProfileId) {
+      const chartAccess = await getSubscriptionAccess(supabase, profile.id);
+      if (!chartAccess.isPro) {
+        throw new ActionError(
+          "pro_required_charts",
+          "Adding family and friends is part of Pro.",
+          403,
+        );
+      }
       const { count, error: countError } = await supabase
         .from("chart_profiles")
         .select("id", { count: "exact", head: true })
@@ -4259,12 +4585,25 @@ async function _handleInternal(
     const tz = profile.current_timezone ?? "Asia/Kolkata";
     const targetDate = todayInTimezone(tz);
     const access = await getSubscriptionAccess(supabase, profile.id);
-    const askQuota = await consumeAskQuota(
-      adminSupabase,
-      profile.id,
-      targetDate,
-      access.isPlus,
-    );
+    const askQuotaResult = await consumeQuota(adminSupabase, profile.id, "ask", access.isPro);
+    if (!askQuotaResult.allowed) {
+      throw access.isPro
+        ? new ActionError(
+          "ask_fair_use_reached",
+          "You've asked 30 questions today. Pro Ask resets at midnight IST.",
+          429,
+        )
+        : new ActionError(
+          "free_ask_limit_reached",
+          "Free includes 3 Ask questions a day. Pro gives you up to 30.",
+          429,
+        );
+    }
+    const askQuota = {
+      planCode: access.isPro ? "pro" : "free",
+      remaining: askQuotaResult.remaining,
+      key: askQuotaResult.key,
+    };
 
     // Active chart (friend chart or own) decides both the reading and where the chat is stored.
     const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
@@ -4477,6 +4816,24 @@ async function _handleInternal(
     const length = compare
       ? Math.min(30, Math.max(1, Number(body.days) || 7))
       : 1;
+    // Free: 3 distinct checks and 3 Find-a-date searches per IST day; re-opening the same
+    // check (same activity, date and chart) never counts twice.
+    const timingQuota = await consumeQuota(
+      adminSupabase,
+      profile.id,
+      compare ? "timing_find" : "timing_check",
+      access.isPro,
+      [purposeType, targetDate, bi?.id ?? "self", compare ? String(length) : ""].join(":"),
+    );
+    if (!timingQuota.allowed) {
+      throw new ActionError(
+        "timing_limit_reached",
+        compare
+          ? "Free includes 3 Find-a-date searches a day. Pro is unlimited."
+          : "Free includes 3 timing checks a day. Pro is unlimited.",
+        429,
+      );
+    }
     const evaluations = Array.from({ length }, (_, i) =>
       evaluateDay({
         date: local.plus({ days: i }).toISODate()!,

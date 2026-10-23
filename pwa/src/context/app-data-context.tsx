@@ -29,6 +29,7 @@ import {
   writeLastUserId,
 } from "@/lib/engine-cache";
 import { todayInTimezone } from "@/lib/local-date";
+import { fetchBillingStatus, type AccessDetails, type BillingStatus } from "@/lib/billing";
 import { createClient } from "@/lib/supabase/client";
 import type { TodayPayload } from "@/lib/today-types";
 import { parseTodayPayload } from "@/lib/today-types";
@@ -43,7 +44,7 @@ export type PackPreparing = {
   stalled: boolean;
 };
 
-type AccessInfo = { isPro?: boolean; isPlus?: boolean; planCode?: string };
+type AccessInfo = Partial<AccessDetails>;
 
 const ACTIVE_LABEL_KEY = "muh_active_chart_label_v1";
 const ACTIVE_DOB_KEY = "muh_active_chart_dob_v1";
@@ -80,6 +81,12 @@ type AppDataContextValue = {
   error: string | null;
   /** Entitlement of the signed-in account (never of the chart being viewed). */
   isPro: boolean;
+  /** Full plan details (provider, renewal date…) when known. */
+  access: AccessInfo | null;
+  /** Apply an authoritative access payload (e.g. right after checkout). */
+  applyAccess: (next: AccessInfo) => void;
+  /** Re-read plan + today's usage from the server. */
+  refreshAccess: () => Promise<BillingStatus | null>;
   /** Set while a reading (e.g. a newly added friend chart) is being generated. */
   preparing: PackPreparing | null;
   retryPreparing: () => void;
@@ -661,6 +668,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       isPro: (access?.isPro ?? pack?.access?.isPro) === true,
+      access,
+      applyAccess: (next: AccessInfo) => recordAccess(next),
+      refreshAccess: async () => {
+        const status = await fetchBillingStatus();
+        if (status?.access) recordAccess(status.access);
+        return status;
+      },
       preparing,
       retryPreparing: () => {
         setPreparing(null);
@@ -686,6 +700,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [
     pack,
     access,
+    recordAccess,
     preparing,
     today,
     loading,

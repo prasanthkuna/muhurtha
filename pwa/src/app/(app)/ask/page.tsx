@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/editorial/page-header";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
+import { usePaywall } from "@/context/paywall-context";
 import { parseAskAnswer } from "@/lib/engine-parsers";
 import type { AskMessage } from "@/lib/types";
 
@@ -25,6 +26,7 @@ function AskInner() {
   const params = useSearchParams();
   const seed = params.get("q") ?? "";
   const { t } = useLocale();
+  const { openPaywall } = usePaywall();
   const engineBody = useEngineBody();
   const { views, loading, error, userId, activeChartProfileId } = useAppData();
   const chartKey = `${userId ?? "anon"}:${activeChartProfileId ?? "self"}`;
@@ -113,7 +115,10 @@ function AskInner() {
         const errText =
           code === "free_ask_limit_reached"
             ? t("ask.limit")
-            : json.error?.toString() ?? "Ask failed. Try again.";
+            : code === "ask_fair_use_reached"
+              ? t("billing.askFair")
+              : json.error?.toString() ?? "Ask failed. Try again.";
+        if (code === "free_ask_limit_reached") openPaywall("ask");
         updateThread(key, (t) => ({
           ...t,
           messages: [...t.messages, { id: crypto.randomUUID(), role: "assistant", text: errText }],

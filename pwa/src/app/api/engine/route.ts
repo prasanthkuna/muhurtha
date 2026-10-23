@@ -37,15 +37,23 @@ export async function POST(req: Request) {
         ? String((e as { code?: string }).code)
         : undefined;
     const status =
-      code === "location_required"
+      !code
+        ? 400
+        : code === "location_required"
         ? 422
         : code === "unauthenticated" || code === "http_401"
           ? 401
           : code === "birth_pack_not_ready"
             ? 503
-            : code === "free_ask_limit_reached"
+            : code === "free_ask_limit_reached" ||
+                code === "ask_fair_use_reached" ||
+                code === "timing_limit_reached"
               ? 429
-              : 400;
+              : code.startsWith("pro_required") || code === "already_pro"
+                ? code === "already_pro" ? 409 : 403
+                : code === "payments_unavailable"
+                  ? 503
+                  : 400;
     return NextResponse.json({ error: message, ...(code ? { error_code: code } : {}) }, { status });
   }
 }

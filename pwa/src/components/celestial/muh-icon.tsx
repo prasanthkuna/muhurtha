@@ -32,4 +32,6 @@ export {
   ChevronDown,
   Lock,
   WifiOff,
+  Crown,
+  ShieldCheck,
 } from "lucide-react";

@@ -5,6 +5,7 @@ import { formatDisplayDate } from "@/lib/format-date";
 import {
   Bookmark,
   Languages,
+  Lock,
   LogOut,
   RefreshCw,
   ScrollText,
@@ -26,6 +27,9 @@ import { saveProfileCurrentPlace } from "@/lib/onboarding/save-onboarding";
 import { loadBirthProfileResult, type BirthProfileSummary } from "@/lib/profile-bundle";
 import { createClient } from "@/lib/supabase/client";
 import { PushSection } from "@/components/settings/push-section";
+import { PlanSection } from "@/components/settings/plan-section";
+import { usePaywall } from "@/context/paywall-context";
+import { setServerLanguage } from "@/lib/billing";
 
 function Section({
   title,
@@ -64,6 +68,7 @@ type BirthState = "loading" | "ok" | "missing" | "error";
 export default function SettingsPage() {
   const { t, locale, setLocale } = useLocale();
   const { isPro, refresh, today, pack } = useAppData();
+  const { openPaywall } = usePaywall();
   const [email, setEmail] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
   const [birth, setBirth] = useState<BirthProfileSummary | null>(null);
@@ -134,8 +139,18 @@ export default function SettingsPage() {
 
   async function changeLanguage(next: AppLocale) {
     if (next === locale) return;
+    // Switching language regenerates the reading, so it is a Pro feature after onboarding.
+    if (!isPro) {
+      openPaywall("language");
+      return;
+    }
     setLangBusy(true);
     try {
+      const server = await setServerLanguage(next);
+      if (!server.ok && server.proRequired) {
+        openPaywall("language");
+        return;
+      }
       // The data provider reloads every localized payload (pack, Today, chart list) as soon
       // as the locale changes and ignores any in-flight request from the old language.
       // Calling refresh() here used to reload with the *previous* locale captured in its
@@ -190,8 +205,12 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      <PlanSection />
+
       <Section title={t("settings.languageTitle")}>
-        <p className="px-1 text-sm text-ink-secondary">{t("settings.languageHint")}</p>
+        <p className="px-1 text-sm text-ink-secondary">
+          {isPro ? t("settings.languageHint") : t("billing.langLocked")}
+        </p>
         <div className="flex flex-wrap gap-2 px-1">
           {APP_LOCALES.map((code) => (
             <button
@@ -205,7 +224,11 @@ export default function SettingsPage() {
                   : "border border-line bg-paper text-ink-secondary hover:border-gold-accent/40"
               }`}
             >
-              <Languages className="h-3.5 w-3.5" aria-hidden />
+              {!isPro && locale !== code ? (
+                <Lock className="h-3.5 w-3.5" aria-hidden />
+              ) : (
+                <Languages className="h-3.5 w-3.5" aria-hidden />
+              )}
               {localeLabel(code)}
             </button>
           ))}
@@ -329,6 +352,9 @@ export default function SettingsPage() {
           external
           title={t("settings.deleteEmail")}
         />
+        <SettingsRow href="/pricing" icon={<ScrollText className="h-4 w-4" />} title={t("billing.legal.pricing")} />
+        <SettingsRow href="/refund" icon={<ScrollText className="h-4 w-4" />} title={t("billing.legal.refund")} />
+        <SettingsRow href="/contact" icon={<ScrollText className="h-4 w-4" />} title={t("billing.legal.contact")} />
         <SettingsRow href={`mailto:${LegalUrls.supportEmail}`} external title={t("settings.support")} />
       </Section>
 
