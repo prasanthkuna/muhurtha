@@ -65,6 +65,28 @@ export type PurposePlanner = {
   betterOptionSeed?: string;
 };
 
+const GRAHA_LOCAL: Record<"te" | "hi", Record<string, string>> = {
+  te: {
+    Sun: "సూర్యుడు", Moon: "చంద్రుడు", Mars: "కుజుడు", Mercury: "బుధుడు", Jupiter: "గురువు",
+    Venus: "శుక్రుడు", Saturn: "శని", Rahu: "రాహువు", Ketu: "కేతువు",
+  },
+  hi: {
+    Sun: "सूर्य", Moon: "चंद्र", Mars: "मंगल", Mercury: "बुध", Jupiter: "गुरु",
+    Venus: "शुक्र", Saturn: "शनि", Rahu: "राहु", Ketu: "केतु",
+  },
+};
+
+/** Graha name in the reader's language (engine keys are English). */
+export function grahaLocal(name: string, loc: AppLocale): string {
+  return loc === "en" ? name : GRAHA_LOCAL[loc][name] ?? name;
+}
+
+/** Swap English graha names inside an engine sentence for te/hi (also fixes older stored facts). */
+export function localizeGrahaNames(text: string, loc: AppLocale): string {
+  if (loc === "en" || !text) return text;
+  return text.replace(/\b(Sun|Moon|Mars|Mercury|Jupiter|Venus|Saturn|Rahu|Ketu)\b/g, (m) => GRAHA_LOCAL[loc][m] ?? m);
+}
+
 // Engine phrase banks (archetypes, life-area signals/cautions) are English. In te/hi the
 // screens must never show them raw, so keep only items written in the reader's script.
 const NATIVE_SCRIPT = /[\u0900-\u097F\u0C00-\u0C7F]/;
@@ -117,9 +139,9 @@ function phaseTransition(
       : "The same underlying tone continued here, but in a more visible way.";
   }
   return loc === "te"
-    ? `${prev.adLord} స్వరం నుంచి ${seg.adLord} వైపు మలుపు తిరిగిన దశ.`
+    ? `${grahaLocal(prev.adLord, "te")} స్వరం నుంచి ${grahaLocal(seg.adLord, "te")} వైపు మలుపు తిరిగిన దశ.`
     : loc === "hi"
-    ? `यह ${prev.adLord} के स्वर से ${seg.adLord} की तरफ मुड़ने वाला चरण था।`
+    ? `यह ${grahaLocal(prev.adLord, "hi")} के स्वर से ${grahaLocal(seg.adLord, "hi")} की तरफ मुड़ने वाला चरण था।`
     : `This phase turned the story from ${prev.adLord} tone into ${seg.adLord} tone.`;
 }
 

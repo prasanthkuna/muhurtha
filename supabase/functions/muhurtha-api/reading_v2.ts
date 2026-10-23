@@ -7,6 +7,7 @@
  * zero-call adapter for readings written by the old 6-phase pack pipeline.
  */
 import { DateTime } from "luxon";
+import { localizeGrahaNames } from "./planner.ts";
 
 export const READING_SCHEMA_VERSION = 2;
 export const READING_PROMPT_VERSION = "reading-v2.2";
@@ -724,8 +725,8 @@ export function buildReadingView(c: V2Content, facts: V2Facts, opts: ViewOptions
       title: ch.title,
       highlight: ch.highlight,
       sentences,
-      evidenceLine: f.evidence,
-      transitionNote: f.transition,
+      evidenceLine: localizeGrahaNames(f.evidence, facts.locale),
+      transitionNote: localizeGrahaNames(f.transition, facts.locale),
       focusAreas: nativeView(facts.locale, f.domains),
       pressureThemes: nativeView(facts.locale, f.pressure),
       domainLenses: f.lenses,
