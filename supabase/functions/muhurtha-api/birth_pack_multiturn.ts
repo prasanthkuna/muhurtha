@@ -85,6 +85,8 @@ const SHARED_RULES = `
 - Prefer a chart-specific contrast or genuine change in period over generic productivity advice such as clearing pending work, staying practical or fixing systems.
 - Give every section a clear editorial purpose: identity reveals an enduring pattern; Life Map explains the period transition; daily content is a concise briefing; timing explains calculated traditional factors. Use memorable but measured language, not WhatsApp slang or broad motivational advice.
 - BANNED openers: "This phase feels like", "The scene here is", "Picture a", "As of today, this feels".
+- If profile.subject_is_account_owner is false, the reading is about profile.display_name (a partner, friend or family member), not the account holder.
+- If birth.life_stage_note is present, follow it strictly: the subject is a child, so write for the parent and never give career, money, romance or marriage advice.
 - Return valid JSON only for the requested keys. No markdown.`;
 
 function slimKernel(kernel: unknown): Record<string, unknown> | undefined {

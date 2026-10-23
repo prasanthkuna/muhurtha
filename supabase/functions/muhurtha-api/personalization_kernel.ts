@@ -668,6 +668,8 @@ function localizeDomains(domains: DomainLens[], loc: AppLocale): DomainLens[] {
 function lifeStage(age?: number): string {
   if (!Number.isFinite(age ?? NaN)) return "adult practical decisions";
   const n = age!;
+  if (n < 3) return "infancy: care rhythm, sleep, feeding, health, and family bonding";
+  if (n < 13) return "childhood: learning style, play, health routine, and family harmony";
   if (n <= 22) return "study, confidence, identity, and early direction";
   if (n <= 32) return "career build, money structure, and relationship clarity";
   if (n <= 42) return "consolidation, family responsibility, stable money, and meaningful work";

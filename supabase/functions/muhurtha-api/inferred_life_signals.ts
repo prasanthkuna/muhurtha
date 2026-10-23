@@ -14,6 +14,8 @@ export function intentFingerprint(
 }
 
 function ageBand(age: number): string {
+  if (age < 3) return "infant";
+  if (age < 13) return "child";
   if (age < 22) return "student";
   if (age < 30) return "early_career";
   if (age < 40) return "family_builder";
@@ -36,15 +38,17 @@ export function inferLifeSignals(
   const mdLord = kernel?.period.mahadashaLord ?? "";
   const lifeStage = kernel?.lifeStage ?? ageBand(age);
 
-  if (age < 28) themes.push("growth_and_direction");
+  const isChild = Number.isFinite(age) && age < 13;
+  if (isChild) themes.push("child_wellbeing_and_family_harmony");
+  else if (age < 28) themes.push("growth_and_direction");
   if (age >= 25 && age < 40) themes.push("career_and_family_forming");
   if (age >= 35) themes.push("stability_and_responsibility");
 
-  if (RELATIONSHIP_LORDS.has(adLord) || RELATIONSHIP_LORDS.has(mdLord)) {
+  if (!isChild && (RELATIONSHIP_LORDS.has(adLord) || RELATIONSHIP_LORDS.has(mdLord))) {
     themes.push("relationship_marriage_timing");
   }
-  if (CAREER_LORDS.has(adLord)) themes.push("work_career_pressure");
-  if (MONEY_LORDS.has(adLord)) themes.push("money_restructuring");
+  if (!isChild && CAREER_LORDS.has(adLord)) themes.push("work_career_pressure");
+  if (!isChild && MONEY_LORDS.has(adLord)) themes.push("money_restructuring");
   if (FAMILY_LORDS.has(adLord)) themes.push("family_duty");
 
   const domainKeys = (kernel?.domains ?? []).map((d) => d.key).slice(0, 4);

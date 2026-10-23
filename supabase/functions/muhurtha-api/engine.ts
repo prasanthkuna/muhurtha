@@ -42,6 +42,7 @@ import {
 } from "./birth_intelligence_pack.ts";
 import {
   advanceBirthPackPhases,
+  BIRTH_PACK_PHASE_ORDER,
   birthPackPhasesRemaining,
   isPhaseAdvanceLocked,
   nextBirthPackPhase,
@@ -271,6 +272,8 @@ function lifeChapterInfo(
   const ad = planetLabel(kernel.period.antardashaLord, loc);
   const next = planetLabel(kernel.period.nextMahadashaLord, loc);
   const months = kernel.period.remainingMonths ?? null;
+  // Only call a chapter "closing" when it really ends soon (was hard-coded for everyone).
+  const closing = months != null && months <= 18;
   const phaseSpan = kernel.period.startLabel && kernel.period.endLabel
     ? `${kernel.period.startLabel} - ${kernel.period.endLabel}`
     : "";
@@ -286,15 +289,18 @@ function lifeChapterInfo(
       } నెలలు మాత్రమే ఉన్నాయి.`
       : "ఈ దశ ఇంకా కొనసాగుతోంది.";
     return {
-      title: `${md} అధ్యాయం ముగింపు దశలో ఉంది`,
-      summary:
-        `${md} దశ మీ జీవితంలో ఒక పెద్ద అధ్యాయం. ఇప్పుడు అది ముగింపు వైపు వెళ్తోంది; తర్వాత ${next} దశ మొదలవుతుంది. ఇది మంచి/చెడు అని ఒక్క మాటలో చెప్పడం కంటే, పాత పనులు పూర్తి చేసే సమయం అని చూడాలి.`,
-      qualityLabel: "మార్పు దశ",
+      title: closing ? `${md} అధ్యాయం ముగింపు దశలో ఉంది` : `${md} అధ్యాయం కొనసాగుతోంది`,
+      summary: closing
+        ? `${md} దశ మీ జీవితంలో ఒక పెద్ద అధ్యాయం. ఇప్పుడు అది ముగింపు వైపు వెళ్తోంది; తర్వాత ${next} దశ మొదలవుతుంది. ఇది మంచి/చెడు అని ఒక్క మాటలో చెప్పడం కంటే, పాత పనులు పూర్తి చేసే సమయం అని చూడాలి.`
+        : `ప్రస్తుతం ${md} దశ ఈ జీవిత భాగాన్ని నడిపిస్తోంది; ${ad} ఇప్పటి ఉప దశ. ${next} దశ ఇంకా చాలా దూరంలో ఉంది.`,
+      qualityLabel: closing ? "మార్పు దశ" : "కొనసాగుతున్న దశ",
       timelineLabel: left,
       currentChapterLabel: `${md} పెద్ద అధ్యాయం`,
       currentEpisodeLabel: `${ad} ప్రస్తుత భాగం`,
       nextChapterLabel: next ? `${next} తర్వాతి అధ్యాయం` : "",
-      actionLine: "కొత్త పెద్ద పనికంటే ముందు, పెండింగ్ విషయాలు క్లియర్ చేయండి.",
+      actionLine: closing
+        ? "కొత్త పెద్ద పనికంటే ముందు, పెండింగ్ విషయాలు క్లియర్ చేయండి."
+        : "ఈ దశ నేర్పుతున్న దానిపై నిలకడగా ముందుకు సాగండి.",
       traditionalWhy: kernel.period.line,
     };
   }
@@ -303,28 +309,34 @@ function lifeChapterInfo(
       ? `${phaseSpan ? `${phaseSpan}. ` : ""}लगभग ${Math.max(1, Math.round(months))} महीने बचे हैं।`
       : "यह अध्याय अभी चल रहा है।";
     return {
-      title: `${md} chapter closing`,
-      summary:
-        `${md} आपके जीवन का बड़ा अध्याय है। यह अब समाप्ति की तरफ है; अगला अध्याय ${next} है। इसे सिर्फ अच्छा/बुरा न मानें. अभी पुराने काम साफ करने का समय है।`,
-      qualityLabel: "बदलाव का समय",
+      title: closing ? `${md} अध्याय समाप्ति की ओर` : `${md} अध्याय जारी है`,
+      summary: closing
+        ? `${md} आपके जीवन का बड़ा अध्याय है। यह अब समाप्ति की तरफ है; अगला अध्याय ${next} है। इसे सिर्फ अच्छा/बुरा न मानें. अभी पुराने काम साफ करने का समय है।`
+        : `अभी ${md} का बड़ा अध्याय चल रहा है और ${ad} इसका मौजूदा हिस्सा है। ${next} का अध्याय अभी दूर है।`,
+      qualityLabel: closing ? "बदलाव का समय" : "चलता अध्याय",
       timelineLabel: left,
       currentChapterLabel: `${md} बड़ा अध्याय`,
       currentEpisodeLabel: `${ad} अभी का हिस्सा`,
       nextChapterLabel: next ? `${next} अगला अध्याय` : "",
-      actionLine: "नई बड़ी छलांग से पहले अधूरे काम साफ करें।",
+      actionLine: closing
+        ? "नई बड़ी छलांग से पहले अधूरे काम साफ करें।"
+        : "यह अध्याय जो सिखा रहा है, उस पर लगातार आगे बढ़ें।",
       traditionalWhy: kernel.period.line,
     };
   }
   return {
-    title: `${md} chapter is closing`,
-    summary:
-      `${md} has been the big chapter shaping this part of life. It is now moving toward closure; ${next} comes next. This is not simply good or bad. Treat it as a transition: close old loops before chasing one more big move.`,
-    qualityLabel: "Transition phase",
+    title: closing ? `${md} chapter is closing` : `${md} chapter is active`,
+    summary: closing
+      ? `${md} has been the big chapter shaping this part of life. It is now moving toward closure; ${next} comes next. This is not simply good or bad. Treat it as a transition: close old loops before chasing one more big move.`
+      : `${md} is the big chapter shaping this part of life right now, with ${ad} as the current episode. ${next} follows much later, so build steadily on what this chapter is teaching.`,
+    qualityLabel: closing ? "Transition phase" : "Active chapter",
     timelineLabel: closeLineEn,
     currentChapterLabel: `${md} big chapter`,
     currentEpisodeLabel: `${ad} current episode`,
     nextChapterLabel: next ? `${next} next chapter` : "",
-    actionLine: "Clear pending work before starting the next big thing.",
+    actionLine: closing
+      ? "Clear pending work before starting the next big thing."
+      : "Build steadily on what this chapter is teaching.",
     traditionalWhy: kernel.period.line,
   };
 }
@@ -2042,14 +2054,115 @@ async function continueBirthPackGeneration(
   }
 }
 
-async function ensureBirthPack(
+/** Label of the partner/friend chart this birth input belongs to (null for the owner). */
+async function chartSubjectName(
   supabase: SupabaseClient,
   profile: ProfRow,
-  bi: BioRow | null,
+  bi: BioRow,
+): Promise<string | null> {
+  if ((bi as { source?: string | null }).source !== "chart_profile") return null;
+  const { data } = await supabase
+    .from("chart_profiles")
+    .select("label")
+    .eq("owner_profile_id", profile.id)
+    .eq("birth_input_id", bi.id)
+    .maybeSingle();
+  return (data?.label as string | undefined)?.trim() || null;
+}
+
+/** Children (incl. infants) need parent-facing copy, not career/romance/money advice. */
+function lifeStageNote(age: number): string | null {
+  if (!Number.isFinite(age) || age >= 13) return null;
+  if (age < 3) {
+    return "Subject is an infant/toddler. Write for a parent reading about their child: temperament, care rhythm, sleep/feeding/health routines, family harmony and blessings. No career, money, romance, marriage or exam advice.";
+  }
+  return "Subject is a child. Write for a parent: temperament, learning style, play, health routine and family harmony. No career, money, romance or marriage advice.";
+}
+
+function runInBackground(task: Promise<unknown>, label: string): void {
+  const edgeRuntime = (globalThis as {
+    EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void };
+  }).EdgeRuntime;
+  const guarded = task.catch((error) => console.error(`[bg] ${label} failed`, error));
+  if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(guarded);
+}
+
+/** Phases a background worker runs per kick (each is one LLM call). */
+const PACK_KICK_PHASES = 2;
+/** Do not re-kick a generating row that was touched this recently. */
+const PACK_KICK_DEBOUNCE_MS = 4_000;
+
+type PackProgress = { state: "started" | "generating" | "queued" | "ready"; done: number; total: number };
+
+/**
+ * Non-blocking generation driver for the client poll loop: starts (or nudges) phased pack
+ * generation in the background and returns progress immediately. Safe to call repeatedly;
+ * the claim row + phase lock make concurrent kicks no-ops.
+ */
+async function kickBirthPackGeneration(
+  supabase: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow,
   locale: AppLocale,
   dateStr: string,
-): Promise<BirthPackRow | null> {
-  if (!bi) return null;
+): Promise<PackProgress> {
+  const total = BIRTH_PACK_PHASE_ORDER.length;
+  const subjectName = await chartSubjectName(supabase, profile, bi);
+  const ctx = buildBirthPackContext(supabase, profile, bi, locale, dateStr, subjectName);
+  const row = await fetchPackByFactSignature(
+    supabase,
+    profile.id,
+    bi.id,
+    locale,
+    ctx.factSignature,
+    dateStr,
+  ) as (BirthPackRow & { updated_at?: string }) | null;
+
+  if (!row || row.status === "fallback") {
+    const claimed = await tryClaimPackGeneration(
+      supabase,
+      profile,
+      bi,
+      locale,
+      dateStr,
+      ctx.factSignature,
+      ctx.expiresOn,
+    );
+    if (!claimed) return { state: "queued", done: 0, total };
+    await logAppEvent(
+      supabase,
+      profile.id,
+      "birth_pack",
+      "info",
+      "birth_pack_llm_started",
+      undefined,
+      { locale, factSignature: ctx.factSignature.slice(0, 120), mode: "kick-background" },
+    );
+    runInBackground(continueBirthPackGeneration(ctx, { maxPhases: PACK_KICK_PHASES }), "pack kick");
+    return { state: "started", done: 0, total };
+  }
+
+  if (row.status === "ready") return { state: "ready", done: total, total };
+
+  const content = (row.content ?? {}) as BirthIntelligencePackContent;
+  const remaining = birthPackPhasesRemaining(content);
+  const done = Math.max(0, total - remaining.length);
+  if (!isPhaseAdvanceLocked(content) && packAdvanceAgeMs(row) >= PACK_KICK_DEBOUNCE_MS) {
+    // remaining === 0 → continueBirthPackGeneration promotes the backfilled pack to ready.
+    runInBackground(continueBirthPackGeneration(ctx, { maxPhases: PACK_KICK_PHASES }), "pack advance");
+  }
+  return { state: "generating", done, total };
+}
+
+/** Deterministic facts + signature for a birth pack (no I/O). */
+function buildBirthPackContext(
+  supabase: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow,
+  locale: AppLocale,
+  dateStr: string,
+  subjectName?: string | null,
+): BirthPackContinuationContext {
   const tz = profile.current_timezone ?? "Asia/Kolkata";
   const refInstant = parseDateAsUtcInstant(dateStr, tz);
   const { segments } = computeTimeline(bi, tz);
@@ -2082,47 +2195,12 @@ async function ensureBirthPack(
       .join("|"),
   ]);
 
-  const { data: existing, error: existingError } = await supabase
-    .from("birth_intelligence_packs")
-    .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on")
-    .eq("profile_id", profile.id)
-    .eq("birth_input_id", bi.id)
-    .eq("locale", locale)
-    .eq("pack_version", BIRTH_PACK_VERSION)
-    .eq("engine_version", ENGINE_V)
-    .eq("fact_signature", factSignature)
-    .eq("status", "ready")
-    .gte("expires_on", dateStr)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (existingError) throw existingError;
-  if (existing) {
-    const pack = existing as BirthPackRow;
-    attachNatalLuckToContent(
-      pack.content as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
-      locale,
-    );
-    await persistNotificationScheduleBestEffort(supabase, pack, profile, bi, locale, timing);
-    return pack;
-  }
-
-  const cached = await findBestExistingPack(supabase, profile.id, bi.id, locale);
-  if (cached && countTodayCards(cached.content) >= PACK_DAILY_DAYS) {
-    attachNatalLuckToContent(
-      cached.content as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
-      locale,
-    );
-    await persistNotificationScheduleBestEffort(supabase, cached, profile, bi, locale, timing);
-    return cached;
-  }
-
   const lifeChapter = lifeChapterInfo(kernel, locale);
   const packFacts = {
     profile: {
-      display_name: profile.display_name,
+      // For a partner/friend chart the reading is about that person, not the account owner.
+      display_name: subjectName || profile.display_name,
+      subject_is_account_owner: !subjectName,
       current_city: profile.current_city,
       language_code: profile.language_code,
       explanation_mode: profile.explanation_mode,
@@ -2141,6 +2219,9 @@ async function ensureBirthPack(
       nakshatra_pada: bi.nakshatra_pada,
       timezone: bi.birth_timezone,
       age: calculateAge(bi.date_of_birth),
+      ...(lifeStageNote(calculateAge(bi.date_of_birth))
+        ? { life_stage_note: lifeStageNote(calculateAge(bi.date_of_birth)) }
+        : {}),
     },
     locale,
     generation_date: dateStr,
@@ -2209,6 +2290,57 @@ async function ensureBirthPack(
     packQualityExpected,
     timing,
   };
+  return continuationCtx;
+}
+
+async function ensureBirthPack(
+  supabase: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow | null,
+  locale: AppLocale,
+  dateStr: string,
+): Promise<BirthPackRow | null> {
+  if (!bi) return null;
+  const subjectName = await chartSubjectName(supabase, profile, bi);
+  const continuationCtx = buildBirthPackContext(supabase, profile, bi, locale, dateStr, subjectName);
+  const { factSignature, expiresOn, timing, packQualityExpected } = continuationCtx;
+  const { data: existing, error: existingError } = await supabase
+    .from("birth_intelligence_packs")
+    .select("id, content, provider, model, status, fact_signature, generated_for_date, expires_on")
+    .eq("profile_id", profile.id)
+    .eq("birth_input_id", bi.id)
+    .eq("locale", locale)
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("engine_version", ENGINE_V)
+    .eq("fact_signature", factSignature)
+    .eq("status", "ready")
+    .gte("expires_on", dateStr)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) {
+    const pack = existing as BirthPackRow;
+    attachNatalLuckToContent(
+      pack.content as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      locale,
+    );
+    await persistNotificationScheduleBestEffort(supabase, pack, profile, bi, locale, timing);
+    return pack;
+  }
+
+  const cached = await findBestExistingPack(supabase, profile.id, bi.id, locale);
+  if (cached && countTodayCards(cached.content) >= PACK_DAILY_DAYS) {
+    attachNatalLuckToContent(
+      cached.content as Record<string, unknown>,
+      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      locale,
+    );
+    await persistNotificationScheduleBestEffort(supabase, cached, profile, bi, locale, timing);
+    return cached;
+  }
+
 
   const exactRow = await fetchPackByFactSignature(
     supabase,
@@ -3176,7 +3308,7 @@ async function _handleInternal(
     const { data, error } = await supabase
       .from("chart_profiles")
       .select(
-        "id, label, birth_input_id, created_at, birth_inputs(date_of_birth, birth_place, janma_nakshatra, birth_input_mode)",
+        "id, label, birth_input_id, created_at, birth_inputs(date_of_birth, birth_place, janma_nakshatra, birth_input_mode, exact_birth_time, time_bucket)",
       )
       .eq("owner_profile_id", profile.id)
       .order("created_at", { ascending: true });
@@ -3368,6 +3500,27 @@ async function _handleInternal(
       body,
     );
     let pack = await loadBirthPack(adminSupabase, profile, bi, locale, dateStr);
+    if ((!pack || !isClientServablePack(pack)) && body.ensure === true && !mayGenerate) {
+      // Background generation for the client poll loop (partner/friend charts and any
+      // reading that was never generated): never blocks the request.
+      const progress = await kickBirthPackGeneration(adminSupabase, profile, bi, locale, dateStr);
+      if (progress.state === "ready") {
+        pack = await loadBirthPack(adminSupabase, profile, bi, locale, dateStr);
+      }
+      if (!pack || !isClientServablePack(pack)) {
+        const access = await getSubscriptionAccess(supabase, profile.id);
+        return {
+          generating: true,
+          status: "generating",
+          progress,
+          date: dateStr,
+          locale,
+          displayName: subjectName,
+          birthInputId: bi.id,
+          access: buildAccessPayload(access),
+        };
+      }
+    }
     if ((!pack || !isClientServablePack(pack)) && mayGenerate) {
       pack = await ensureBirthPack(adminSupabase, profile, bi, locale, dateStr);
     }
