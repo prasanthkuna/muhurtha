@@ -220,7 +220,13 @@ export default function TodayPage() {
   );
   const decorate = (list: TimingWindow[]) =>
     list.map((w) => ({ ...w, whyItWorks: scrub(w.whyItWorks) || undefined }));
-  const chapterSummary = scrub(day?.lifeChapter?.summary ?? day?.currentLifePeriod?.summary);
+  // "Your chapter": the AI-written current chapter from the reading; the engine's template
+  // line is only a fallback for readings that have no chapter text yet.
+  const aiChapter = views.currentChapter();
+  const chapterTitle = aiChapter?.title && aiChapter.title !== aiChapter.periodLabel ? aiChapter.title : null;
+  const chapterSummary = scrub(
+    aiChapter?.highlight || day?.lifeChapter?.summary || day?.currentLifePeriod?.summary,
+  );
 
   const week = views.horizon("week");
   const month = views.horizon("month");
@@ -337,8 +343,9 @@ export default function TodayPage() {
           {isToday && chapterSummary ? (
             <ProseBlock>
               <p className="text-xs uppercase tracking-wide text-gold-text">{t("today.chapter")}</p>
+              {chapterTitle ? <p className="mt-2 font-serif text-lg leading-snug text-ink">{chapterTitle}</p> : null}
               <p className="mt-2 text-sm text-ink-secondary">{chapterSummary}</p>
-              <Link href="/life" className="mt-3 inline-block text-sm text-gold-text">
+              <Link href={aiChapter ? `/life/${aiChapter.id}` : "/life"} className="mt-3 inline-block text-sm text-gold-text">
                 {t("today.readLife")}
               </Link>
             </ProseBlock>

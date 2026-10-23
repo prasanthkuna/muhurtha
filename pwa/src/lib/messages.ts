@@ -2,6 +2,7 @@ import type { AppLocale } from "./locale";
 import { EXTRA } from "./messages-share";
 import { SUPPLEMENT } from "./messages-supplement";
 import { BILLING } from "./messages-billing";
+import { READING } from "./messages-reading";
 
 type MessageTree = { [key: string]: string | MessageTree };
 
@@ -924,6 +925,7 @@ function lookup(tree: MessageTree, path: string): string | undefined {
 
 export function t(locale: AppLocale, key: string): string {
   return (
+    READING[locale]?.[key] ??
     BILLING[locale]?.[key] ??
     lookup(catalogs[locale], key) ??
     (locale === "en" ? undefined : SUPPLEMENT[locale]?.[key]) ??
@@ -931,6 +933,7 @@ export function t(locale: AppLocale, key: string): string {
     lookup(catalogs.en, key) ??
     EXTRA.en[key] ??
     BILLING.en[key] ??
+    READING.en[key] ??
     key
   );
 }

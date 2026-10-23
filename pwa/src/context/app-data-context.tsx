@@ -42,6 +42,11 @@ export type PackPreparing = {
   startedAt: number;
   /** No progress for a long time: show a retry instead of an endless spinner. */
   stalled: boolean;
+  /** Reading v2 job status (when the engine reports it). */
+  pct?: number;
+  stage?: string;
+  slow?: boolean;
+  failed?: boolean;
 };
 
 type AccessInfo = Partial<AccessDetails>;
@@ -52,7 +57,7 @@ const ACTIVE_DOB_KEY = "muh_active_chart_dob_v1";
 const PACK_REFRESH_POLL_MS = 15_000;
 const ACCESS_KEY_PREFIX = "muh_access_v1_";
 const PACK_POLL_MS = 4_000;
-const PACK_STALL_MS = 6 * 60_000;
+const PACK_STALL_MS = 10 * 60_000;
 
 function readAccess(uid: string | null): AccessInfo | null {
   if (typeof window === "undefined" || !uid) return null;
@@ -249,7 +254,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const load = useCallback(
-    async (opts?: { silent?: boolean; force?: boolean; poll?: boolean }) => {
+    async (opts?: { silent?: boolean; force?: boolean; poll?: boolean; retry?: boolean }) => {
       const locale = localeRef.current;
       const chartId = readActiveChartId();
       const dataKey = `${locale}:${chartId ?? "self"}`;
@@ -264,10 +269,23 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const p = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
         const done = Number(p.done ?? 0) || 0;
         const total = Number(p.total ?? 0) || 0;
+        const pct = typeof p.pct === "number" ? p.pct : undefined;
+        const stage = typeof p.stage === "string" ? p.stage : undefined;
+        const failed = p.state === "failed";
+        const slow = p.slow === true;
         setPreparing((prev) => {
-          const progressed = !prev || done !== prev.done;
+          const progressed = !prev || done !== prev.done || stage !== prev.stage;
           const startedAt = prev && !progressed ? prev.startedAt : Date.now();
-          return { done, total, startedAt, stalled: Date.now() - startedAt > PACK_STALL_MS };
+          return {
+            done,
+            total,
+            startedAt,
+            stalled: failed || Date.now() - startedAt > PACK_STALL_MS,
+            pct,
+            stage,
+            slow,
+            failed,
+          };
         });
       };
 
@@ -365,6 +383,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 may_generate: false,
                 // Engine starts/advances generation in the background if no reading exists.
                 ensure: true,
+                ...(opts?.retry ? { retry: true } : {}),
               }),
             ).then(({ res, json }) => {
               if (!live()) return;
@@ -442,7 +461,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   /** Coalesce overlapping loads (mount + auth events + locale change). */
   const loadOnce = useCallback(
-    (opts?: { silent?: boolean; force?: boolean; poll?: boolean }) => {
+    (opts?: { silent?: boolean; force?: boolean; poll?: boolean; retry?: boolean }) => {
       const key = `${localeRef.current}:${readActiveChartId() ?? "self"}`;
       if (inflight.current && inflight.current.key === key && !opts?.force) {
         return inflight.current.promise;
@@ -678,7 +697,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       preparing,
       retryPreparing: () => {
         setPreparing(null);
-        void loadOnce({ silent: true, force: true });
+        void loadOnce({ silent: true, force: true, retry: true });
       },
       refresh: async () => {
         clearEngineCache();

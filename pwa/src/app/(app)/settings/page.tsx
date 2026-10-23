@@ -7,7 +7,6 @@ import {
   Languages,
   Lock,
   LogOut,
-  RefreshCw,
   ScrollText,
   Share2,
   Sparkles,
@@ -28,6 +27,7 @@ import { loadBirthProfileResult, type BirthProfileSummary } from "@/lib/profile-
 import { createClient } from "@/lib/supabase/client";
 import { PushSection } from "@/components/settings/push-section";
 import { PlanSection } from "@/components/settings/plan-section";
+import { BirthEditSection } from "@/components/settings/birth-edit-section";
 import { usePaywall } from "@/context/paywall-context";
 import { setServerLanguage } from "@/lib/billing";
 
@@ -77,7 +77,6 @@ export default function SettingsPage() {
   const [currentPlace, setCurrentPlace] = useState<ResolvedPlace | null>(null);
   const [locationMsg, setLocationMsg] = useState<string | null>(null);
   const [langBusy, setLangBusy] = useState(false);
-  const [refreshBusy, setRefreshBusy] = useState(false);
 
   const loadBirth = useCallback(async () => {
     setBirthState("loading");
@@ -125,16 +124,6 @@ export default function SettingsPage() {
     const supabase = createClient();
     if (supabase) await supabase.auth.signOut();
     window.location.assign("/welcome");
-  }
-
-  async function hardRefresh() {
-    setRefreshBusy(true);
-    try {
-      clearEngineCache();
-      await Promise.all([refresh(), loadBirth()]);
-    } finally {
-      setRefreshBusy(false);
-    }
   }
 
   async function changeLanguage(next: AppLocale) {
@@ -267,6 +256,7 @@ export default function SettingsPage() {
         {pending ? (
           <p className="px-1 text-sm text-ink-tertiary" aria-live="polite">{t("ui.loadingBirth")}</p>
         ) : null}
+        {birthState === "ok" ? <BirthEditSection onSaved={() => void loadBirth()} /> : null}
         {birthState === "missing" ? (
           <p className="px-1 text-sm text-ink-secondary">{t("settings.birthMissing")}</p>
         ) : null}
@@ -357,21 +347,6 @@ export default function SettingsPage() {
         <SettingsRow href="/contact" icon={<ScrollText className="h-4 w-4" />} title={t("billing.legal.contact")} />
         <SettingsRow href={`mailto:${LegalUrls.supportEmail}`} external title={t("settings.support")} />
       </Section>
-
-      <section className="space-y-2 border-t border-line pt-4">
-        <SettingsRow
-          onClick={() => void hardRefresh()}
-          icon={
-            refreshBusy ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )
-          }
-          title={t("common.refresh")}
-          trailing={null}
-        />
-      </section>
 
       <button
         type="button"
