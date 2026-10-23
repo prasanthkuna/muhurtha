@@ -2237,6 +2237,72 @@ async function kickBirthPackGeneration(
   return { state: "generating", done, total };
 }
 
+/** A generating pack untouched this long has lost its driver (client closed or stopped polling). */
+const PACK_SWEEP_IDLE_MS = 45_000;
+/** Only rescue recent generations; older orphans are cleaned up by the normal stale logic. */
+const PACK_SWEEP_MAX_AGE_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
+ * Server-side safety net (pg_cron): phased packs only advance while a client request drives
+ * them, so a new user who closes onboarding mid-generation was left with a half-built pack.
+ * Nudge every recent, idle `generating` pack forward a couple of phases in the background.
+ */
+export async function sweepStalledBirthPacks(
+  adminSupabase: SupabaseClient,
+  opts?: { limit?: number },
+): Promise<Record<string, unknown>> {
+  const idleBefore = new Date(Date.now() - PACK_SWEEP_IDLE_MS).toISOString();
+  const createdAfter = new Date(Date.now() - PACK_SWEEP_MAX_AGE_MS).toISOString();
+  const { data: rows, error } = await adminSupabase
+    .from("birth_intelligence_packs")
+    .select("id, profile_id, birth_input_id, locale, fact_signature")
+    .eq("pack_version", BIRTH_PACK_VERSION)
+    .eq("status", "generating")
+    .lt("updated_at", idleBefore)
+    .gt("created_at", createdAfter)
+    .order("updated_at", { ascending: true })
+    .limit(opts?.limit ?? 5);
+  if (error) throw error;
+  const results: Record<string, unknown>[] = [];
+  for (const row of (rows ?? []) as {
+    id: string;
+    profile_id: string;
+    birth_input_id: string;
+    locale: string;
+    fact_signature: string | null;
+  }[]) {
+    try {
+      const { data: profile } = await adminSupabase
+        .from("profiles")
+        .select(
+          "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code, explanation_mode, onboarding_intent",
+        )
+        .eq("id", row.profile_id)
+        .maybeSingle();
+      if (!profile) continue;
+      const bi = await withBirthPlacePrecision(
+        await getBirthInput(adminSupabase, row.birth_input_id, row.profile_id),
+      );
+      if (!bi) continue;
+      const prof = profile as ProfRow;
+      const locale = normalizeLocale(row.locale);
+      const dateStr = todayInTimezone(prof.current_timezone ?? "Asia/Kolkata");
+      // Only drive the exact row that stalled; never start a brand-new (paid) generation here.
+      const subjectName = await chartSubjectName(adminSupabase, prof, bi);
+      const ctx = buildBirthPackContext(adminSupabase, prof, bi, locale, dateStr, subjectName);
+      if (ctx.factSignature !== row.fact_signature) {
+        results.push({ id: row.id, skipped: "signature_changed" });
+        continue;
+      }
+      const progress = await kickBirthPackGeneration(adminSupabase, prof, bi, locale, dateStr);
+      results.push({ id: row.id, ...progress });
+    } catch (e) {
+      results.push({ id: row.id, error: errorMessage(e) });
+    }
+  }
+  return { considered: rows?.length ?? 0, results };
+}
+
 /** Deterministic facts + signature for a birth pack (no I/O). */
 function buildBirthPackContext(
   supabase: SupabaseClient,

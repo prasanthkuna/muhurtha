@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { handleRequest, pushChartMoments, warmBirthPack } from "./engine.ts";
+import { handleRequest, pushChartMoments, sweepStalledBirthPacks, warmBirthPack } from "./engine.ts";
 import { smokeTestLocaleLlm } from "./locale_smoke.ts";
 import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
@@ -166,6 +166,24 @@ Deno.serve(async (req) => {
             : undefined,
         },
       );
+      return new Response(JSON.stringify(result), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    if (body.action === "pack_sweep") {
+      // pg_cron safety net: finish birth packs whose client stopped polling mid-generation.
+      const cronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
+      const given = req.headers.get("x-push-cron-secret") ?? "";
+      if (!(cronSecret && given === cronSecret) && !isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+      const result = await sweepStalledBirthPacks(adminSupabase);
+      if ((result.considered as number) > 0) console.log("[pack_sweep]", JSON.stringify(result));
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
       });
