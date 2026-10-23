@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -132,7 +133,7 @@ function TimingInner() {
 
   if (loading && !views) return <LoadingState message={t("timing.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("nav.timing")} subtitle={error ?? t("ui.unavailable")} />;
+    return <ReadingUnavailable title={t("nav.timing")} />;
   }
 
   const timingPlan = (pack?.content?.timing_plan ?? {}) as Record<string, Record<string, string>>;

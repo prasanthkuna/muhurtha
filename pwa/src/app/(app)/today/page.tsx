@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { useEffect, useState } from "react";
@@ -158,7 +159,7 @@ export default function TodayPage() {
 
   if (loading && !pack) return <LoadingState message={t("today.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("nav.today")} subtitle={error ?? t("ui.unavailable")} />;
+    return <ReadingUnavailable title={t("nav.today")} />;
   }
 
   const isToday = offset === 0;

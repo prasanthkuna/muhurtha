@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { ChevronRight } from "@/components/celestial/muh-icon";
 import { CelestialHeaderCard } from "@/components/celestial/celestial-header-card";
@@ -12,9 +13,10 @@ import { useLocale } from "@/context/locale-context";
 
 export default function DecodePage() {
   const { t } = useLocale();
-  const { views, loading, error, pack } = useAppData();
+  const { views, loading, error, pack, preparing } = useAppData();
 
   if (loading && !pack) return <LoadingState message={t("decode.opening")} />;
+  if (preparing && (!views || !pack)) return <ReadingUnavailable title={t("nav.decode")} />;
   if (error || !views || !pack) {
     return (
       <div className="space-y-4">

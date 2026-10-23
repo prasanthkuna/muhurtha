@@ -33,13 +33,52 @@ import type { TodayPayload } from "@/lib/today-types";
 import { parseTodayPayload } from "@/lib/today-types";
 import type { BirthPackPayload } from "@/lib/types";
 
+export type PackPreparing = {
+  /** Phases finished / total, when the engine reports them. */
+  done: number;
+  total: number;
+  startedAt: number;
+  /** No progress for a long time: show a retry instead of an endless spinner. */
+  stalled: boolean;
+};
+
+type AccessInfo = { isPro?: boolean; isPlus?: boolean; planCode?: string };
+
+const ACTIVE_LABEL_KEY = "muh_active_chart_label_v1";
+const ACCESS_KEY_PREFIX = "muh_access_v1_";
+const PACK_POLL_MS = 4_000;
+const PACK_STALL_MS = 6 * 60_000;
+
+function readAccess(uid: string | null): AccessInfo | null {
+  if (typeof window === "undefined" || !uid) return null;
+  try {
+    const raw = localStorage.getItem(ACCESS_KEY_PREFIX + uid);
+    return raw ? (JSON.parse(raw) as AccessInfo) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAccess(uid: string | null, access: AccessInfo) {
+  if (typeof window === "undefined" || !uid) return;
+  try {
+    localStorage.setItem(ACCESS_KEY_PREFIX + uid, JSON.stringify(access));
+  } catch {
+    /* quota */
+  }
+}
+
 type AppDataContextValue = {
   pack: BirthPackPayload | null;
   views: BirthPackViews | null;
   today: TodayPayload | null;
   loading: boolean;
   error: string | null;
+  /** Entitlement of the signed-in account (never of the chart being viewed). */
   isPro: boolean;
+  /** Set while a reading (e.g. a newly added friend chart) is being generated. */
+  preparing: PackPreparing | null;
+  retryPreparing: () => void;
   refresh: () => Promise<void>;
   /** Day payload for any date (cached per user/locale/chart/date); used by Today's day browser. */
   fetchDay: (date: string) => Promise<TodayPayload | null>;
@@ -126,6 +165,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [activeChartLabel, setActiveChartLabel] = useState<string | null>(null);
   const [chartProfiles, setChartProfiles] = useState<ChartProfileSummary[]>([]);
   const [dataLocale, setDataLocale] = useState<string | null>(null);
+  const [access, setAccessState] = useState<AccessInfo | null>(null);
+  const [preparing, setPreparing] = useState<PackPreparing | null>(null);
+  const [pollTick, setPollTick] = useState(0);
   const userIdRef = useRef<string | null>(null);
   const inflight = useRef<{ key: string; promise: Promise<void> } | null>(null);
   // Always the latest locale, so callbacks captured before a language switch (e.g. a
@@ -150,6 +192,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (snap.uid) {
       userIdRef.current = snap.uid;
       setUserId(snap.uid);
+      setAccessState(readAccess(snap.uid));
+    }
+    if (readActiveChartId()) {
+      try {
+        setActiveChartLabel(localStorage.getItem(ACTIVE_LABEL_KEY));
+      } catch {
+        /* ignore */
+      }
     }
     if (snap.pack) {
       setPack(snap.pack);
@@ -158,6 +208,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       dataKeyRef.current = `${locale}:${readActiveChartId() ?? "self"}`;
       setLoading(false);
     }
+  }, []);
+
+  const recordAccess = useCallback((next: AccessInfo | undefined | null) => {
+    if (!next || typeof next !== "object" || next.isPro === undefined) return;
+    setAccessState(next);
+    writeAccess(userIdRef.current, next);
   }, []);
 
   const reloadChartProfiles = useCallback(async () => {
@@ -173,7 +229,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const load = useCallback(
-    async (opts?: { silent?: boolean; force?: boolean }) => {
+    async (opts?: { silent?: boolean; force?: boolean; poll?: boolean }) => {
       const locale = localeRef.current;
       const chartId = readActiveChartId();
       const dataKey = `${locale}:${chartId ?? "self"}`;
@@ -183,6 +239,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const markData = () => {
         dataKeyRef.current = dataKey;
         setDataLocale(locale);
+      };
+      const setPreparingFrom = (raw: unknown) => {
+        const p = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+        const done = Number(p.done ?? 0) || 0;
+        const total = Number(p.total ?? 0) || 0;
+        setPreparing((prev) => {
+          const progressed = !prev || done !== prev.done;
+          const startedAt = prev && !progressed ? prev.startedAt : Date.now();
+          return { done, total, startedAt, stalled: Date.now() - startedAt > PACK_STALL_MS };
+        });
       };
 
       let uid: string | null = null;
@@ -223,6 +289,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const switchedData = dataKeyRef.current !== dataKey;
         if (cachedEntry) {
           setPack(cachedEntry.pack);
+          recordAccess(cachedEntry.pack.access);
+          setPreparing(null);
           markData();
         } else if (switchedData) {
           // Language or chart changed and nothing is cached for it: never keep showing the
@@ -238,7 +306,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         // Timezone: start with the cached value so the pack/today requests are not
         // serialized behind the profile query; correct it if the profile disagrees.
         let tz = readCachedTimezone() || profileTimezone || "Asia/Kolkata";
-        const tzQuery: Promise<string | null> = Promise.resolve(
+        const tzQuery: Promise<string | null> = opts?.poll
+          ? Promise.resolve(null)
+          : Promise.resolve(
           supabase
             .from("profiles")
             .select("current_timezone")
@@ -270,27 +340,45 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           opts?.force || !cachedEntry || cachedEntry.ageMs > PACK_REVALIDATE_MS;
         const packTask = needPackFetch
           ? postEngine(
-              engineExtras(locale, chartId, { action: "birth_pack_get", may_generate: false }),
+              engineExtras(locale, chartId, {
+                action: "birth_pack_get",
+                may_generate: false,
+                // Engine starts/advances generation in the background if no reading exists.
+                ensure: true,
+              }),
             ).then(({ res, json }) => {
               if (!live()) return;
+              if (res.ok && json.generating === true) {
+                recordAccess(json.access as AccessInfo | undefined);
+                if (hasPack) return; // keep showing the cached reading
+                markData();
+                setError(null);
+                setPreparingFrom(json.progress);
+                return;
+              }
               if (!res.ok) {
                 const code = json.error_code?.toString() ?? "";
                 if (hasPack) return; // keep showing the cached reading
                 if (code === "birth_pack_not_ready") {
-                  setError("Your reading is still preparing. Pull down to refresh in a moment.");
+                  markData();
+                  setError(null);
+                  setPreparingFrom(null);
                   return;
                 }
                 throw new Error(json.error?.toString() ?? "Failed to load pack");
               }
               const normalized = normalizePackResponse(json);
+              recordAccess(normalized.access);
               setPack(normalized);
+              setPreparing(null);
               markData();
               setError(null);
               writeCachedPack(uid!, locale, chartId, normalized);
             })
           : Promise.resolve();
 
-        const todayTask = fetchToday(tz).then(async () => {
+        // Generation polls only need the pack; Today/timezone/chart list are already loaded.
+        const todayTask = opts?.poll ? Promise.resolve() : fetchToday(tz).then(async () => {
           const fromProfile = await tzQuery.catch(() => null);
           if (!live()) return;
           if (fromProfile && fromProfile !== tz) {
@@ -305,7 +393,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         });
 
         await Promise.all([packTask, todayTask]);
-        if (live()) void reloadChartProfiles();
+        if (live() && !opts?.poll) void reloadChartProfiles();
       } catch (e) {
         if (!live()) return;
         if (!uid || !cachedFor(uid)) {
@@ -326,12 +414,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     // profileTimezone intentionally omitted: it is read as a hint only. `locale` stays a
     // dependency so a language switch re-creates load and re-runs the load effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [locale, reloadChartProfiles],
+    [locale, reloadChartProfiles, recordAccess],
   );
 
   /** Coalesce overlapping loads (mount + auth events + locale change). */
   const loadOnce = useCallback(
-    (opts?: { silent?: boolean; force?: boolean }) => {
+    (opts?: { silent?: boolean; force?: boolean; poll?: boolean }) => {
       const key = `${localeRef.current}:${readActiveChartId() ?? "self"}`;
       if (inflight.current && inflight.current.key === key && !opts?.force) {
         return inflight.current.promise;
@@ -371,11 +459,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (id: string | null, label?: string | null) => {
       setActiveChartProfileId(id);
       setActiveChartLabel(label ?? null);
-      if (id) localStorage.setItem(CHART_PROFILE_STORAGE_KEY, id);
-      else localStorage.removeItem(CHART_PROFILE_STORAGE_KEY);
-      setPack(null);
-      setToday(null);
-      await loadOnce({ force: true });
+      setPreparing(null);
+      if (id) {
+        localStorage.setItem(CHART_PROFILE_STORAGE_KEY, id);
+        if (label) localStorage.setItem(ACTIVE_LABEL_KEY, label);
+      } else {
+        localStorage.removeItem(CHART_PROFILE_STORAGE_KEY);
+        localStorage.removeItem(ACTIVE_LABEL_KEY);
+      }
+      // Cache-first: switching back to your own (or any previously opened) chart renders
+      // instantly from the per-chart cache and revalidates in the background. The load
+      // clears stale data itself when nothing is cached for the new chart.
+      await loadOnce({ silent: true });
     },
     [loadOnce],
   );
@@ -404,8 +499,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       return;
     }
     const found = chartProfiles.find((p) => p.id === activeChartProfileId);
-    if (found) setActiveChartLabel(found.label);
+    if (found) {
+      setActiveChartLabel(found.label);
+      try {
+        localStorage.setItem(ACTIVE_LABEL_KEY, found.label);
+      } catch {
+        /* ignore */
+      }
+    }
   }, [activeChartProfileId, chartProfiles]);
+
+  // While a reading is generating, poll (each poll also nudges the background generator)
+  // and swap the reading in as soon as it is ready — no "pull down to refresh".
+  useEffect(() => {
+    if (!preparing || preparing.stalled) return;
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState === "hidden") {
+        setPollTick((n) => n + 1);
+        return;
+      }
+      void loadOnce({ silent: true, poll: true });
+    }, PACK_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [preparing, pollTick, loadOnce]);
 
   const saveChartProfile = useCallback(
     async (input: {
@@ -443,22 +559,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!res.ok) throw new Error(json.error?.toString() ?? "Could not save chart");
 
       const birthInputId = json.birth_input_id?.toString();
-      if (birthInputId) {
-        await fetch("/api/engine", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "chart_initialize",
-            birth_input_id: birthInputId,
-            locale,
-          }),
-        });
-      }
-
       const id = json.id?.toString() ?? "";
       const label = json.label?.toString() ?? input.label;
-      await reloadChartProfiles();
-      await setActiveChartProfile(id, label);
+
+      // Show the new chart right away; everything slow happens in the background.
+      setChartProfiles((prev) => [
+        ...prev.filter((p) => p.id !== id),
+        {
+          id,
+          label,
+          birthInputId,
+          dateOfBirth: input.dateOfBirth,
+          birthPlace: input.birthPlace,
+          exactBirthTime: input.exactBirthTime ?? undefined,
+          timeBucket: input.timeBucket ?? undefined,
+        },
+      ]);
+      const init = birthInputId
+        ? fetch("/api/engine", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "chart_initialize",
+              birth_input_id: birthInputId,
+              locale,
+            }),
+          }).catch(() => undefined)
+        : Promise.resolve(undefined);
+      void init.then(() => reloadChartProfiles());
+      // Switch to the new chart without waiting: its reading starts generating on the
+      // first load and the progress state resolves on its own.
+      void setActiveChartProfile(id, label);
     },
     [locale, reloadChartProfiles, setActiveChartProfile],
   );
@@ -493,7 +624,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       today,
       loading,
       error,
-      isPro: pack?.access?.isPro === true,
+      isPro: (access?.isPro ?? pack?.access?.isPro) === true,
+      preparing,
+      retryPreparing: () => {
+        setPreparing(null);
+        void loadOnce({ silent: true, force: true });
+      },
       refresh: async () => {
         clearEngineCache();
         await loadOnce({ force: true });
@@ -512,6 +648,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     };
   }, [
     pack,
+    access,
+    preparing,
     today,
     loading,
     error,

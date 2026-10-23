@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -42,7 +43,7 @@ export default function LifeChapterPage() {
 
   if (loading && !views) return <LoadingState message={t("life.chapterLoading")} />;
   if (error || !views) {
-    return <PageHeader title={t("life.chapterTitle")} subtitle={error ?? t("ui.unavailable")} />;
+    return <ReadingUnavailable title={t("life.chapterTitle")} />;
   }
 
   const chapter = views.chapterById(params.chapterId);

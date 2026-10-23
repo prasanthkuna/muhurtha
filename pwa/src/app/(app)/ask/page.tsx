@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { AskAnswerCard } from "@/components/ask/ask-answer-card";
@@ -60,7 +61,7 @@ function AskInner() {
 
   if (loading && !views) return <LoadingState message={t("ask.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("nav.ask")} subtitle={error ?? t("ui.unavailable")} />;
+    return <ReadingUnavailable title={t("nav.ask")} />;
   }
 
   const suggestions = views.askSuggestions();

@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { useState } from "react";
 import { ChapterHeroCard } from "@/components/celestial/chapter-hero-card";
@@ -134,7 +135,7 @@ export default function LifeIndexPage() {
 
   if (loading && !views) return <LoadingState message={t("life.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("life.title")} subtitle={error ?? t("ui.unavailable")} />;
+    return <ReadingUnavailable title={t("life.title")} />;
   }
 
   const chapters = views.chapters();

@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import { PageHeader } from "@/components/editorial/page-header";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { ProseBlock } from "@/components/editorial/prose-block";
@@ -74,7 +75,7 @@ export default function SharePage() {
 
   if (loading && !views) return <LoadingState message={t("share.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("share.title")} subtitle={error ?? t("ui.unavailable")} />;
+    return <ReadingUnavailable title={t("share.title")} />;
   }
 
   return (

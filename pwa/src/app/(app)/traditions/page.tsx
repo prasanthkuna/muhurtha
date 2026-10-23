@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import { LuckyStrip } from "@/components/editorial/lucky-strip";
 import { PageHeader } from "@/components/editorial/page-header";
 import { ProseBlock } from "@/components/editorial/prose-block";
@@ -17,7 +18,7 @@ export default function TraditionsPage() {
 
   if (loading && !views) return <LoadingState message={t("traditions.loading")} />;
   if (error || !views) {
-    return <PageHeader title={t("traditions.title")} subtitle={error ?? t("ui.unavailable")} />;
+    return <ReadingUnavailable title={t("traditions.title")} />;
   }
 
   const luck = views.natalLuck;
