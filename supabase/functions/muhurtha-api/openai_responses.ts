@@ -390,7 +390,10 @@ async function geminiCall(model: string, input: CreateResponseInput, timeoutMs: 
     const msg = e instanceof Error ? e.message : String(e);
     const elapsed = Date.now() - t0;
     if (!/^gemini_create_failed:(429|500|503):/.test(msg) || elapsed > 15_000) throw e;
-    const next = geminiChain(model)[1] ?? model;
+    // Free-tier daily cap is per model: hop to a sibling Gemini model (never OpenAI).
+    const dayCap = /PerDay|per day/i.test(msg);
+    const quotaNext = (Deno.env.get("GEMINI_QUOTA_FALLBACK_MODEL") ?? "gemini-3.5-flash").trim();
+    const next = dayCap && quotaNext && quotaNext !== model ? quotaNext : (geminiChain(model)[1] ?? model);
     console.warn(`[gemini] ${model}: ${msg.slice(0, 80)}; retrying once on ${next}`);
     await new Promise((r) => setTimeout(r, 3_000));
     return await geminiCallOnce(next, input, timeoutMs - elapsed - 3_000, id, variant);

@@ -11,7 +11,7 @@ import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 
 export const READING_SCHEMA_VERSION = 2;
-export const READING_PROMPT_VERSION = "reading-v2.4";
+export const READING_PROMPT_VERSION = "reading-v2.5";
 
 export type ReadingLocale = "en" | "te" | "hi";
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
@@ -322,7 +322,7 @@ export function buildSystemPrompt(facts: V2Facts): string {
     DATE_RULE,
     "Rules:",
     "1. The engine owns all facts. Never write clock times, durations in hours, years, dates, ages or planet/graha names in days, weekdays, weeks, months or push. Planet names are allowed only inside chapters and profile, and only when they help.",
-    "2. Every day needs its OWN hook from that day's facts, never a mood bucket. Build body as: hook (today's star by name, or the tithi_hint, or the tara_hint in plain words) -> why it matters for THIS person (their natal signals or current period) -> one concrete action. Use tithi_hint on every day that has one (full moon, new moon, Ekadashi ...). day_tone is an internal label: never write 'mixed/careful/supportive tone', 'day tone' or 'energy' as an opener. No two day bodies may start with the same two words; no two lines may share an opener. Call a star 'your birth star' ONLY when is_birth_star is true; otherwise it is 'today's star' (use the exact nakshatra name from that day's facts, Telugu: nakshatra_te). Never reuse a title or chip across days. Never put a weekday name in a day title.",
+    "2. Every day needs its OWN hook from that day's facts, never a mood bucket. Build body as: hook (today's star by name, or the tithi_hint, or the tara_hint in plain words) -> why it matters for THIS person (their natal signals or current period) -> one concrete action. Vary the sentence shape: open with the star's name on at most one day in three; on the others lead with the action, the person or the moment and name the star mid-sentence. Never use the formula '<star> combined with/alongside <tithi>'. Name the current period as 'your current period', never by planet names. Use tithi_hint on every day that has one (full moon, new moon, Ekadashi ...). day_tone is an internal label: never write 'mixed/careful/supportive tone', 'day tone' or 'energy' as an opener. No two day bodies may start with the same two words; no two lines may share an opener. Call a star 'your birth star' ONLY when is_birth_star is true; otherwise it is 'today's star' (use the exact nakshatra name from that day's facts, Telugu: nakshatra_te). Never reuse a title or chip across days. Never put a weekday name in a day title.",
     "3. window_notes: write one note for every window id listed for that day/weekday (and no others). Good windows (g*) say what to use them for; c1 is the traditional caution window: say what to keep routine. Never write times; the app shows them.",
     "4. weekdays are evergreen cards used after the dated days run out: write for that weekday in general, no tithi/nakshatra references.",
     "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique.",
@@ -637,6 +637,7 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
   const dayFact = new Map(facts.days.map((d) => [d.date, d]));
   const natalStar = (facts.natal as { nakshatra?: string } | undefined)?.nakshatra ?? "";
   const bodyOpenSeen = new Map<string, number>();
+  let starOpeners = 0;
   for (const { section, id, d, wins } of dayLike) {
     const text = dayText(d);
     checkText(section, id, text, true);
@@ -645,6 +646,15 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
     const bodyOpen = tokenize(d.body ?? "").slice(0, 2).join(" ");
     bodyOpenSeen.set(bodyOpen, (bodyOpenSeen.get(bodyOpen) ?? 0) + 1);
     if (bodyOpen && (bodyOpenSeen.get(bodyOpen) ?? 0) > 2) flag(section, id, "body_opener_repeat");
+    if (fx) {
+      const first = (d.body ?? "").trim().split(/[\s,]+/)[0] ?? "";
+      const starWords = [fx.nakshatra.split(" ")[0], NAKSHATRA_TE[fx.nakshatra]?.split(" ")[0] ?? "~"];
+      if (first && starWords.some((w) => first.startsWith(w))) {
+        starOpeners += 1;
+        if (starOpeners > 10) flag(section, id, "star_opener_repeat");
+      }
+      if (/\b(combined with|alongside)\b/i.test(d.body ?? "")) flag(section, id, "formula_phrase");
+    }
     if (!d.title || !d.body || (d.body ?? "").length < 40) flag(section, id, "too_thin");
     const noteIds = new Set((d.window_notes ?? []).map((n) => n.window_id));
     if (wins.some((w) => !noteIds.has(w))) flag(section, id, "window_note_missing");
@@ -742,7 +752,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     "Rewrite ONLY these items. Fix every listed problem and keep everything else about the rules.",
     "Problems:",
     ...v.flags.map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
-    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently.",
+    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly.",
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 40))}`,
     "FACTS for these items:",
     JSON.stringify(factItems),
