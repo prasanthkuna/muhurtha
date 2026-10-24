@@ -1,6 +1,7 @@
 /**
  * Batched LLM Journey and Quick Proof cards. Grounded in planner facts.
  */
+import { openAiAllowed } from "./llm_policy.ts";
 import { generateJsonWithFallbackEnvelope } from "./gemini_json.ts";
 import type { AppLocale } from "./vedic_labels.ts";
 import type { PhasePlan } from "./planner.ts";
@@ -154,7 +155,7 @@ async function generatePhaseCards(
   opts?: { supabase?: SupabaseClient; profileId?: string },
 ): Promise<JourneyLlmEnvelope | null> {
   const hasGemini = Boolean(Deno.env.get("GEMINI_API_KEY") ?? "");
-  const hasOpenAi = Boolean(Deno.env.get("OPENAI_API_KEY") ?? "");
+  const hasOpenAi = openAiAllowed();
   if (!hasGemini && !hasOpenAi) {
     console.warn(`${mode} LLM unavailable: no provider key configured`);
     return null;

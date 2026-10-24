@@ -3,6 +3,7 @@
  * Completion is detected by whichever comes first: a client status poll, the pg_cron sweep,
  * or the OpenAI webhook (when configured). All paths call advanceJob(), which is idempotent.
  */
+import { maxAttempts, retryBackoffMs } from "./llm_policy.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildReadingSchema,
@@ -29,6 +30,7 @@ import {
   type ResponseObject,
 } from "./openai_responses.ts";
 
+/** Attempts when OpenAI can take over; Gemini-only uses maxAttempts() from llm_policy.ts. */
 export const MAX_ATTEMPTS = 3;
 const POLL_DEBOUNCE_MS = 2500;
 const CLAIM_MS = 150_000;
@@ -225,7 +227,7 @@ export async function submitJob(admin: SupabaseClient, job: JobRow, reading: Rea
       model,
       openai_response_id: r.id,
       attempts: job.attempts + 1,
-      started_at: job.started_at ?? new Date().toISOString(),
+      started_at: new Date().toISOString(), // per attempt, so JOB_TIMEOUT_MS never trips on a later retry
       error: null,
       last_polled_at: new Date().toISOString(),
     });
@@ -236,8 +238,8 @@ export async function submitJob(admin: SupabaseClient, job: JobRow, reading: Rea
       job_id: job.id, profile_id: job.profile_id, purpose: "reading", model, locale: reading.locale,
       status: "create_failed", error: msg.slice(0, 500),
     });
-    if (attempts >= MAX_ATTEMPTS) return await failJob(admin, job, reading, msg, attempts);
-    return await updateJob(admin, job.id, { status: "queued", stage: "retrying", attempts, error: msg.slice(0, 500) });
+    if (attempts >= maxAttempts()) return await failJob(admin, job, reading, msg, attempts);
+    return await updateJob(admin, job.id, { status: "queued", stage: "retrying", attempts, error: msg.slice(0, 500), last_polled_at: new Date().toISOString() });
   }
 }
 
@@ -364,7 +366,10 @@ export async function advanceJob(
   }
 
   if (job.status === "queued") {
-    if (job.attempts >= MAX_ATTEMPTS) return await failJob(admin, job, reading, job.error ?? "max_attempts");
+    if (job.attempts >= maxAttempts()) return await failJob(admin, job, reading, job.error ?? "max_attempts");
+    // Back off between retries (Gemini sheds load in bursts); the 20s sweep picks the job up again.
+    const lastTouch = Date.parse(job.last_polled_at ?? job.created_at);
+    if (job.attempts > 0 && now - lastTouch < retryBackoffMs(job.attempts)) return job;
     return await submitJob(admin, job, reading);
   }
 
@@ -395,8 +400,8 @@ export async function advanceJob(
     if (now - started > JOB_TIMEOUT_MS) {
       const attempts = job.attempts;
       await logCall(admin, { job_id: job.id, profile_id: job.profile_id, purpose: "reading", model: job.model ?? readingModel(), response_id: resp.id, locale: reading.locale, status: "timeout", latency_ms: now - started });
-      if (attempts >= MAX_ATTEMPTS) return await failJob(admin, job, reading, "timeout");
-      return await updateJob(admin, job.id, { status: "queued", stage: "retrying", error: "timeout", started_at: new Date().toISOString() });
+      if (attempts >= maxAttempts()) return await failJob(admin, job, reading, "timeout");
+      return await updateJob(admin, job.id, { status: "queued", stage: "retrying", error: "timeout", started_at: new Date().toISOString(), last_polled_at: new Date().toISOString() });
     }
     return await updateJob(admin, job.id, { last_polled_at: new Date().toISOString(), stage: "writing" });
   }
@@ -435,15 +440,15 @@ export async function advanceJob(
     const why = !content
       ? `no_content:${resp.status}:${resp.error ?? resp.incomplete_reason ?? ""}`
       : `invalid:${validation?.fatal.join(";")}`;
-    if (job.attempts >= MAX_ATTEMPTS) {
+    if (job.attempts >= maxAttempts()) {
       await updateJob(admin, job.id, { ...totals, validation: validation as never });
       return await failJob(admin, { ...job, ...totals }, reading, why);
     }
     const queued = await updateJob(admin, job.id, {
       ...totals, status: "queued", stage: "retrying", error: why.slice(0, 500), validation: validation as never,
-      openai_response_id: null, claimed_until: null,
+      openai_response_id: null, claimed_until: null, last_polled_at: new Date().toISOString(),
     });
-    return await submitJob(admin, queued, reading);
+    return queued; // resubmitted by the sweep after retryBackoffMs()
   }
 
   content = sanitizeContent(content, facts);

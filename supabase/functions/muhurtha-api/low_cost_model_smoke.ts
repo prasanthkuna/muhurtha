@@ -1,3 +1,4 @@
+import { openAiAllowed as openAiAllowedPolicy } from "./llm_policy.ts";
 import { geminiGenerateJsonEnvelope } from "./gemini_json.ts";
 import { openAiGenerateJsonEnvelope } from "./openai_json.ts";
 
@@ -112,9 +113,8 @@ export async function smokeTestLowCostModels(): Promise<Record<string, unknown>>
     }
   }
 
-  const openAiAllowed = Deno.env.get("OPENAI_API_KEY")?.trim() &&
-    !deployed.disableOpenAi;
-  if (openAiAllowed) {
+  const openAiOk = openAiAllowedPolicy() && !deployed.disableOpenAi;
+  if (openAiOk) {
     for (const model of OPENAI_CANDIDATES) {
       results.push(await probeOpenAi(model));
     }

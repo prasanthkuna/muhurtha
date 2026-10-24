@@ -32,6 +32,7 @@ Deno.test("gemini request schema drops array counts but keeps a property named m
 Deno.test("gemini primary gets two attempts before the OpenAI fallback", () => {
   const keep = { g: Deno.env.get("GEMINI_API_KEY"), o: Deno.env.get("OPENAI_API_KEY"), p: Deno.env.get("READING_PROVIDER") };
   Deno.env.set("GEMINI_API_KEY", "test"); Deno.env.set("OPENAI_API_KEY", "test"); Deno.env.delete("READING_PROVIDER");
+  Deno.env.set("LLM_FALLBACK", "openai");
   try {
     const seq = [0, 1, 2].map((a) => providerOf(modelForAttempt(a)));
     if (seq.join(",") !== "gemini,gemini,openai") throw new Error(seq.join(","));
@@ -41,6 +42,22 @@ Deno.test("gemini primary gets two attempts before the OpenAI fallback", () => {
     Deno.env.set("READING_PROVIDER", "openai");
     if (providerOf(modelForAttempt(0)) !== "openai") throw new Error("override");
   } finally {
+    Deno.env.delete("LLM_FALLBACK");
     for (const [k, v] of [["GEMINI_API_KEY", keep.g], ["OPENAI_API_KEY", keep.o], ["READING_PROVIDER", keep.p]] as const) v === undefined ? Deno.env.delete(k) : Deno.env.set(k, v);
+  }
+});
+
+Deno.test("Gemini-only by default: OpenAI is never chosen, even when forced or keyed", async () => {
+  const { openAiAllowed, maxAttempts, retryBackoffMs } = await import("./llm_policy.ts");
+  Deno.env.set("GEMINI_API_KEY", "test"); Deno.env.set("OPENAI_API_KEY", "test"); Deno.env.delete("LLM_FALLBACK");
+  Deno.env.set("READING_PROVIDER", "openai");
+  try {
+    if (openAiAllowed()) throw new Error("allowed without LLM_FALLBACK=openai");
+    const seq = [0, 1, 2, 3, 7].map((a) => providerOf(modelForAttempt(a)));
+    if (seq.some((p) => p !== "gemini")) throw new Error(seq.join(","));
+    if (maxAttempts() < 5) throw new Error("gemini-only should retry longer");
+    if (retryBackoffMs(1) !== 15_000 || retryBackoffMs(10) !== 300_000) throw new Error("backoff");
+  } finally {
+    Deno.env.delete("READING_PROVIDER"); Deno.env.delete("OPENAI_API_KEY"); Deno.env.delete("GEMINI_API_KEY");
   }
 });

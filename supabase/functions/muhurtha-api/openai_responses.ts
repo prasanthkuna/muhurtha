@@ -11,6 +11,7 @@
  * retrieveResponse() reads that row for ids starting with "gem_"; a row that outlives
  * GEMINI_ASYNC_TTL_MS (worker killed) reads as failed so the job runner retries.
  */
+import { openAiAllowed } from "./llm_policy.ts";
 import { createClient } from "@supabase/supabase-js";
 
 export const READING_MODEL_DEFAULT = "gpt-5.4-mini";
@@ -62,7 +63,7 @@ export function geminiConfigured(): boolean {
 
 export function primaryProvider(): LlmProvider {
   const forced = Deno.env.get("READING_PROVIDER")?.trim().toLowerCase();
-  if (forced === "openai") return "openai";
+  if (forced === "openai" && openAiAllowed()) return "openai";
   return geminiConfigured() ? "gemini" : "openai";
 }
 
@@ -106,8 +107,9 @@ export function llmConfigured(): boolean {
   return openAiConfigured() || geminiConfigured();
 }
 
+/** True only when the OpenAI fallback is explicitly enabled (LLM_FALLBACK=openai); see llm_policy.ts. */
 export function openAiConfigured(): boolean {
-  return Boolean(Deno.env.get("OPENAI_API_KEY")?.trim());
+  return openAiAllowed();
 }
 
 export function costUsd(model: string, u: ResponseUsage | null): number {
@@ -119,6 +121,7 @@ export function costUsd(model: string, u: ResponseUsage | null): number {
 }
 
 function apiKey(): string {
+  if (!openAiAllowed()) throw new Error("openai_disabled");
   const k = Deno.env.get("OPENAI_API_KEY")?.trim();
   if (!k) throw new Error("openai_not_configured");
   return k;
@@ -247,7 +250,7 @@ export async function retrieveResponse(id: string): Promise<ResponseObject> {
 }
 
 export async function cancelResponse(id: string): Promise<void> {
-  if (id.startsWith("gem_")) return;
+  if (id.startsWith("gem_") || !openAiAllowed()) return;
   await fetch(`https://api.openai.com/v1/responses/${encodeURIComponent(id)}/cancel`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey()}` },

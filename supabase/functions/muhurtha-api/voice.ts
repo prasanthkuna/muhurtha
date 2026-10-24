@@ -12,7 +12,7 @@ export const ENGLISH_VOICE = [
   "Astro words only when needed, with a 2-4 word gloss the first time: 'Jupiter–Saturn (your current planet period)', '<natal nakshatra> (your birth star)', 'Rahu Kalam (the daily ~90-min no-new-starts slot)'.",
   "Don't lean on pet words: 'routine', 'clean', 'practical', 'calm', 'gentle', 'clear' at most 3 times each across the whole reading. Vary them.",
   "No em-dash chains, no 'not X, but Y' templates, no rhetorical triplets, no fear, no doom.",
-  "'Birth star' means only the natal nakshatra. Don't name the day's tithi, yoga or tara in the text (never the word 'tara'); name the day's nakshatra on at most 3 days, as 'today's star', never as a birth star.",
+  "'Birth star' means only the natal nakshatra. Name today's star or tithi in plain words when it's the day's hook; never write the words 'tara', 'yoga' or 'day tone'.",
 ].join(" ");
 
 export const TELUGU_VOICE = [
@@ -21,7 +21,7 @@ export const TELUGU_VOICE = [
   "Use spoken forms: చేయొచ్చు (not చేయవచ్చు), వద్దు/చేయకండి, అయిపోయింది, కాస్త, కొంచెం. Never use bookish words: మరియు (use commas), కిటికీ or విండో (use టైమ్), సమయ విండో, అనుకూలమైన కాలం, ప్రయత్నించండి (use ట్రై చేయండి), శుభప్రదమైన, దయచేసి, తదుపరి (use నెక్స్ట్), అధ్యాయం (use చాప్టర్).",
   "Neutral dialect, no regional slang. Short lines. One real-life example per idea (ఆఫీస్ మెయిల్, అమ్మకి కాల్, EMI, జిమ్).",
   "Astro words: plain Telugu names (గురువు, శని, రాహుకాలం, నక్షత్రం) with a 2-4 word gloss when it's a dasha: 'గురు–శని దశ (మీ ఇప్పటి గ్రహ దశ)'.",
-  "Don't name the day's తిథి, యోగం or తార in the text; name the day's నక్షత్రం on at most 3 days ('ఈరోజు నక్షత్రం'), never as జన్మ నక్షత్రం. Don't join words with 'అండ్' (use a comma or 'కూడా').",
+  "ఈరోజు నక్షత్రం (nakshatra_te) లేదా తిథి (పౌర్ణమి, అమావాస్య, ఏకాదశి) ని hook గా సింపుల్ మాటల్లో చెప్పండి; 'తార', 'యోగం', 'టోన్' అనే పదాలు రాయకండి. జన్మ నక్షత్రం అని is_birth_star true అయినప్పుడే అనండి. Don't join words with 'అండ్' (use a comma or 'కూడా').",
 ].join(" ");
 
 export const HINDI_VOICE = [

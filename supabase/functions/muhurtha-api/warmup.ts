@@ -1,3 +1,4 @@
+import { openAiAllowed } from "./llm_policy.ts";
 import {
   DEFAULT_BIRTH_PACK_MAX_OUTPUT_TOKENS,
   DEFAULT_GEMINI_MODEL,
@@ -61,8 +62,7 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
       DEFAULT_GEMINI_MODEL,
     birthPackGeminiMaxOutput: DEFAULT_BIRTH_PACK_MAX_OUTPUT_TOKENS,
     geminiFallback: secrets.GEMINI_API_KEY,
-    openAiFallback: envCheck("OPENAI_API_KEY") &&
-      Deno.env.get("DISABLE_OPENAI")?.trim().toLowerCase() !== "true",
+    openAiFallback: openAiAllowed(),
   };
 
   const birthPackPrimary = config.birthPackPrimary.toLowerCase();
@@ -74,7 +74,7 @@ export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, un
     const probeUser = JSON.stringify({ task: "warmup_probe", phase: "core_identity" });
 
     const probeOpenAi = () =>
-      secrets.OPENAI_API_KEY
+      secrets.OPENAI_API_KEY && openAiAllowed()
         ? openAiGenerateJsonEnvelope(probeSystem, probeUser, {
           modelEnvName: "BIRTH_PACK_MODEL",
           birthPackPhase: "core_identity",

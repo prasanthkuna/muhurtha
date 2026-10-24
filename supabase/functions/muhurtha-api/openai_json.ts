@@ -1,3 +1,4 @@
+import { openAiAllowed } from "./llm_policy.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAppEvent } from "./engine.ts";
 import {
@@ -83,7 +84,7 @@ export async function openAiGenerateJsonEnvelope(
     ? undefined
     : optsOrModelEnvName?.modelOverride;
   const apiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
-  if (!apiKey) return null;
+  if (!apiKey || !openAiAllowed()) return null;
   const model = modelOverride?.trim() || resolveModel(modelEnvName);
   const isBirthPack = modelEnvName === "BIRTH_PACK_MODEL" || birthPackPhase != null;
   const maxTokens = maxCompletionTokens(modelEnvName, birthPackPhase);

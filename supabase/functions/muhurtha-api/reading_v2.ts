@@ -11,7 +11,7 @@ import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 
 export const READING_SCHEMA_VERSION = 2;
-export const READING_PROMPT_VERSION = "reading-v2.3";
+export const READING_PROMPT_VERSION = "reading-v2.4";
 
 export type ReadingLocale = "en" | "te" | "hi";
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
@@ -322,7 +322,7 @@ export function buildSystemPrompt(facts: V2Facts): string {
     DATE_RULE,
     "Rules:",
     "1. The engine owns all facts. Never write clock times, durations in hours, years, dates, ages or planet/graha names in days, weekdays, weeks, months or push. Planet names are allowed only inside chapters and profile, and only when they help.",
-    "2. Every day must read differently: use that day's tithi, nakshatra, yoga, moon sign, tara and day_tone to choose a different angle, title and chips (use them silently; see the voice rules on naming them). Never reuse a title, opening phrase or chip across days. Do not mention the weekday name in day titles.",
+    "2. Every day needs its OWN hook from that day's facts, never a mood bucket. Build body as: hook (today's star by name, or the tithi_hint, or the tara_hint in plain words) -> why it matters for THIS person (their natal signals or current period) -> one concrete action. Use tithi_hint on every day that has one (full moon, new moon, Ekadashi ...). day_tone is an internal label: never write 'mixed/careful/supportive tone', 'day tone' or 'energy' as an opener. No two day bodies may start with the same two words; no two lines may share an opener. Call a star 'your birth star' ONLY when is_birth_star is true; otherwise it is 'today's star' (use the exact nakshatra name from that day's facts, Telugu: nakshatra_te). Never reuse a title or chip across days. Never put a weekday name in a day title.",
     "3. window_notes: write one note for every window id listed for that day/weekday (and no others). Good windows (g*) say what to use them for; c1 is the traditional caution window: say what to keep routine. Never write times; the app shows them.",
     "4. weekdays are evergreen cards used after the dated days run out: write for that weekday in general, no tithi/nakshatra references.",
     "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique.",
@@ -336,8 +336,58 @@ export function buildSystemPrompt(facts: V2Facts): string {
   ].join("\n");
 }
 
+// ---------------------------------------------------------------- grounding hints (engine-owned)
+
+export const NAKSHATRA_TE: Record<string, string> = {
+  "Ashwini": "అశ్విని", "Bharani": "భరణి", "Krittika": "కృత్తిక", "Rohini": "రోహిణి", "Mrigashira": "మృగశిర",
+  "Ardra": "ఆరుద్ర", "Punarvasu": "పునర్వసు", "Pushya": "పుష్యమి", "Ashlesha": "ఆశ్లేష", "Magha": "మఖ",
+  "Purva Phalguni": "పుబ్బ", "Uttara Phalguni": "ఉత్తర", "Hasta": "హస్త", "Chitra": "చిత్త", "Swati": "స్వాతి",
+  "Vishakha": "విశాఖ", "Anuradha": "అనూరాధ", "Jyeshtha": "జ్యేష్ఠ", "Mula": "మూల", "Purva Ashadha": "పూర్వాషాఢ",
+  "Uttara Ashadha": "ఉత్తరాషాఢ", "Shravana": "శ్రవణం", "Dhanishta": "ధనిష్ఠ", "Shatabhisha": "శతభిష",
+  "Purva Bhadrapada": "పూర్వాభాద్ర", "Uttara Bhadrapada": "ఉత్తరాభాద్ర", "Revati": "రేవతి",
+};
+
+/** Plain-language meaning of the day's tara relative to the birth star (the classic 9-tara cycle). */
+const TARA_HINT: Record<string, string> = {
+  Janma: "birth-star echo day: energy can dip, keep plans light and self-care high",
+  Sampat: "gain day: good for money tasks and asking for what you need",
+  Vipat: "friction day: expect small snags, double-check before sending or paying",
+  Kshema: "well-being day: good for health, home and steady progress",
+  Pratyak: "obstacle day: finish what's open instead of starting new things",
+  Sadhana: "achievement day: push the one task that matters most",
+  Naidhana: "low day: protect energy, avoid big commitments and arguments",
+  Mitra: "friendly day: good for people, favours and teamwork",
+  "Parama Mitra": "best-friend day: very supportive, good for important asks",
+};
+
+function tithiHint(tithi: string): string | null {
+  const t = tithi.toLowerCase();
+  if (t.includes("purnima")) return "full moon (Purnima): emotions run high, good for gratitude, family and finishing";
+  if (t.includes("amavasya")) return "new moon (Amavasya): quiet reset, rest and plan, no big launches";
+  if (t.includes("ekadashi")) return "Ekadashi: light food, discipline and focus";
+  if (t.includes("chaturthi")) return t.includes("krishna") ? "Sankashti Chaturthi: clear obstacles, finish pending work" : "Chaturthi: remove blockers before starting";
+  if (t.includes("ashtami")) return "Ashtami: effortful day, stick to essentials";
+  if (t.includes("pratipada")) return "Pratipada: a fresh lunar start, good to set an intention";
+  return null;
+}
+
+/** Facts sent to the model, with per-day grounding hints so every day has its own real hook. */
+export function promptFacts(facts: V2Facts): V2Facts {
+  const natal = (facts.natal as { nakshatra?: string } | undefined)?.nakshatra ?? "";
+  return {
+    ...facts,
+    days: facts.days.map((d) => ({
+      ...d,
+      ...(facts.locale === "te" ? { nakshatra_te: NAKSHATRA_TE[d.nakshatra] ?? d.nakshatra } : {}),
+      is_birth_star: Boolean(natal) && d.nakshatra === natal,
+      tara_hint: d.tara ? TARA_HINT[d.tara] ?? null : null,
+      tithi_hint: tithiHint(d.tithi),
+    })),
+  } as V2Facts;
+}
+
 export function buildUserPrompt(facts: V2Facts): string {
-  return "FACTS (JSON):\n" + JSON.stringify(facts);
+  return "FACTS (JSON):\n" + JSON.stringify(promptFacts(facts));
 }
 
 // ---------------------------------------------------------------- sanitize
@@ -480,6 +530,50 @@ export function jaccard(a: Set<string>, b: Set<string>): number {
   return inter / (a.size + b.size - inter);
 }
 
+const WEEKDAY_NAMES: Record<ReadingLocale, RegExp> = {
+  en: /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i,
+  te: /(ఆదివారం|సోమవారం|మంగళవారం|బుధవారం|గురువారం|శుక్రవారం|శనివారం)/,
+  hi: /(रविवार|सोमवार|मंगलवार|बुधवार|गुरुवार|शुक्रवार|शनिवार)/,
+};
+const TONE_LABEL_RE: Record<ReadingLocale, RegExp> = {
+  en: /\b(mixed|careful|supportive|balanced)\s+(day\s+)?(tone|tones|energy)\b|\bday tone\b|\btara\b/i,
+  te: /(మిక్స్‌డ్ టోన్|డే టోన్|టోన్ |తార బలం|తారా బలం)/,
+  hi: /(मिक्स्ड टोन|डे टोन)/,
+};
+const NAK_EN_RE = new RegExp(`\\b(${Object.keys(NAKSHATRA_TE).sort((a, b) => b.length - a.length).join("|")})\\b`, "g");
+
+/** Day-copy grounding: stars named must be that day's star; birth star only when it really is; no internal labels. */
+export function groundingProblems(
+  text: string,
+  d: V2DayCopy,
+  fx: V2DayFact | undefined,
+  natal: string,
+  locale: ReadingLocale,
+  section: "days" | "weekdays",
+): string[] {
+  const out: string[] = [];
+  if (TONE_LABEL_RE[locale].test(text)) out.push("tone_label");
+  if (section !== "days" || !fx) return out;
+  if (WEEKDAY_NAMES[locale].test(d.title ?? "")) out.push("weekday_in_title");
+  const isBirth = Boolean(natal) && fx.nakshatra === natal;
+  const named = locale === "te"
+    ? Object.entries(NAKSHATRA_TE).filter(([, te]) => new RegExp(`(^|\\s)${te}(\\s+)?(నక్షత్ర|\\(|,|\\.)|నక్షత్రం\\s+${te}(\\s|,|\\.|$)`).test(text)).map(([en]) => en)
+    : [...new Set([...text.matchAll(NAK_EN_RE)].map((m) => m[1]))];
+  // A star other than today's may appear only as the natal star introduced as such.
+  for (const n of named) {
+    if (n === fx.nakshatra) continue;
+    if (n === natal && !isBirth && /today|ఈరోజు|आज/i.test(text) && /birth star|జన్మ నక్షత్ర/i.test(text) && !text.includes(fx.nakshatra) && !text.includes(NAKSHATRA_TE[fx.nakshatra] ?? "~")) { out.push("wrong_star"); continue; }
+    if (n !== natal) out.push("wrong_star");
+  }
+  if (!isBirth && /\(your birth star\)|your birth star (is )?(active|today)|జన్మ నక్షత్రం ఈరోజు/i.test(text)) out.push("wrong_star");
+  const hint = tithiHint(fx.tithi);
+  if (hint && /purnima|amavasya|ekadashi/i.test(fx.tithi)) {
+    const words = locale === "te" ? /(పౌర్ణమి|పున్నమి|అమావాస్య|ఏకాదశి)/ : /(full moon|purnima|new moon|amavasya|ekadashi)/i;
+    if (!words.test(text)) out.push("tithi_missed");
+  }
+  return [...new Set(out)];
+}
+
 function dayText(d: V2DayCopy): string {
   return [d.title, d.line, d.body, ...(d.do ?? []), ...(d.avoid ?? []), ...(d.window_notes ?? []).map((n) => `${n.label} ${n.note}`)].join(" ");
 }
@@ -535,9 +629,17 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
     ...(c.days ?? []).map((d) => ({ section: "days" as const, id: d.date, d, wins: dayWin.get(d.date) ?? [] })),
     ...(c.weekdays ?? []).map((d) => ({ section: "weekdays" as const, id: d.weekday, d, wins: wdWin.get(d.weekday) ?? [] })),
   ];
+  const dayFact = new Map(facts.days.map((d) => [d.date, d]));
+  const natalStar = (facts.natal as { nakshatra?: string } | undefined)?.nakshatra ?? "";
+  const bodyOpenSeen = new Map<string, number>();
   for (const { section, id, d, wins } of dayLike) {
     const text = dayText(d);
     checkText(section, id, text, true);
+    const fx = section === "days" ? dayFact.get(String(id)) : undefined;
+    for (const reason of groundingProblems(text, d, fx, natalStar, locale, section)) flag(section, id, reason);
+    const bodyOpen = tokenize(d.body ?? "").slice(0, 2).join(" ");
+    bodyOpenSeen.set(bodyOpen, (bodyOpenSeen.get(bodyOpen) ?? 0) + 1);
+    if (bodyOpen && (bodyOpenSeen.get(bodyOpen) ?? 0) > 2) flag(section, id, "body_opener_repeat");
     if (!d.title || !d.body || (d.body ?? "").length < 40) flag(section, id, "too_thin");
     const noteIds = new Set((d.window_notes ?? []).map((n) => n.window_id));
     if (wins.some((w) => !noteIds.has(w))) flag(section, id, "window_note_missing");
@@ -624,7 +726,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     areas: pick(content.areas as never[], "area_id", scope.areas),
   };
   const factItems = {
-    days: facts.days.filter((d) => scope.days?.includes(d.date)),
+    days: promptFacts(facts).days.filter((d) => scope.days?.includes(d.date)),
     weekdays: facts.weekdays.filter((d) => scope.weekdays?.includes(d.weekday)),
     chapters: facts.chapters.filter((d) => scope.chapters?.includes(d.chapter_id)),
     weeks: facts.weeks.filter((d) => scope.weeks?.includes(d.period_key)),
@@ -635,7 +737,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     "Rewrite ONLY these items. Fix every listed problem and keep everything else about the rules.",
     "Problems:",
     ...v.flags.map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
-    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them.",
+    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently.",
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 40))}`,
     "FACTS for these items:",
     JSON.stringify(factItems),

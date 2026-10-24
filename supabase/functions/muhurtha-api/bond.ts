@@ -7,6 +7,7 @@
  *   for the guide, cached in pair_readings; the engine owns every fact.
  * Every write goes through the service-role client; reads are re-checked against membership.
  */
+import { maxAttempts, retryBackoffMs } from "./llm_policy.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DateTime } from "luxon";
 import {
@@ -305,14 +306,14 @@ async function submitPair(admin: SupabaseClient, row: PairRow): Promise<PairRow>
       reasoningEffort: "low", maxOutputTokens: 9000, metadata: { pair_reading_id: row.id, kind: row.kind, locale: row.locale },
     });
     return await updatePair(admin, row.id, {
-      openai_response_id: r.id, model, attempts: row.attempts + 1, started_at: row.started_at ?? new Date().toISOString(),
+      openai_response_id: r.id, model, attempts: row.attempts + 1, started_at: new Date().toISOString(),
       last_polled_at: new Date().toISOString(), error: null,
     });
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).slice(0, 400);
     await logCall(admin, { profile_id: row.requested_by, purpose: row.kind, model, locale: row.locale, status: "create_failed", error: msg });
     const attempts = row.attempts + 1;
-    if (attempts >= MAX_ATTEMPTS) return await updatePair(admin, row.id, { status: "failed", attempts, error: msg });
+    if (attempts >= maxAttempts()) return await updatePair(admin, row.id, { status: "failed", attempts, error: msg });
     return await updatePair(admin, row.id, { attempts, error: msg, openai_response_id: null, last_polled_at: new Date().toISOString() });
   }
 }
@@ -324,7 +325,9 @@ export async function advancePair(admin: SupabaseClient, rowIn: PairRow, opts: {
   if (row.status !== "generating") return row;
   const now = Date.now();
   if (!row.openai_response_id) {
-    if (row.attempts >= MAX_ATTEMPTS) return await updatePair(admin, row.id, { status: "failed" });
+    if (row.attempts >= maxAttempts()) return await updatePair(admin, row.id, { status: "failed" });
+    const lastTouch = Date.parse(row.last_polled_at ?? row.created_at);
+    if (row.attempts > 0 && now - lastTouch < retryBackoffMs(row.attempts)) return row;
     return await submitPair(admin, row);
   }
   const claimed = row.claimed_until ? Date.parse(row.claimed_until) : 0;
@@ -341,8 +344,8 @@ export async function advancePair(admin: SupabaseClient, rowIn: PairRow, opts: {
   if (resp.status === "queued" || resp.status === "in_progress") {
     if (now - started > JOB_TIMEOUT_MS) {
       await logCall(admin, { profile_id: row.requested_by, purpose: row.kind, model: row.model ?? readingModel(), response_id: resp.id, locale: row.locale, status: "timeout", latency_ms: now - started });
-      if (row.attempts >= MAX_ATTEMPTS) return await updatePair(admin, row.id, { status: "failed", error: "timeout" });
-      return await updatePair(admin, row.id, { openai_response_id: null, error: "timeout", started_at: new Date().toISOString() });
+      if (row.attempts >= maxAttempts()) return await updatePair(admin, row.id, { status: "failed", error: "timeout" });
+      return await updatePair(admin, row.id, { openai_response_id: null, error: "timeout", started_at: new Date().toISOString(), last_polled_at: new Date().toISOString() });
     }
     return await updatePair(admin, row.id, { last_polled_at: new Date().toISOString() });
   }
@@ -375,11 +378,10 @@ export async function advancePair(admin: SupabaseClient, rowIn: PairRow, opts: {
   const v = validateBond(content, row.locale, row.kind, row.kind === "bond_month" ? row.facts as MonthFacts : undefined);
   if (!content || !v.ok) {
     const why = !content ? `no_content:${resp.status}` : `invalid:${v.fatal.join(";")}`;
-    if (row.attempts >= MAX_ATTEMPTS) {
+    if (row.attempts >= maxAttempts()) {
       return await updatePair(admin, row.id, { ...totals, status: "failed", error: why.slice(0, 400), validation: v as never, claimed_until: null });
     }
-    const again = await updatePair(admin, row.id, { ...totals, error: why.slice(0, 400), validation: v as never, openai_response_id: null, claimed_until: null });
-    return await submitPair(admin, again);
+    return await updatePair(admin, row.id, { ...totals, error: why.slice(0, 400), validation: v as never, openai_response_id: null, claimed_until: null, last_polled_at: new Date().toISOString() });
   }
   if (row.kind === "bond_month") {
     const allowed = new Set((row.facts as MonthFacts).key_days.map((d) => d.date));
