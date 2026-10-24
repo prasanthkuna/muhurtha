@@ -111,3 +111,12 @@ Deno.test("voice lint: sampled model output is clean after polish", () => {
   }
   assertEquals(bad, []);
 });
+
+Deno.test("Ask prose never shows window ids", async () => {
+  const { scrubWindowIds } = await import("./ask_v2.ts");
+  const out = scrubWindowIds({ direct_answer: "Send it in g1, not c1.", best_window: "g1", tip: "c1 లో పంపకండి; g2లో పంపండి" }, "te");
+  if (/\b[gc][1-3]\b/.test(out.direct_answer) || /[gc][1-3]/.test(out.tip)) throw new Error(JSON.stringify(out));
+  if (out.best_window !== "g1") throw new Error("id field changed");
+  const en = scrubWindowIds({ a: "Send it in g1 and keep it short." }, "en");
+  if (en.a !== "Send it in your best time slot and keep it short.") throw new Error(en.a);
+});

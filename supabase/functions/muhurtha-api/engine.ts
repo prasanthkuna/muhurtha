@@ -5721,7 +5721,7 @@ async function _handleInternal(
     const goodWindows = good.slice(0, 2).map((w) => ({
       start: w.start,
       end: w.end,
-      label: locale === "en" ? "Good window" : fallbackPackStrings(locale).goodCategory,
+      label: locale === "en" ? "Good time" : fallbackPackStrings(locale).goodCategory,
     }));
     const cautionWindows = caution.slice(0, 2).map((w) => ({
       start: w.start,

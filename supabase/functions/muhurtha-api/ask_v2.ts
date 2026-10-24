@@ -57,7 +57,7 @@ function system(ctx: AskContext): string {
     "Start direct_answer with the answer itself (yes / not yet / better on <day>), not with a restatement of the question. No 'Based on your chart' openers.",
     "share_hook: a line someone would actually post, max one emoji. No emoji anywhere else.",
     "Ground every answer in the CONTEXT (profile, current chapter, today's card, upcoming days). Do not invent planets, dashas, dates or times beyond it.",
-    "Never write clock times; pick best_window / caution_window ids instead and the app shows the times.",
+    "Never write clock times; pick best_window / caution_window ids instead and the app shows the times. Never write the ids themselves (g1, g2, c1) in any text; say 'the best time' or 'Rahu Kalam' instead.",
     "No fear, no guarantees, no medical/legal/financial certainty; for health or legal questions suggest a professional too.",
     ctx.subject.is_child ? "This chart is a child's: answer for the parent; no career/money/romance framing for the child." : "",
     "If the question is not about life, timing or the chart, answer briefly and steer back kindly.",
@@ -93,8 +93,32 @@ export async function askWithLlm(
     throw new Error(`ask_incomplete:${resp.status}:${resp.incomplete_reason ?? resp.error ?? ""}`);
   }
   const parsed = JSON.parse(resp.output_text) as AskLlmAnswer;
-  const answer = polishDeep(parsed, ctx.locale, new Set(["best_window", "caution_window", "suggested_date", "topic"]));
+  const answer = scrubWindowIds(
+    polishDeep(parsed, ctx.locale, new Set(["best_window", "caution_window", "suggested_date", "topic"])),
+    ctx.locale,
+  );
   return { answer, resp, latencyMs: Date.now() - t0, model };
+}
+
+const WINDOW_WORDS: Record<string, { good: string; caution: string }> = {
+  en: { good: "your best time slot", caution: "the go-slow slot" },
+  te: { good: "మంచి టైమ్‌", caution: "జాగ్రత్త టైమ్‌" },
+  hi: { good: "अच्छे समय", caution: "धीमे समय" },
+};
+
+/** The model sometimes leaks window ids ("send it in g1", "c1 లో") into prose; swap them for words. */
+export function scrubWindowIds<T>(answer: T, locale: string): T {
+  const w = WINDOW_WORDS[locale] ?? WINDOW_WORDS.en;
+  const keep = new Set(["best_window", "caution_window", "suggested_date", "topic"]);
+  const fix = (s: string) =>
+    s.replace(/(^|[^A-Za-z0-9_])([gc])([1-3])(?![A-Za-z0-9_])/g, (_m, pre: string, k: string) => pre + (k === "g" ? w.good : w.caution));
+  const walk = (v: unknown, key = ""): unknown => {
+    if (typeof v === "string") return keep.has(key) ? v : fix(v);
+    if (Array.isArray(v)) return v.map((x) => walk(x, key));
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k)]));
+    return v;
+  };
+  return walk(answer) as T;
 }
 
 export function normalizeQuestion(q: string): string {

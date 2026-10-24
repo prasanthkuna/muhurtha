@@ -137,7 +137,14 @@ export function startNotificationPoller() {
   });
 }
 
-function scheduleLocalWindowReminders(today: TodayPayload | null, timeZone: string) {
+const LOCAL_REMINDER_COPY: Record<AppLocale, { goodTitle: string; cautionTitle: string; goodBody: string; cautionBody: string }> = {
+  en: { goodTitle: "Good time in 10 minutes", cautionTitle: "Go-slow time in 10 minutes", goodBody: "A good time starts soon. Line up your important thing.", cautionBody: "Ease off soon. Save new starts for later." },
+  te: { goodTitle: "10 నిమిషాల్లో మంచి టైమ్", cautionTitle: "10 నిమిషాల్లో జాగ్రత్త టైమ్", goodBody: "మంచి టైమ్ వస్తోంది. ముఖ్యమైన పని రెడీ చేసుకోండి.", cautionBody: "కాసేపట్లో స్లో అవ్వండి. కొత్తవి తర్వాత స్టార్ట్ చేయండి." },
+  hi: { goodTitle: "10 मिनट में अच्छा समय", cautionTitle: "10 मिनट में धीमा समय", goodBody: "अच्छा समय आने वाला है। ज़रूरी काम तैयार रखिए।", cautionBody: "थोड़ी देर में धीमे चलिए। नई शुरुआत बाद में कीजिए।" },
+};
+
+function scheduleLocalWindowReminders(today: TodayPayload | null, timeZone: string, locale: AppLocale = "en") {
+  const copy = LOCAL_REMINDER_COPY[locale] ?? LOCAL_REMINDER_COPY.en;
   if (!today?.date) return;
   const rows: QueuedNotification[] = [];
   const scheduleWindow = (w: { start: string; label?: string }, tone: "good" | "caution") => {
@@ -148,8 +155,8 @@ function scheduleLocalWindowReminders(today: TodayPayload | null, timeZone: stri
     rows.push({
       key: `${keyPrefix}:${today.date}:${w.start}`,
       at: new Date(reminderMs).toISOString(),
-      title: tone === "good" ? "Good window in 10 minutes" : "Caution window in 10 minutes",
-      body: w.label || (tone === "good" ? "A supportive window opens soon." : "Plan to go lighter soon."),
+      title: tone === "good" ? copy.goodTitle : copy.cautionTitle,
+      body: w.label || (tone === "good" ? copy.goodBody : copy.cautionBody),
     });
   };
   for (const w of today.goodWindows.slice(0, 3)) scheduleWindow(w, "good");
@@ -206,7 +213,7 @@ export async function syncTimingNotifications(
     /* fall back to local windows */
   }
 
-  queued.push(...(scheduleLocalWindowReminders(today, timeZone) ?? []));
+  queued.push(...(scheduleLocalWindowReminders(today, timeZone, locale) ?? []));
   const merged = mergeQueue(queued);
   for (const row of merged) {
     scheduleOne(row.key, Date.parse(row.at) - Date.now(), row.title, row.body);
