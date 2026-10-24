@@ -18,7 +18,7 @@ export const ENGLISH_VOICE = [
 export const TELUGU_VOICE = [
   "TELUGU VOICE: మాట్లాడే తెలుగు, ఫ్రెండ్ లాగా — Twitter/WhatsApp లో మనం రాసేలా. Respectful spoken మీరు (చేయండి, చూడండి, occasional అండీ); never bare నువ్వు commands (చేయి, చూడు, ఉంచు).",
   "About a quarter of the words can be everyday English, WRITTEN IN TELUGU SCRIPT: టైమ్, ఫోకస్, ప్లాన్, సేవ్, బ్రేక్, ఓకే, ఫ్రీ, జాబ్, మెసేజ్, కాల్. Keep sentences Telugu.",
-  "Use spoken forms: చేయొచ్చు (not చేయవచ్చు), వద్దు/చేయకండి, అయిపోయింది, కాస్త, కొంచెం. Never use bookish words: మరియు (use commas), కిటికీ (use టైమ్), సమయ విండో, అనుకూలమైన కాలం, ప్రయత్నించండి (use ట్రై చేయండి), శుభప్రదమైన, దయచేసి, తదుపరి (use నెక్స్ట్), అధ్యాయం (use చాప్టర్).",
+  "Use spoken forms: చేయొచ్చు (not చేయవచ్చు), వద్దు/చేయకండి, అయిపోయింది, కాస్త, కొంచెం. Never use bookish words: మరియు (use commas), కిటికీ or విండో (use టైమ్), సమయ విండో, అనుకూలమైన కాలం, ప్రయత్నించండి (use ట్రై చేయండి), శుభప్రదమైన, దయచేసి, తదుపరి (use నెక్స్ట్), అధ్యాయం (use చాప్టర్).",
   "Neutral dialect, no regional slang. Short lines. One real-life example per idea (ఆఫీస్ మెయిల్, అమ్మకి కాల్, EMI, జిమ్).",
   "Astro words: plain Telugu names (గురువు, శని, రాహుకాలం, నక్షత్రం) with a 2-4 word gloss when it's a dasha: 'గురు–శని దశ (మీ ఇప్పటి గ్రహ దశ)'.",
   "Don't name the day's తిథి, యోగం or తార in the text; name the day's నక్షత్రం on at most 3 days ('ఈరోజు నక్షత్రం'), never as జన్మ నక్షత్రం. Don't join words with 'అండ్' (use a comma or 'కూడా').",
@@ -38,7 +38,7 @@ export const DATE_RULE =
 /** Words the voice lint rejects in static strings and sampled LLM output (case-insensitive). */
 export const VOICE_BANNED: Record<VoiceLocale, string[]> = {
   en: ["auspicious", "favourable", "favorable", "energies", "harness", "navigate", "delve", "tapestry", "embark", "the universe", "cosmic", "stars align", "manifest"],
-  te: ["కిటికీ", "మరియు", "అధ్యాయం", "దయచేసి", "శుభప్రదమైన", "ఐచ్ఛికం", "విఫలమైంది", "ధృవీకరించబడింది"],
+  te: ["కిటికీ", "విండో", "మరియు", "అధ్యాయం", "దయచేసి", "శుభప్రదమైన", "ఐచ్ఛికం", "విఫలమైంది", "ధృవీకరించబడింది"],
   hi: ["खिड़की", "ब्रह्मांड", "कॉस्मिक"],
 };
 
@@ -93,6 +93,9 @@ const TE_FIX: [RegExp, string][] = [
   [/\s*,?\s*మరియు\s+/g, ", "],
   [/\s+అండ్\s+/g, ", "],
   [/కిటికీలు/g, "టైమ్స్"],
+  [/విండోలు/g, "టైమ్స్"],
+  [/విండో/g, "టైమ్"],
+  [/అనుకూలమైన/g, "మంచి"],
   [/కిటికీ/g, "టైమ్"],
   [/దయచేసి\s*/g, ""],
   [/([\u0c15-\u0c39])వచ్చు/g, "$1ొచ్చు"],

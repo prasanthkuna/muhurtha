@@ -120,3 +120,8 @@ Deno.test("Ask prose never shows window ids", async () => {
   const en = scrubWindowIds({ a: "Send it in g1 and keep it short." }, "en");
   if (en.a !== "Send it in your best time slot and keep it short.") throw new Error(en.a);
 });
+
+Deno.test("Telugu polish turns విండో / అనుకూలమైన into spoken words", () => {
+  const out = polishVoice("కొద్దిసేపట్లో మీకు అనుకూలమైన విండో ప్రారంభమవుతుంది", "te");
+  if (out.includes("విండో") || out.includes("అనుకూలమైన")) throw new Error(out);
+});
