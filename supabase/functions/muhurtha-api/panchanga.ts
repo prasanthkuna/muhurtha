@@ -180,6 +180,10 @@ export type QuickDayFacts = {
   rank: number;
   good: { start: string; end: string }[];
   rahu: { start: string; end: string } | null;
+  /** 0..29 (14 Purnima, 29 Amavasya) */
+  tithiIndex: number;
+  /** 0..26 */
+  nakIndex: number;
 };
 
 /** Cheap sunrise facts for the reading packet (no transition search). */
@@ -228,5 +232,7 @@ export function quickDayFacts(args: {
     rank,
     good: windows.good.map((w) => ({ start: w.start, end: w.end })),
     rahu: rahu ? { start: rahu.start, end: rahu.end } : null,
+    tithiIndex: n.tithi,
+    nakIndex: n.nakshatra,
   };
 }

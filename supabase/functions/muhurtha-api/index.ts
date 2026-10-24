@@ -1,7 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
+  bondMonthPrepare,
   handleRequest,
+  pushBondMoments,
   migrateLegacyPacks,
   pushChartMoments,
   startGoldenReading,
@@ -13,6 +15,7 @@ import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
 import { runWarmup } from "./warmup.ts";
 import { dispatchDuePush } from "./push.ts";
+import { invitePreview, quickMatch } from "./bond.ts";
 import { ensurePlan, type PlanCode, PRO_PLANS, razorpayConfig } from "./razorpay.ts";
 import type { AppLocale } from "./vedic_labels.ts";
 
@@ -201,6 +204,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (body.action === "match_quick_public" || body.action === "invite_preview") {
+      // Public, zero-LLM: the /match share page and the /join invite preview (no birth data out).
+      const result = body.action === "match_quick_public"
+        ? quickMatch((body.a ?? {}) as Record<string, unknown>, (body.b ?? {}) as Record<string, unknown>)
+        : await invitePreview(createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey), String(body.token ?? ""));
+      return new Response(JSON.stringify(result), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    if (body.action === "bond_month_prepare") {
+      const cronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
+      const given = req.headers.get("x-push-cron-secret") ?? "";
+      if (!(cronSecret && given === cronSecret) && !isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+      const result = await bondMonthPrepare(adminSupabase);
+      console.log("[bond_month_prepare]", JSON.stringify(result).slice(0, 2000));
+      return new Response(JSON.stringify(result), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
     if (body.action === "billing_ensure_plans") {
       // Idempotent: find or create the Razorpay plans for the configured key mode (billing_plans).
       const cronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
@@ -238,7 +268,7 @@ Deno.serve(async (req) => {
         });
       }
       const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
-      const result = await dispatchDuePush(adminSupabase, Date.now(), pushChartMoments);
+      const result = await dispatchDuePush(adminSupabase, Date.now(), pushChartMoments, pushBondMoments);
       if (result.considered > 0 || result.suppressed > 0) console.log("[push_dispatch]", JSON.stringify(result));
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Glyph } from "@/components/ui/glyph";
 import { AttributionCapture } from "@/components/share/attribution-capture";
-import { CARD_LABELS, DEFAULT_GLYPH } from "@/lib/share/card-types";
+import { CARD_CTA, CARD_LABELS, DEFAULT_GLYPH } from "@/lib/share/card-types";
 import { SITE_URL, loadSharedCard } from "@/lib/share/server";
 
 export const revalidate = 3600;
@@ -68,10 +68,10 @@ export default async function SharedCardPage({ params }: Props) {
         className="mt-4 h-auto w-full rounded-2xl border border-gold-accent/30 shadow-[0_12px_36px_rgba(119,84,31,0.12)]"
       />
       <Link
-        href={`/welcome?src=${src}&ref=${id}`}
+        href={card.type === "match" ? `/match?src=${src}&ref=${id}` : `/welcome?src=${src}&ref=${id}`}
         className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-gold-button px-6 text-base font-semibold text-ink shadow-sm"
       >
-        {c.cta}
+        {card.type === "match" ? (CARD_CTA.match?.[card.locale] ?? c.cta) : c.cta}
       </Link>
       <p className="mt-3 text-center text-sm text-ink-secondary">{c.sub}</p>
     </main>

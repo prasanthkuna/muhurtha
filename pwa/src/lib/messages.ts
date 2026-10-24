@@ -3,6 +3,7 @@ import { EXTRA } from "./messages-share";
 import { SUPPLEMENT } from "./messages-supplement";
 import { BILLING } from "./messages-billing";
 import { READING } from "./messages-reading";
+import { BOND } from "./messages-bond";
 
 type MessageTree = { [key: string]: string | MessageTree };
 
@@ -925,6 +926,7 @@ function lookup(tree: MessageTree, path: string): string | undefined {
 
 export function t(locale: AppLocale, key: string): string {
   return (
+    BOND[locale]?.[key] ??
     READING[locale]?.[key] ??
     BILLING[locale]?.[key] ??
     lookup(catalogs[locale], key) ??
@@ -934,6 +936,7 @@ export function t(locale: AppLocale, key: string): string {
     EXTRA.en[key] ??
     BILLING.en[key] ??
     READING.en[key] ??
+    BOND.en[key] ??
     key
   );
 }

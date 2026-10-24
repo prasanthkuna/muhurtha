@@ -6,6 +6,14 @@ import { attachNatalLuckToContent, buildNatalLuck } from "./natal_luck.ts";
 import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
 import { evaluateDay, quickDayFacts } from "./panchanga.ts";
 import {
+  BOND_ACTIONS,
+  type BondDeps,
+  bondMomentsFor,
+  handleBondAction,
+  prepareBondMonths,
+  sweepPairReadings,
+} from "./bond.ts";
+import {
   ADULT_AREAS,
   buildReadingView,
   CHILD_AREAS,
@@ -3255,9 +3263,36 @@ export async function startGoldenReading(
 }
 
 export async function sweepReadings(admin: SupabaseClient, body: Record<string, unknown>) {
-  return await sweepReadingJobs(admin, onReadingReady, {
-    responseId: typeof body.response_id === "string" ? body.response_id : undefined,
-  });
+  const responseId = typeof body.response_id === "string" ? body.response_id : undefined;
+  const readings = await sweepReadingJobs(admin, onReadingReady, { responseId });
+  const pairs = await sweepPairReadings(admin, { responseId }).catch((e) => ({ considered: 0, error: errorMessage(e) }));
+  return {
+    ...readings,
+    considered: Number(readings.considered ?? 0) + Number(pairs.considered ?? 0),
+    pairs,
+  };
+}
+
+/** Engine helpers for bond.ts (Pro check + dasha segments). */
+function bondDeps(admin: SupabaseClient): BondDeps {
+  return {
+    isPro: async (profileId: string) => (await getSubscriptionAccess(admin, profileId)).isPro,
+    segmentsFor: (bi, tz) => computeTimeline(bi as BioRow, tz).segments,
+  };
+}
+
+export async function bondMonthPrepare(admin: SupabaseClient) {
+  return await prepareBondMonths(admin, bondDeps(admin));
+}
+
+export async function pushBondMoments(
+  admin: SupabaseClient,
+  profileId: string,
+  tz: string,
+  dateStr: string,
+  locale: string | null,
+) {
+  return await bondMomentsFor(admin, bondDeps(admin), profileId, tz, dateStr, locale);
 }
 
 /** Zero-LLM migration of ready legacy packs into v2 readings (source = migrated). */
@@ -4230,6 +4265,11 @@ async function _handleInternal(
 
   if (action.startsWith("push_")) {
     return await handlePushAction(action, body, prof, adminSupabase);
+  }
+
+  if (BOND_ACTIONS.has(action)) {
+    const profile = requireProfile(prof, action);
+    return await handleBondAction(action, body, profile.id, adminSupabase, bondDeps(adminSupabase));
   }
 
   if (action === "birth_place_search") {

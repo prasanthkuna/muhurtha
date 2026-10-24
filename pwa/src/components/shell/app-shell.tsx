@@ -9,20 +9,23 @@ import { ProfileSwitcher } from "@/components/shell/profile-switcher";
 import { cn } from "@/components/ui/cn";
 import { useLocale } from "@/context/locale-context";
 import { Settings } from "@/components/celestial/muh-icon";
+import { PendingInviteAccept } from "@/components/bond/pending-invite";
 import {
   NavIconAsk,
-  NavIconDecode,
+  NavIconBond,
+  NavIconCalendar,
   NavIconLife,
-  NavIconTiming,
   NavIconToday,
 } from "./nav-icons";
 
+/** Bond replaces Decode (Decode lives under Life); Calendar replaces Timing (Find-a-date
+ *  stays at /timing, linked from Calendar, and keeps the Calendar tab lit). */
 const tabKeys = [
-  { href: "/decode", key: "nav.decode", Icon: NavIconDecode },
-  { href: "/life", key: "nav.life", Icon: NavIconLife },
-  { href: "/today", key: "nav.today", center: true, Icon: NavIconToday },
-  { href: "/timing", key: "nav.timing", Icon: NavIconTiming },
-  { href: "/ask", key: "nav.ask", Icon: NavIconAsk },
+  { href: "/bond", key: "nav.bond", Icon: NavIconBond, also: [] as string[] },
+  { href: "/life", key: "nav.life", Icon: NavIconLife, also: ["/decode"] },
+  { href: "/today", key: "nav.today", center: true, Icon: NavIconToday, also: [] as string[] },
+  { href: "/calendar", key: "nav.calendar", Icon: NavIconCalendar, also: ["/timing"] },
+  { href: "/ask", key: "nav.ask", Icon: NavIconAsk, also: [] as string[] },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -75,6 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
       </header>
       <main className="flex-1 px-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2">
+        <PendingInviteAccept />
         <ChartProfileBanner />
         <PageTransition>{children}</PageTransition>
       </main>
@@ -84,8 +88,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <div className="mx-auto grid max-w-lg grid-cols-5 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
           {tabKeys.map((tab) => {
-            const active =
-              pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+            const active = [tab.href, ...tab.also].some(
+              (h) => pathname === h || pathname.startsWith(`${h}/`),
+            );
             const Icon = tab.Icon;
             return (
               <Link

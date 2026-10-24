@@ -27,6 +27,7 @@ export type PushPrefs = {
   child: boolean;
   friends: boolean;
   weekly: boolean;
+  bond: boolean;
 };
 export const DEFAULT_PREFS: PushPrefs = {
   daily: true,
@@ -36,6 +37,7 @@ export const DEFAULT_PREFS: PushPrefs = {
   child: true,
   friends: false,
   weekly: false,
+  bond: true,
 };
 
 const SYNC_KEY = "muh_push_sync_v1";

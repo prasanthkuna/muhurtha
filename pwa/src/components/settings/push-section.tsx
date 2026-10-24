@@ -197,6 +197,7 @@ export function PushSection() {
                     ] as const)
                   : []),
                 ["weekly", t("settings.pushPrefWeekly")],
+                ["bond", t("settings.pushPrefBond")],
               ] as const
             ).map(([key, label]) => (
               <label key={key} className="flex min-h-11 items-center justify-between gap-3 text-sm text-ink">

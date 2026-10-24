@@ -20,7 +20,9 @@ export type PushKind =
   | "child_milestone"
   | "friend_birthday"
   | "weekly_outlook"
-  | "reading_ready";
+  | "reading_ready"
+  | "bond_month_ready"
+  | "bond_heads_up";
 export type PushPrefs = {
   daily: boolean;
   good: boolean;
@@ -29,6 +31,8 @@ export type PushPrefs = {
   child: boolean;
   friends: boolean;
   weekly: boolean;
+  /** Bond: monthly couple guide + day-before heads-up for key couple days */
+  bond: boolean;
 };
 
 export const DEFAULT_PUSH_PREFS: PushPrefs = {
@@ -39,6 +43,7 @@ export const DEFAULT_PUSH_PREFS: PushPrefs = {
   child: true,
   friends: false,
   weekly: false,
+  bond: true,
 };
 
 /** Chart-specific moments come from engine.ts (injected by index.ts to avoid an import cycle). */
@@ -53,6 +58,16 @@ export type ChartMomentsFn = (
 ) => Promise<
   { key: string; kind: "chapter_change" | "child_milestone" | "friend_birthday"; title: string; body: string; url: string; image: string }[]
 >;
+
+/** Bond heads-up for tomorrow (engine.ts / bond.ts, injected like chart moments). */
+export type BondMomentsFn = (
+  admin: SupabaseClient,
+  profileId: string,
+  tz: string,
+  dateStr: string,
+  locale: string | null,
+) => Promise<{ key: string; title: string; body: string; url: string }[]>;
+const BOND_LOCAL = "19:30";
 
 // Spam-safety rules (Chrome's on-device classifier and plain good manners):
 /** No scheduled alert in the first hour after someone turns notifications on. */
@@ -77,6 +92,8 @@ const KIND_PRIORITY: Record<PushKind, number> = {
   good_window: 5,
   weekly_outlook: 6,
   reading_ready: 0,
+  bond_month_ready: 0,
+  bond_heads_up: 3,
 };
 const DAILY_BRIEF_LOCAL = "06:45";
 const LEAD_MINUTES = 10;
@@ -433,6 +450,7 @@ export function normalizePrefs(raw: unknown): PushPrefs {
     child: flag("child"),
     friends: flag("friends"),
     weekly: flag("weekly"),
+    bond: flag("bond"),
   };
 }
 
@@ -600,11 +618,53 @@ export async function sendReadingReadyToProfile(
   return results;
 }
 
+/** One-off alert (e.g. "monthly couple guide ready"); once per subscription + key. */
+export async function sendOneOffToProfile(
+  admin: SupabaseClient,
+  profileId: string,
+  key: string,
+  kind: PushKind,
+  build: (l: PushLocale) => { title: string; body: string; url: string; open: string },
+  opts: { pref?: keyof PushPrefs; localeRaw?: string | null } = {},
+): Promise<SendResult[]> {
+  const { data, error } = await admin
+    .from("push_subscriptions")
+    .select("id, profile_id, endpoint, p256dh, auth, locale, timezone, prefs, failure_count")
+    .eq("profile_id", profileId)
+    .is("disabled_at", null);
+  if (error) throw error;
+  const results: SendResult[] = [];
+  for (const sub of (data ?? []) as SubscriptionRow[]) {
+    if (opts.pref && !normalizePrefs(sub.prefs)[opts.pref]) continue;
+    const tz = sub.timezone || "Asia/Kolkata";
+    if (inQuietHours(Date.now(), tz)) continue;
+    const { data: done } = await admin.from("push_deliveries").select("notification_key")
+      .eq("subscription_id", sub.id).eq("notification_key", key).maybeSingle();
+    if (done) continue;
+    const l = loc(opts.localeRaw ?? sub.locale);
+    const c = build(l);
+    const payload: NotificationPayload = {
+      ...basePayload(kind, l, `muh-${kind}-${key.slice(-10)}`),
+      renotify: true,
+      title: c.title,
+      body: c.body,
+      image: "/notifications/daily.png",
+      url: c.url,
+      actions: [{ action: "open", title: c.open, url: c.url }],
+    };
+    const r = await sendToSubscription(sub, payload, { ttl: 12 * 60 * 60, urgency: "normal", topic: kind.replace(/_/g, "") });
+    await recordResult(admin, sub, key, kind, r);
+    results.push(r);
+  }
+  return results;
+}
+
 /** Cron entry point: send every alert that became due since the last run, once. */
 export async function dispatchDuePush(
   admin: SupabaseClient,
   nowMs = Date.now(),
   chartMoments?: ChartMomentsFn,
+  bondMoments?: BondMomentsFn,
 ) {
   const { data, error } = await admin
     .from("push_subscriptions")
@@ -671,6 +731,30 @@ export async function dispatchDuePush(
             title: m.title,
             body: m.body,
             image: m.image,
+            url: m.url,
+            actions: [{ action: "open", title: COPY[l].openToday, url: m.url }],
+          },
+        });
+      }
+    }
+    const bondAt = DateTime.fromISO(`${dateStr}T${BOND_LOCAL}`, { zone: tz }).toMillis();
+    if (bondMoments && prefs.bond && isDue(bondAt)) {
+      const ms = await bondMoments(admin, sub.profile_id, tz, dateStr, l).catch((e) => {
+        console.warn("[push_dispatch] bond moments failed", e instanceof Error ? e.message : e);
+        return [];
+      });
+      for (const m of ms) {
+        due.push({
+          key: m.key,
+          at: bondAt,
+          urgency: "normal",
+          ttl: 3 * 60 * 60,
+          payload: {
+            ...basePayload("bond_heads_up", l, `muh-bond-${dateStr}`),
+            renotify: false,
+            title: m.title,
+            body: m.body,
+            image: "/notifications/daily.png",
             url: m.url,
             actions: [{ action: "open", title: COPY[l].openToday, url: m.url }],
           },

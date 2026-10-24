@@ -3,6 +3,7 @@ import path from "node:path";
 import { createCanvas, GlobalFonts, Path2D, type SKRSContext2D } from "@napi-rs/canvas";
 import { GLYPHS } from "@/lib/glyphs";
 import {
+  CARD_CTA,
   CARD_DIMENSIONS,
   CARD_LABELS,
   DEFAULT_GLYPH,
@@ -312,7 +313,7 @@ function renderPortrait(ctx: Ctx, p: CardPayload, w: number, h: number) {
   ctx.textAlign = "right";
   ctx.fillStyle = C.gold;
   ctx.font = `28px ${SANS_BOLD}`;
-  ctx.fillText(L.cta, w - pad, fy);
+  ctx.fillText(CARD_CTA[p.type]?.[p.locale] ?? L.cta, w - pad, fy);
   ctx.textAlign = "left";
   if (foot.birth) {
     fy += 42;
@@ -462,7 +463,7 @@ function renderLandscape(ctx: Ctx, p: CardPayload, w: number, h: number) {
   if (foot.who) ctx.fillText(foot.who, x, fy);
   ctx.textAlign = "right";
   ctx.fillStyle = C.gold;
-  ctx.fillText(L.cta, right, fy);
+  ctx.fillText(CARD_CTA[p.type]?.[p.locale] ?? L.cta, right, fy);
   ctx.textAlign = "left";
 }
 

@@ -12,6 +12,8 @@ const APP_PREFIXES = [
   "/traditions",
   "/plans",
   "/share",
+  "/bond",
+  "/calendar",
 ];
 
 function isAppRoute(pathname: string) {

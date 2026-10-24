@@ -133,3 +133,27 @@ export function NavIconSettings({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/** Two interlocking rings (Bond). */
+export function NavIconBond({ className, active }: IconProps) {
+  const s = stroke(active);
+  return (
+    <svg className={cn("h-6 w-6 shrink-0", className)} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="9" cy="12" r="5.25" stroke="currentColor" strokeWidth={s} fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.12 : 0} />
+      <circle cx="15" cy="12" r="5.25" stroke="currentColor" strokeWidth={s} />
+      <path d="M12 8.2c.9.9 1.4 2.2 1.4 3.8s-.5 2.9-1.4 3.8" stroke="currentColor" strokeWidth={s} strokeLinecap="round" fill="none" opacity={active ? 1 : 0} />
+    </svg>
+  );
+}
+
+/** Month grid with a marked date (Calendar). */
+export function NavIconCalendar({ className, active }: IconProps) {
+  const s = stroke(active);
+  return (
+    <svg className={cn("h-6 w-6 shrink-0", className)} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="5.5" width="16" height="14.5" rx="2" stroke="currentColor" strokeWidth={s} fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.12 : 0} />
+      <path d="M4 10h16M8.5 3.5v3.5M15.5 3.5v3.5" stroke="currentColor" strokeWidth={s} strokeLinecap="round" />
+      <circle cx="15.5" cy="15" r="1.6" fill="currentColor" />
+    </svg>
+  );
+}

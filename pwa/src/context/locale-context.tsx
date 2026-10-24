@@ -20,6 +20,8 @@ type LocaleContextValue = {
   setLocale: (next: AppLocale) => Promise<void>;
   t: (key: string) => string;
   localeReady: boolean;
+  /** Public pages only: switch the language on screen without saving it anywhere. */
+  previewLocale: (next: AppLocale) => void;
 };
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -92,6 +94,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       setLocale,
       t: (key: string) => translate(locale, key),
       localeReady,
+      previewLocale: (next: AppLocale) => setLocaleState(next),
     }),
     [locale, setLocale, localeReady],
   );

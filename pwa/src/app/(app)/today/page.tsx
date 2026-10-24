@@ -2,6 +2,7 @@
 
 import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
+import { TodayBondLine } from "@/components/bond/today-bond-line";
 import { DateTime } from "luxon";
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, MapPin } from "@/components/celestial/muh-icon";
@@ -259,6 +260,8 @@ export default function TodayPage() {
       ) : (
         <PageHeader eyebrow={dateLabel} title={cardTitle} subtitle={mainAdvice || undefined} />
       )}
+
+      {isToday && !dayLoading ? <TodayBondLine /> : null}
 
       {!dayLoading && !dayError && !cardMissing ? (
         <div className="flex flex-wrap items-center justify-end gap-2" data-testid="today-share-row">

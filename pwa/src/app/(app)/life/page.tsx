@@ -152,6 +152,9 @@ export default function LifeIndexPage() {
   return (
     <div className="space-y-6" data-testid="life-loaded">
       <PageHeader eyebrow={t("life.atlasEyebrow")} title={t("life.atlasTitle")} className="mb-2" />
+      <Link href="/decode" className="-mt-2 inline-flex text-sm font-semibold text-gold-text underline-offset-4 hover:underline" data-testid="life-open-decode">
+        {t("life.openDecode")} →
+      </Link>
       {currentChapter ? (
         <Link
           href={`/life/${currentChapter.id}`}

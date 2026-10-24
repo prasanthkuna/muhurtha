@@ -11,6 +11,7 @@ const en: Fx = {
   finddate: { title: "Best dates for griha pravesh", value: "4 Nov · 9 Nov · 16 Nov", subtitle: "Between 1 and 30 November", body: "4 Nov has the cleanest morning (6:48 – 8:20 AM). 9 Nov is the strongest overall.", chips: ["Top score 88"], glyph: "home", verdict: "good", name: "Prasanth" },
   ask: { title: "Is this a good month to change jobs?", body: "The second half of the month is better. Saturn's sub-period favours a planned move over a sudden one — line up the offer before you resign, ideally after the 14th.", glyph: "ask", name: "Prasanth" },
   milestone: { title: "Annaprashana (first rice)", value: "Thu, 5 Nov · 9:12 – 10:40 AM", subtitle: "Around day 165 · Shravana nakshatra", body: "A gentle, well-placed morning for the first feeding ceremony.", glyph: "firstFood", verdict: "good", name: "Sweety" },
+  match: { title: "Asha & Ravi", value: "27 / 36", subtitle: "A good match", body: "Strong friendship and easy temperament — a little care around money talks.", glyph: "bond" },
 };
 
 const te: Fx = {
@@ -22,6 +23,7 @@ const te: Fx = {
   finddate: { title: "గృహ ప్రవేశానికి మంచి తేదీలు", value: "4 నవం · 9 నవం · 16 నవం", subtitle: "1 – 30 నవంబర్ మధ్య", body: "4 నవంబర్ ఉదయం (ఉ. 6:48 – 8:20) శుభ్రమైన సమయం. 9 నవంబర్ మొత్తం మీద బలమైనది.", chips: ["అత్యధిక స్కోరు 88"], glyph: "home", verdict: "good", name: "ప్రశాంత్" },
   ask: { title: "ఉద్యోగం మారడానికి ఈ నెల మంచిదేనా?", body: "నెల రెండో సగం మంచిది. శని అంతర్దశ ఆకస్మిక మార్పు కంటే ప్రణాళికతో చేసే మార్పుకు అనుకూలం — 14వ తేదీ తర్వాత ఆఫర్ ఖరారు చేసుకుని రాజీనామా చేయండి.", glyph: "ask", name: "ప్రశాంత్" },
   milestone: { title: "అన్నప్రాశన", value: "గురు, 5 నవం · ఉ. 9:12 – 10:40", subtitle: "సుమారు 165వ రోజు · శ్రవణ నక్షత్రం", body: "మొదటి అన్నం పెట్టే వేడుకకు ప్రశాంతమైన, అనుకూలమైన ఉదయం.", glyph: "firstFood", verdict: "good", name: "స్వీటీ" },
+  match: { title: "ఆశ & రవి", value: "27 / 36", subtitle: "మంచి పొంతన", body: "మంచి స్నేహం, తేలికైన స్వభావం — డబ్బు విషయాల్లో కొంచెం జాగ్రత్త.", glyph: "bond" },
 };
 
 const hi: Fx = {
@@ -33,6 +35,7 @@ const hi: Fx = {
   finddate: { title: "गृह प्रवेश की शुभ तिथियाँ", value: "4 नव · 9 नव · 16 नव", subtitle: "1 – 30 नवंबर के बीच", body: "4 नवंबर की सुबह (6:48 – 8:20) सबसे साफ़ है। 9 नवंबर कुल मिलाकर सबसे मज़बूत।", chips: ["सर्वोच्च स्कोर 88"], glyph: "home", verdict: "good", name: "प्रशांत" },
   ask: { title: "क्या नौकरी बदलने के लिए यह महीना ठीक है?", body: "महीने का दूसरा हिस्सा बेहतर है। शनि अंतर्दशा अचानक बदलाव से ज़्यादा योजनाबद्ध कदम का साथ देती है — 14 तारीख़ के बाद ऑफ़र पक्का करके इस्तीफ़ा दें।", glyph: "ask", name: "प्रशांत" },
   milestone: { title: "अन्नप्राशन", value: "गुरु, 5 नव · सुबह 9:12 – 10:40", subtitle: "लगभग 165वाँ दिन · श्रवण नक्षत्र", body: "पहले अन्न संस्कार के लिए शांत, अनुकूल सुबह।", glyph: "firstFood", verdict: "good", name: "स्वीटी" },
+  match: { title: "आशा & रवि", value: "27 / 36", subtitle: "अच्छा मेल", body: "गहरी दोस्ती और सहज स्वभाव — पैसों की बातों में थोड़ी सावधानी।", glyph: "bond" },
 };
 
 export const FIXTURES: Record<CardLocale, Fx> = { en, te, hi };

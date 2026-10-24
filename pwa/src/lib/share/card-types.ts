@@ -9,6 +9,7 @@ export const CARD_TYPES = [
   "finddate",
   "ask",
   "milestone",
+  "match",
 ] as const;
 export type CardType = (typeof CARD_TYPES)[number];
 export type CardLocale = "en" | "te" | "hi";
@@ -66,6 +67,7 @@ export const CARD_LABELS: Record<
       finddate: "Best dates",
       ask: "Asked Muhūrta",
       milestone: "Child milestone",
+      match: "Guna Milan",
     },
     cta: "See your own day · free",
     forName: (n) => `For ${n}`,
@@ -82,6 +84,7 @@ export const CARD_LABELS: Record<
       finddate: "మంచి తేదీలు",
       ask: "ముహూర్తాన్ని అడిగాను",
       milestone: "పిల్లల శుభ ఘట్టం",
+      match: "గుణ మేళనం",
     },
     cta: "మీ రోజు కూడా చూడండి · ఉచితం",
     forName: (n) => `${n} కోసం`,
@@ -98,6 +101,7 @@ export const CARD_LABELS: Record<
       finddate: "शुभ तिथियाँ",
       ask: "मुहूर्त से पूछा",
       milestone: "शिशु संस्कार",
+      match: "गुण मिलान",
     },
     cta: "अपना दिन भी देखें · मुफ़्त",
     forName: (n) => `${n} के लिए`,
@@ -115,6 +119,12 @@ export const DEFAULT_GLYPH: Record<CardType, GlyphName> = {
   finddate: "findDate",
   ask: "ask",
   milestone: "child",
+  match: "bond",
+};
+
+/** Per-type call to action on the card and the share landing page (falls back to `cta`). */
+export const CARD_CTA: Partial<Record<CardType, Record<CardLocale, string>>> = {
+  match: { en: "Check your match · free", te: "మీ పొంతన చూడండి · ఉచితం", hi: "अपना मिलान देखें · मुफ़्त" },
 };
 
 function clean(raw: unknown, max: number): string | undefined {
@@ -180,6 +190,6 @@ export function cardCaption(p: CardPayload, url: string): string {
   const L = CARD_LABELS[p.locale];
   const lines = [`${L.eyebrow[p.type]} · ${p.data.title}`];
   if (p.data.value) lines.push(p.data.value);
-  lines.push("", `${L.cta}: ${url}`);
+  lines.push("", `${CARD_CTA[p.type]?.[p.locale] ?? L.cta}: ${url}`);
   return lines.join("\n");
 }

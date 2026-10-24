@@ -9,9 +9,9 @@ import { useLocale } from "@/context/locale-context";
 import { clearEngineCache } from "@/lib/engine-cache";
 import { fetchBillingStatus, startCheckout, type PlanCode } from "@/lib/billing";
 
-export type PaywallReason = "general" | "charts" | "language" | "ask" | "timing" | "chapter";
+export type PaywallReason = "general" | "charts" | "language" | "ask" | "timing" | "chapter" | "bond" | "calendar";
 
-const FEATURES = ["family", "language", "timing", "ask", "chapters"] as const;
+const FEATURES = ["bond", "calendar", "family", "language", "timing", "ask", "chapters"] as const;
 
 type Phase = "choose" | "busy" | "success";
 

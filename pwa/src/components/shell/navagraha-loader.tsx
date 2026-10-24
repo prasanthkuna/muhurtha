@@ -48,7 +48,7 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
-function NavagrahaWheel({ active }: { active: number }) {
+export function NavagrahaWheel({ active }: { active: number }) {
   const { t } = useLocale();
   const focus = GRAHAS.find((g) => g.key === DRISHTI_CYCLE[active % DRISHTI_CYCLE.length])!;
   const from = polar(focus.sign, R_GLYPH);
