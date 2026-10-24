@@ -247,7 +247,7 @@ const ARCHETYPES: Record<string, NakshatraArchetype> = {
     workStyle: "best with coding, craft, writing, repair, systems, and execution",
     speechStyle: "clever, precise, and sometimes too corrective",
     relationshipStyle: "shows care by fixing, arranging, and making life easier",
-    stressPattern: "perfection pressure when the result carries their name",
+    stressPattern: "the 'it has to be perfect' stress when their name is on it",
     resetStyle: "hands-on work, clean checklist, stop at good enough",
     metaphors: ["artisan hand", "well-folded cloth"],
   },

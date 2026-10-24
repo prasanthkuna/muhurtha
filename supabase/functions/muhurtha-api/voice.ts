@@ -10,13 +10,14 @@ export const ENGLISH_VOICE = [
   "Plain words: say 'good time' or 'slot', never 'window'; 'good' or 'lucky', never 'auspicious' or 'favourable'; never 'energies', 'harness', 'navigate', 'delve', 'embark', 'journey', 'tapestry', 'realm', 'align', 'resonate', 'unlock your potential'.",
   "No LinkedIn or fortune-cookie lines (no 'clarity', 'momentum', 'follow-through', 'structure', 'steady' stacked together). Give one concrete, real-life example instead (a text you've been putting off, the bill, the gym, a call with mom).",
   "Astro words only when needed, with a 2-4 word gloss the first time: 'Jupiter–Saturn (your current planet period)', 'nakshatra (birth star)', 'Rahu Kalam (the daily ~90-min no-new-starts slot)'.",
+  "Don't lean on pet words: 'routine', 'clean', 'practical', 'calm', 'gentle', 'clear' at most 3 times each across the whole reading. Vary them.",
   "No em-dash chains, no 'not X, but Y' templates, no rhetorical triplets, no fear, no doom.",
 ].join(" ");
 
 export const TELUGU_VOICE = [
   "TELUGU VOICE: మాట్లాడే తెలుగు, ఫ్రెండ్ లాగా — Twitter/WhatsApp లో మనం రాసేలా. Respectful spoken మీరు (చేయండి, చూడండి, occasional అండీ); never bare నువ్వు commands (చేయి, చూడు, ఉంచు).",
   "About a quarter of the words can be everyday English, WRITTEN IN TELUGU SCRIPT: టైమ్, ఫోకస్, ప్లాన్, సేవ్, బ్రేక్, ఓకే, ఫ్రీ, జాబ్, మెసేజ్, కాల్. Keep sentences Telugu.",
-  "Use spoken forms: చేయొచ్చు (not చేయవచ్చు), వద్దు/చేయకండి, అయిపోయింది, కాస్త, కొంచెం. Never use bookish words: మరియు (use commas), కిటికీ (use టైమ్), సమయ విండో, అనుకూలమైన కాలం, ప్రయత్నించండి (use ట్రై చేయండి), శుభప్రదమైన, దయచేసి, తదుపరి (use నెక్స్ట్).",
+  "Use spoken forms: చేయొచ్చు (not చేయవచ్చు), వద్దు/చేయకండి, అయిపోయింది, కాస్త, కొంచెం. Never use bookish words: మరియు (use commas), కిటికీ (use టైమ్), సమయ విండో, అనుకూలమైన కాలం, ప్రయత్నించండి (use ట్రై చేయండి), శుభప్రదమైన, దయచేసి, తదుపరి (use నెక్స్ట్), అధ్యాయం (use చాప్టర్).",
   "Neutral dialect, no regional slang. Short lines. One real-life example per idea (ఆఫీస్ మెయిల్, అమ్మకి కాల్, EMI, జిమ్).",
   "Astro words: plain Telugu names (గురువు, శని, రాహుకాలం, నక్షత్రం) with a 2-4 word gloss when it's a dasha: 'గురు–శని దశ (మీ ఇప్పటి గ్రహ దశ)'.",
 ].join(" ");
@@ -35,7 +36,7 @@ export const DATE_RULE =
 /** Words the voice lint rejects in static strings and sampled LLM output (case-insensitive). */
 export const VOICE_BANNED: Record<VoiceLocale, string[]> = {
   en: ["auspicious", "favourable", "favorable", "energies", "harness", "navigate", "delve", "tapestry", "embark", "the universe", "cosmic", "stars align", "manifest"],
-  te: ["కిటికీ", "మరియు", "దయచేసి", "శుభప్రదమైన", "ఐచ్ఛికం", "విఫలమైంది", "ధృవీకరించబడింది"],
+  te: ["కిటికీ", "మరియు", "అధ్యాయం", "దయచేసి", "శుభప్రదమైన", "ఐచ్ఛికం", "విఫలమైంది", "ధృవీకరించబడింది"],
   hi: ["खिड़की", "ब्रह्मांड", "कॉस्मिक"],
 };
 
@@ -94,6 +95,9 @@ const TE_FIX: [RegExp, string][] = [
   [/([\u0c15-\u0c39])వచ్చు/g, "$1ొచ్చు"],
   [/ప్రయత్నించండి/g, "ట్రై చేయండి"],
   [/శుభప్రదమైన/g, "మంచి"],
+  [/అధ్యాయాలు/g, "చాప్టర్లు"],
+  [/అధ్యాయం/g, "చాప్టర్"],
+  [/అధ్యాయ/g, "చాప్టర్"],
 ];
 const HI_FIX: [RegExp, string][] = [
   [/खिड़कियाँ/g, "समय"],
