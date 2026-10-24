@@ -27,7 +27,7 @@ async function runLlmProbe(admin: SupabaseClient, body: Record<string, unknown>)
     system: "Return JSON.", user: "Say hi.", schemaName: "t",
     schema: { type: "object", properties: { hi: { type: "string" } }, required: ["hi"], additionalProperties: false },
     reasoningEffort: "low", maxOutputTokens: 200,
-  }, {});
+  }, { noHop: true });
   if (body.list_models) out.models = await geminiProbe(model, { system: "", user: "", schemaName: "__models", schema: {} }, {});
   const readingId = String(body.reading_id ?? "");
   if (!readingId) return out;
@@ -41,6 +41,7 @@ async function runLlmProbe(admin: SupabaseClient, body: Record<string, unknown>)
       noItems: v === "noItems" || v === "noItemsNoDesc", noDescriptions: v === "noDescriptions" || v === "noItemsNoDesc",
       schemaInPrompt: v === "schemaInPrompt", noThinking: v === "noThinking",
       keepItems: v === "base", timeoutMs: Number(body.timeout_ms ?? 135_000),
+      noHop: true, returnText: Boolean(body.return_text),
     });
   }
   return out;

@@ -184,6 +184,8 @@ export type QuickDayFacts = {
   tithiIndex: number;
   /** 0..26 */
   nakIndex: number;
+  /** natal star index (0..26) when known */
+  natalNakIndex?: number | null;
 };
 
 /** Cheap sunrise facts for the reading packet (no transition search). */
@@ -234,5 +236,6 @@ export function quickDayFacts(args: {
     rahu: rahu ? { start: rahu.start, end: rahu.end } : null,
     tithiIndex: n.tithi,
     nakIndex: n.nakshatra,
+    natalNakIndex: natalNak >= 0 ? natalNak : null,
   };
 }

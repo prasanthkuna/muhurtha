@@ -45,8 +45,49 @@ export type CalDay = {
   rahu: { start: string; end: string } | null;
   tithi: string;
   nakshatra: string;
+  /** Tara from the natal star (Janma = the birth star or one of its two echoes). */
+  tara?: string | null;
+  /** Today's Moon star is the natal star. */
+  birth_star?: boolean;
+  /** One reason code for the tags, rendered by the PWA phrase bank (cal.why.*). */
+  why?: CalWhy;
+  /** Best is the calmest slot (rest days), not a "go" slot. */
+  best_kind?: "go" | "calm";
   festival?: string | null;
 };
+
+export type CalWhy =
+  | "chandrashtama" | "birth_star" | "amavasya" | "purnima" | "ekadashi" | "chaturthi" | "rikta" | "janma"
+  | "tara_good" | "tara_bad" | "sthira" | "chara" | "ugra" | "mishra" | "kshipra" | "mridu" | "tikshna";
+
+/** The single strongest reason behind a day's tags, most specific first. */
+export function whyCode(q: QuickDayFacts): CalWhy {
+  const tnum = (q.tithiIndex % 15) + 1;
+  if (q.chandraHouse === 8) return "chandrashtama";
+  if (q.tithiIndex === 29) return "amavasya";
+  if (q.tithiIndex === 14) return "purnima";
+  if (tnum === 11) return "ekadashi";
+  if (isSameStar(q)) return "birth_star";
+  if (q.tara === "Janma") return "janma";
+  if (q.taraSupport === 1 && (q.rank ?? 0) >= 1) return "tara_good";
+  if (tnum === 4) return "chaturthi";
+  if ([9, 14].includes(tnum)) return "rikta";
+  if (q.taraSupport === -1) return "tara_bad";
+  return nakClass(q.nakIndex);
+}
+
+/**
+ * Best slot: never the slot that starts the minute Rahu Kalam ends (the day is still settling),
+ * unless it is the only one. Rest days get the calmest (longest) slot, labelled "calm" in the UI.
+ */
+export function pickBest(q: QuickDayFacts, rest: boolean): { start: string; end: string } | null {
+  if (!q.good.length) return null;
+  const mins = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+  const notAfterRahu = q.good.filter((w) => !q.rahu || Math.abs(mins(w.start) - mins(q.rahu.end)) > 5);
+  const pool = notAfterRahu.length ? notAfterRahu : q.good;
+  if (!rest) return pool[0];
+  return [...pool].sort((a, b) => (mins(b.end) - mins(b.start)) - (mins(a.end) - mins(a.start)) || mins(a.start) - mins(b.start))[0];
+}
 
 export function scoreDay(q: QuickDayFacts): CalDay {
   const wd = q.weekday; // 0 Sun .. 6 Sat
@@ -95,11 +136,20 @@ export function scoreDay(q: QuickDayFacts): CalDay {
     chandrashtama: ch8,
     peak: Math.max(...ranked.map((a) => s[a])),
     scores: s,
-    best: q.good[0] ?? null,
+    best: pickBest(q, restDay),
     rahu: q.rahu,
     tithi: q.tithi,
     nakshatra: q.nakshatra,
+    tara: q.tara,
+    birth_star: isSameStar(q),
+    why: whyCode(q),
+    best_kind: restDay ? "calm" : "go",
   };
+}
+
+/** Janma tara repeats every 9 stars; the birth star itself is the 0th offset only. */
+function isSameStar(q: QuickDayFacts): boolean {
+  return q.natalNakIndex != null && q.natalNakIndex >= 0 && q.natalNakIndex === q.nakIndex;
 }
 
 export type CalPlace = { zone: string; lat: number; lng: number; natalNakshatra: string | null; natalRashi: string | null };

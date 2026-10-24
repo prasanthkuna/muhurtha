@@ -5,10 +5,13 @@ import { resolveBirthPlace, resolveCoordinates } from "./geo_resolver.ts";
 import { attachNatalLuckToContent, buildNatalLuck } from "./natal_luck.ts";
 import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
 import { evaluateDay, quickDayFacts } from "./panchanga.ts";
+import { scoreDay } from "./calendar.ts";
 import {
   BOND_ACTIONS,
   type BondDeps,
   bondMomentsFor,
+  type BioLite,
+  calendarDayForBirth,
   handleBondAction,
   prepareBondMonths,
   sweepPairReadings,
@@ -43,6 +46,7 @@ import {
   type ReadyHook,
 } from "./reading_jobs.ts";
 import { llmConfigured, providerOf, readingModel } from "./openai_responses.ts";
+import { isQuotaCap, isTransientLlmError } from "./llm_policy.ts";
 import { ASK_V2_PROMPT_VERSION, askWithLlm, normalizeQuestion, type AskContext, type AskLlmAnswer } from "./ask_v2.ts";
 import { sendReadingReadyToProfile } from "./push.ts";
 import {
@@ -630,6 +634,8 @@ function narrativeCacheOk(
 
 type BirthPackRow = {
   id: string;
+  /** v2 readings: id + updated_at, so in-place text fixes also bust client caches. */
+  content_version?: string;
   content: BirthIntelligencePackContent;
   provider: string;
   model: string;
@@ -3005,6 +3011,10 @@ function buildReadingFacts(
     tara: d.tara,
     day_tone: tone(d.rank),
     windows: windowsOf(d),
+    calendar: (() => {
+      const c = scoreDay(d);
+      return { favours: c.favours, avoid: c.avoid, why: c.why };
+    })(),
   }));
   const weekdays: V2WeekdayFact[] = WEEKDAYS.map((wd, idx) => {
     const d = quick.find((q) => q.weekday === idx)!;
@@ -3099,6 +3109,7 @@ function readingToPack(r: ReadingRow, profile: ProfRow, dateStr: string): BirthP
   const view = buildReadingView(r.content!, r.facts!, { dateStr, tz, locale: r.locale });
   return {
     id: r.id,
+    content_version: `${r.id}:${r.updated_at ?? r.ready_at ?? ""}`,
     content: view as unknown as BirthIntelligencePackContent,
     provider: r.source === "migrated" ? "migrated" : (r.provider ?? "openai"),
     model: r.model ?? "",
@@ -5107,6 +5118,9 @@ async function _handleInternal(
       locationLabel: profile.current_city ?? "India",
       birthInputId: bi.id,
       packVersion: BIRTH_PACK_VERSION,
+      // Lets the app drop a cached Today/pack the moment a regenerated reading lands.
+      readingId: pack.id ?? null,
+      readingVersion: pack.content_version ?? pack.id ?? null,
       ...(refreshing ? { refreshing } : {}),
       provider: pack.provider,
       model: pack.model,
@@ -5287,10 +5301,20 @@ async function _handleInternal(
         })
       : null;
 
+    // Same verdict the Calendar tab shows for this date, so Today and Calendar never disagree.
+    const calendar = bi ? calendarDayForBirth(bi as unknown as BioLite, profile, dateStr) : null;
+    const birthStarToday = Boolean(
+      natalMoon?.nakshatra && panchanga?.nakshatra?.value && natalMoon.nakshatra === panchanga.nakshatra.value,
+    );
+
     const result = {
       cacheVersion: NARRATIVE_CACHE_VERSION,
       locationVerified,
       panchanga,
+      calendar,
+      birthStarToday,
+      readingId: pack?.id ?? null,
+      readingVersion: pack?.content_version ?? pack?.id ?? null,
       locale,
       displayName: subjectName,
       date: dateStr,
@@ -5764,6 +5788,7 @@ async function _handleInternal(
     // Real AI answer grounded in the reading + live windows; the template above is the
     // fallback when the model is unavailable (quota is refunded then).
     let askLlm: Record<string, unknown> | null = null;
+    let askBusy = false;
     let askCacheKey: string | null = null;
     if (askLlmEnabled() && pack) {
       askCacheKey = await sha256Hex([bi?.id ?? "none", locale, targetDate, normalizeQuestion(question)].join("|"));
@@ -5790,6 +5815,8 @@ async function _handleInternal(
             latency_ms: r.latencyMs,
           };
         } catch (e) {
+          const em = errorMessage(e);
+          askBusy = isQuotaCap(em) || isTransientLlmError(em);
           await logLlmCall(adminSupabase, {
             job_id: null, profile_id: profile.id, purpose: "ask", model: readingModel(), locale,
             status: "error", error: errorMessage(e).slice(0, 300),
@@ -5886,6 +5913,8 @@ async function _handleInternal(
       provenance,
       suggestedDate: askLlm?.suggested_date ?? null,
       aiAnswer: Boolean(askLlm),
+      // The model was busy/rate-limited: the app shows the quick answer plus a "try again" nudge.
+      ...(askBusy ? { llmBusy: true, retryAfterS: 30 } : {}),
       locale,
       askAccess: {
         planCode: askQuota.planCode,

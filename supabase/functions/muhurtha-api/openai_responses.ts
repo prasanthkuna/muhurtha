@@ -89,9 +89,31 @@ export function readingModel(): string {
 /** Gemini models tried in order when one sheds load (same introductory price tier). */
 export function geminiChain(first = geminiModel()): string[] {
   // 3.7/3.8-flash think for 45-140s before the first token on this schema, which cannot fit the
-  // 150s edge wall clock, so by default the failover model is the same fast 3.6-flash.
-  const extra = (Deno.env.get("GEMINI_FALLBACK_MODELS") ?? "").split(",").map((m) => m.trim()).filter(Boolean);
-  return [first, ...extra.filter((m) => m !== first)];
+  // 150s edge wall clock, so they are never in the default chain. Free-tier quotas are per model,
+  // so after the primary come the lower models that still answer when it is capped (owner probe
+  // 2026-10-24, see GEMINI_LOWER_DEFAULT). Never OpenAI.
+  const list = (v: string | undefined) => (v ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+  const extra = list(Deno.env.get("GEMINI_FALLBACK_MODELS"));
+  const lower = list(Deno.env.get("GEMINI_LOWER_MODELS") ?? GEMINI_LOWER_DEFAULT);
+  return [...new Set([first, ...extra, ...lower])];
+}
+
+/** Lower Gemini models tried after the primary, best first (quality/latency probe on the reading schema). */
+export const GEMINI_LOWER_DEFAULT = "gemini-3.5-flash,gemini-3-flash-preview,gemini-3.5-flash-lite,gemini-3.1-flash-lite";
+
+/** Free-tier daily caps reset at midnight Pacific; remember capped models so later calls skip them. */
+const geminiCapUntil = new Map<string, number>();
+function nextPacificMidnightMs(now = Date.now()): number {
+  // PT is UTC-7 (PDT) or UTC-8 (PST); using -7 errs on retrying an hour early, which costs one fast 429.
+  const pt = new Date(now - 7 * 3600_000);
+  const next = Date.UTC(pt.getUTCFullYear(), pt.getUTCMonth(), pt.getUTCDate() + 1) + 7 * 3600_000;
+  return next;
+}
+export function geminiCapped(model: string, now = Date.now()): boolean {
+  return (geminiCapUntil.get(model) ?? 0) > now;
+}
+export function markGeminiCapped(model: string, now = Date.now()): void {
+  geminiCapUntil.set(model, nextPacificMidnightMs(now));
 }
 
 /** Gemini primary: attempt 0 on the primary Gemini model, attempt 1 on the next (or same) Gemini model, then OpenAI. */
@@ -322,7 +344,7 @@ export function parseGemini(raw: any, model: string, id: string): ResponseObject
 }
 
 /** Internal diagnostics: run one Gemini call and report status / error without throwing. */
-export async function geminiProbe(model: string, input: CreateResponseInput, variant: { noThinking?: boolean; noItems?: boolean; noDescriptions?: boolean; schemaInPrompt?: boolean; keepItems?: boolean; timeoutMs?: number }): Promise<Record<string, unknown>> {
+export async function geminiProbe(model: string, input: CreateResponseInput, variant: { noThinking?: boolean; noItems?: boolean; noDescriptions?: boolean; schemaInPrompt?: boolean; keepItems?: boolean; timeoutMs?: number; noHop?: boolean; returnText?: boolean }): Promise<Record<string, unknown>> {
   const t0 = Date.now();
   let schema = geminiSchema(input.schema);
   const strip = (v: unknown, keys: string[]): unknown => {
@@ -340,7 +362,7 @@ export async function geminiProbe(model: string, input: CreateResponseInput, var
       return { ok: res.ok, models: (j?.models ?? []).map((m: { name: string; outputTokenLimit?: number }) => `${m.name}:${m.outputTokenLimit ?? ""}`) };
     }
     const r = await geminiCall(model, { ...input, schema: schema as Record<string, unknown> }, variant.timeoutMs ?? 140_000, undefined, variant);
-    return { ok: true, ms: Date.now() - t0, status: r.status, len: r.output_text?.length ?? 0, usage: r.usage, incomplete: r.incomplete_reason, model: r.model };
+    return { ok: true, ms: Date.now() - t0, status: r.status, len: r.output_text?.length ?? 0, usage: r.usage, incomplete: r.incomplete_reason, model: r.model, ...(variant.returnText ? { text: r.output_text } : {}) };
   } catch (e) {
     return { ok: false, ms: Date.now() - t0, error: (e instanceof Error ? e.message : String(e)).slice(0, 900) };
   }
@@ -379,25 +401,47 @@ function itemCountRules(schema: unknown, path = ""): string[] {
   return rules;
 }
 
-type GeminiVariant = { noThinking?: boolean; schemaInPrompt?: boolean; keepItems?: boolean };
+type GeminiVariant = { noThinking?: boolean; schemaInPrompt?: boolean; keepItems?: boolean; noHop?: boolean };
 
-/** One quick retry when Gemini sheds load (429/503 come back in seconds), staying inside the edge wall clock. */
+/** What to do after a failed Gemini call that produced no text. */
+export function geminiHopReason(msg: string): "cap" | "busy" | "unsupported" | null {
+  if (!/^gemini_create_failed:/.test(msg)) return null;
+  if (/^gemini_create_failed:429:/.test(msg)) return /quota|per ?day|PerDay/i.test(msg) ? "cap" : "busy";
+  if (/^gemini_create_failed:(500|502|503|504):/.test(msg)) return "busy";
+  if (/^gemini_create_failed:404:/.test(msg)) return "unsupported";
+  if (/^gemini_create_failed:400:/.test(msg) && /not supported|no longer available|not found/i.test(msg)) return "unsupported";
+  return null;
+}
+
+/**
+ * Gemini-only model chain: the primary first, then lower models when it is rate-limited, capped
+ * for the day (429), overloaded (5xx) or unavailable. A capped model is skipped by later calls in
+ * this isolate until the quota day resets. Stays inside the caller's time budget; never OpenAI.
+ */
 async function geminiCall(model: string, input: CreateResponseInput, timeoutMs: number, id?: string, variant?: GeminiVariant): Promise<ResponseObject> {
   const t0 = Date.now();
-  try {
-    return await geminiCallOnce(model, input, timeoutMs, id, variant);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    const elapsed = Date.now() - t0;
-    if (!/^gemini_create_failed:(429|500|503):/.test(msg) || elapsed > 15_000) throw e;
-    // Free-tier daily cap is per model: hop to a sibling Gemini model (never OpenAI).
-    const dayCap = /PerDay|per day/i.test(msg);
-    const quotaNext = (Deno.env.get("GEMINI_QUOTA_FALLBACK_MODEL") ?? "gemini-3.5-flash").trim();
-    const next = dayCap && quotaNext && quotaNext !== model ? quotaNext : (geminiChain(model)[1] ?? model);
-    console.warn(`[gemini] ${model}: ${msg.slice(0, 80)}; retrying once on ${next}`);
-    await new Promise((r) => setTimeout(r, 3_000));
-    return await geminiCallOnce(next, input, timeoutMs - elapsed - 3_000, id, variant);
+  const all = variant?.noHop ? [model] : geminiChain(model);
+  const chain = all.filter((m, i) => i === 0 && variant?.noHop ? true : !geminiCapped(m));
+  if (chain.length === 0) chain.push(model);
+  let lastErr: unknown = null;
+  for (let i = 0; i < chain.length; i++) {
+    const m = chain[i];
+    const left = timeoutMs - (Date.now() - t0);
+    if (i > 0 && left < 8_000) break;
+    try {
+      return await geminiCallOnce(m, input, left, id, variant);
+    } catch (e) {
+      lastErr = e;
+      const msg = e instanceof Error ? e.message : String(e);
+      const why = geminiHopReason(msg);
+      if (!why) throw e;
+      if (why === "cap") markGeminiCapped(m);
+      const next = chain[i + 1];
+      console.warn(`[gemini] ${m}: ${why} (${msg.slice(0, 60)})${next ? `; trying ${next}` : ""}`);
+      if (why === "busy" && next) await new Promise((r) => setTimeout(r, 1_500));
+    }
   }
+  throw lastErr ?? new Error("gemini_create_failed:503:no model available");
 }
 
 async function geminiCallOnce(model: string, input: CreateResponseInput, timeoutMs: number, id?: string, variant?: GeminiVariant): Promise<ResponseObject> {
@@ -409,7 +453,12 @@ async function geminiCallOnce(model: string, input: CreateResponseInput, timeout
   };
   const reqSchema = variant?.keepItems ? geminiSchema(input.schema) : geminiRequestSchema(input.schema);
   if (!variant?.schemaInPrompt) generationConfig.responseJsonSchema = reqSchema;
-  if (!variant?.noThinking) generationConfig.thinkingConfig = { thinkingLevel: thinkingLevel(input.reasoningEffort) };
+  if (!variant?.noThinking) {
+    // 2.x models take a token budget; 3.x take a level (2.5-flash 400s on thinkingLevel).
+    generationConfig.thinkingConfig = /^gemini-2\./.test(model)
+      ? { thinkingBudget: input.reasoningEffort === "medium" || input.reasoningEffort === "high" ? 4096 : 1024 }
+      : { thinkingLevel: thinkingLevel(input.reasoningEffort) };
+  }
   const counts = variant?.keepItems ? [] : itemCountRules(input.schema);
   let system = input.system;
   if (counts.length) system += `\n\nArray sizes (must match exactly):\n${counts.join("\n")}`;

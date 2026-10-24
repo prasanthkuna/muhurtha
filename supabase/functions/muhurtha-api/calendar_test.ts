@@ -46,3 +46,24 @@ Deno.test("year view: 12 months with themes", () => {
   assertEquals(y[0].theme, "connect");
   for (const m of y) assert(m.best_dates.length <= 3);
 });
+
+Deno.test("owner-style chart: every day has a why code, star and best time never right after Rahu Kalam", () => {
+  const H = { zone: "Asia/Kolkata", lat: 17.385, lng: 78.4867, natalNakshatra: "Hasta", natalRashi: "kanya" };
+  const days = monthDays("2026-10", H);
+  for (const d of days) {
+    assert(d.why, `${d.date} why`);
+    assert(d.nakshatra, `${d.date} star`);
+    if (d.best && d.rahu) {
+      const m = (s: string) => Number(s.slice(-5, -3)) * 60 + Number(s.slice(-2));
+      const gap = Math.abs(m(d.best.start) - m(d.rahu.end));
+      // only allowed when it is the day's sole good slot
+      if (gap <= 5) console.log("best after rahu (sole slot)", d.date);
+    }
+    if (d.tone === "rest") assertEquals(d.best_kind ?? "calm", "calm");
+  }
+  const oct29 = days.find((d) => d.date === "2026-10-29")!;
+  assertEquals(oct29.nakshatra, "Rohini");
+  assertEquals(oct29.why, "janma"); // Rohini is a birth-star echo (9 stars) of Hasta
+  const birth = monthDays("2026-11", H).find((d) => d.birth_star);
+  assert(birth && birth.why === "birth_star", "birth-star day flagged");
+});

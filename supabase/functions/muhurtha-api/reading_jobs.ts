@@ -3,7 +3,7 @@
  * Completion is detected by whichever comes first: a client status poll, the pg_cron sweep,
  * or the OpenAI webhook (when configured). All paths call advanceJob(), which is idempotent.
  */
-import { maxAttempts, retryBackoffMs } from "./llm_policy.ts";
+import { isQuotaCap, maxAttempts, quotaParkMs, retryBackoffMs } from "./llm_policy.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildReadingSchema,
@@ -31,11 +31,8 @@ import {
 } from "./openai_responses.ts";
 
 /** Attempts when OpenAI can take over; Gemini-only uses maxAttempts() from llm_policy.ts. */
-/** Gemini free-tier quota exhaustion (429 "exceeded your current quota"). */
-export function isQuotaCap(err: string): boolean {
-  return /429/.test(err) && /quota/i.test(err);
-}
-const QUOTA_PARK_MS = Number(Deno.env.get("GEMINI_QUOTA_PARK_MS") ?? String(10 * 60_000));
+export { isQuotaCap } from "./llm_policy.ts";
+const QUOTA_PARK_MS = quotaParkMs();
 
 export const MAX_ATTEMPTS = 3;
 const POLL_DEBOUNCE_MS = 2500;

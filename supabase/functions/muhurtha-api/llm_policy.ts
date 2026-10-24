@@ -20,3 +20,18 @@ export function retryBackoffMs(attemptsMade: number): number {
   if (attemptsMade <= 0) return 0;
   return Math.min(300_000, 15_000 * 2 ** (attemptsMade - 1));
 }
+
+/** Gemini free-tier quota exhaustion (429 "exceeded your current quota"): park the job, don't burn an attempt. */
+export function isQuotaCap(err: string): boolean {
+  return /429/.test(err) && /quota/i.test(err);
+}
+
+/** Short-lived overload (503/500/429 without quota, "high demand", stream stalls): worth a quick retry. */
+export function isTransientLlmError(err: string): boolean {
+  if (isQuotaCap(err)) return false;
+  return /(^|:)(429|500|502|503|504)(:|$)|high demand|overloaded|unavailable|gemini_stream_error|gemini_slow_stream|timeout|aborted/i.test(err);
+}
+
+export function quotaParkMs(): number {
+  return Number(Deno.env.get("GEMINI_QUOTA_PARK_MS") ?? String(10 * 60_000));
+}

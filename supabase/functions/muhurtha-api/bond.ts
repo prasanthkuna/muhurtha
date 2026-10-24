@@ -7,7 +7,7 @@
  *   for the guide, cached in pair_readings; the engine owns every fact.
  * Every write goes through the service-role client; reads are re-checked against membership.
  */
-import { maxAttempts, retryBackoffMs } from "./llm_policy.ts";
+import { isQuotaCap, maxAttempts, quotaParkMs, retryBackoffMs } from "./llm_policy.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DateTime } from "luxon";
 import {
@@ -32,7 +32,7 @@ import {
 import { ashtakoota, type MoonStar, starFromLon } from "./koota.ts";
 import { natalGrahas } from "./grahas.ts";
 import { moonSiderealLongitudeDeg, siderealMetaFromNameOrMoon } from "./ephemeris.ts";
-import { type CalPlace, coupleDayType, dayFacts, monthDays, scoreDay, yearMonths } from "./calendar.ts";
+import { type CalDay, type CalPlace, coupleDayType, dayFacts, monthDays, scoreDay, yearMonths } from "./calendar.ts";
 import { costUsd, createResponse, modelForAttempt, providerOf, readingModel, type ResponseObject, retrieveResponse } from "./openai_responses.ts";
 import { sendOneOffToProfile } from "./push.ts";
 import { BOND_PUSH, bondLoc } from "./bond_phrases.ts";
@@ -312,9 +312,11 @@ async function submitPair(admin: SupabaseClient, row: PairRow): Promise<PairRow>
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).slice(0, 400);
     await logCall(admin, { profile_id: row.requested_by, purpose: row.kind, model, locale: row.locale, status: "create_failed", error: msg });
-    const attempts = row.attempts + 1;
-    if (attempts >= maxAttempts()) return await updatePair(admin, row.id, { status: "failed", attempts, error: msg });
-    return await updatePair(admin, row.id, { attempts, error: msg, openai_response_id: null, last_polled_at: new Date().toISOString() });
+    // A Gemini free-tier cap parks the job (no attempt burned) instead of failing it.
+    const cap = isQuotaCap(msg);
+    const attempts = cap ? Math.max(0, row.attempts) : row.attempts + 1;
+    if (attempts >= maxAttempts() && !cap) return await updatePair(admin, row.id, { status: "failed", attempts, error: msg });
+    return await updatePair(admin, row.id, { attempts, error: msg, openai_response_id: null, last_polled_at: new Date(Date.now() + (cap ? quotaParkMs() : 0)).toISOString() });
   }
 }
 
@@ -377,11 +379,16 @@ export async function advancePair(admin: SupabaseClient, rowIn: PairRow, opts: {
   if (content) content = clipBond(content);
   const v = validateBond(content, row.locale, row.kind, row.kind === "bond_month" ? row.facts as MonthFacts : undefined);
   if (!content || !v.ok) {
-    const why = !content ? `no_content:${resp.status}` : `invalid:${v.fatal.join(";")}`;
-    if (row.attempts >= maxAttempts()) {
+    const why = !content ? `no_content:${resp.status}:${resp.error ?? resp.incomplete_reason ?? ""}` : `invalid:${v.fatal.join(";")}`;
+    const cap = isQuotaCap(why);
+    if (row.attempts >= maxAttempts() && !cap) {
       return await updatePair(admin, row.id, { ...totals, status: "failed", error: why.slice(0, 400), validation: v as never, claimed_until: null });
     }
-    return await updatePair(admin, row.id, { ...totals, error: why.slice(0, 400), validation: v as never, openai_response_id: null, claimed_until: null, last_polled_at: new Date().toISOString() });
+    return await updatePair(admin, row.id, {
+      ...totals, error: why.slice(0, 400), validation: v as never, openai_response_id: null, claimed_until: null,
+      ...(cap ? { attempts: Math.max(1, row.attempts - 1) } : {}),
+      last_polled_at: new Date(Date.now() + (cap ? quotaParkMs() : 0)).toISOString(),
+    });
   }
   if (row.kind === "bond_month") {
     const allowed = new Set((row.facts as MonthFacts).key_days.map((d) => d.date));
@@ -832,4 +839,16 @@ export async function bondMomentsFor(admin: SupabaseClient, deps: BondDeps, prof
   const c = BOND_PUSH[bondLoc(localeRaw)].headsUp[t.type as keyof typeof BOND_PUSH["en"]["headsUp"]];
   if (!c) return [];
   return [{ key: `bond:${t.date}`, title: c.title, body: c.body(pair.other.name), url: "/bond?src=push_bond_heads_up" }];
+}
+
+/** The Calendar's verdict for one date (same scoring the Calendar tab shows), for Today. */
+export function calendarDayForBirth(bi: BioLite, prof: Pick<ProfLite, "current_timezone" | "current_lat" | "current_lng">, date: string): CalDay | null {
+  try {
+    const base = baseOf(prof as ProfLite);
+    const me = personFrom(bi, "", base);
+    const q = dayFacts(date, me.place);
+    return q ? scoreDay(q) : null;
+  } catch {
+    return null;
+  }
 }

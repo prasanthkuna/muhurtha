@@ -11,7 +11,7 @@ import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 
 export const READING_SCHEMA_VERSION = 2;
-export const READING_PROMPT_VERSION = "reading-v2.5";
+export const READING_PROMPT_VERSION = "reading-v2.6";
 
 export type ReadingLocale = "en" | "te" | "hi";
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
@@ -34,6 +34,8 @@ export type V2DayFact = {
   tara: string | null;
   day_tone: "supportive" | "mixed" | "careful";
   windows: V2WindowFact[];
+  /** Calendar tab tags for the same date (deterministic scoring), so copy and Calendar agree. */
+  calendar?: { favours: string[]; avoid: string | null; why?: string };
 };
 export type V2WeekdayFact = { weekday: Weekday; day_lord: string; windows: V2WindowFact[] };
 export type V2PeriodFact = {
@@ -323,10 +325,11 @@ export function buildSystemPrompt(facts: V2Facts): string {
     "Rules:",
     "1. The engine owns all facts. Never write clock times, durations in hours, years, dates, ages or planet/graha names in days, weekdays, weeks, months or push. Planet names are allowed only inside chapters and profile, and only when they help.",
     "2. Every day needs its OWN hook from that day's facts, never a mood bucket. Build body as: hook (today's star by name, or the tithi_hint, or the tara_hint in plain words) -> why it matters for THIS person (their natal signals or current period) -> one concrete action. Vary the sentence shape: open with the star's name on at most one day in three; on the others lead with the action, the person or the moment and name the star mid-sentence. Never use the formula '<star> combined with/alongside <tithi>'. Name the current period as 'your current period', never by planet names. Use tithi_hint on every day that has one (full moon, new moon, Ekadashi ...). day_tone is an internal label: never write 'mixed/careful/supportive tone', 'day tone' or 'energy' as an opener. No two day bodies may start with the same two words; no two lines may share an opener. Call a star 'your birth star' ONLY when is_birth_star is true; otherwise it is 'today's star' (use the exact nakshatra name from that day's facts, Telugu: nakshatra_te). Never reuse a title or chip across days. Never put a weekday name in a day title.",
+    "2b. One screen shows a day's title, line, body, do/avoid chips and window notes together, so each must take a DIFFERENT angle: line = the one-sentence verdict; body = the why + one concrete example; do/avoid = two other actions not named in the body; each window note = what that particular slot suits (no repeat of the body's example). Never reuse the same task (e.g. 'clear the inbox', 'wrap up pending work') in two of them. Each day's calendar field holds the Calendar tab's tags (favours/avoid areas); the day's angle must agree with them: lean into a favoured area, steer away from the avoid area, never contradict them.",
     "3. window_notes: write one note for every window id listed for that day/weekday (and no others). Good windows (g*) say what to use them for; c1 is the traditional caution window: say what to keep routine. Never write times; the app shows them.",
     "4. weekdays are evergreen cards used after the dated days run out: write for that weekday in general, no tithi/nakshatra references.",
-    "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique.",
-    "6. weeks/months: use the counts and notable days given; each period must differ.",
+    "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique: 2-5 words, never the same word twice in one title (no 'New Horizon Horizon'), and no two chapters may start with the same word or share their main noun (avoid 'Quiet Mental Rest' vs 'Quiet Leadership', 'Refining Details' vs 'Refined Work'). Name what is specific to that chapter's lords and domains.",
+    "6. weeks/months: use the counts and notable days given; each period must differ. A week or month card must not restate the current chapter's theme or the day cards' tasks: talk about the stretch itself (which days to use, which to keep light).",
     child
       ? "7. This is a child's chart: speak to the parent about the child. Areas are child areas. No career, money, romance or marriage. No fear, no medical claims; never suggest delaying care."
       : "7. No fear, no guaranteed outcomes, no medical, legal or financial certainty. Remedies are simple habits, prayers or kindness; never purchases or gemstones.",
@@ -583,6 +586,51 @@ function dayText(d: V2DayCopy): string {
   return [d.title, d.line, d.body, ...(d.do ?? []), ...(d.avoid ?? []), ...(d.window_notes ?? []).map((n) => `${n.label} ${n.note}`)].join(" ");
 }
 
+const TITLE_STOP = new Set(["and", "the", "of", "a", "an", "to", "for", "in", "on", "with", "your", "you", "&", "మీ", "ఈ"]);
+/** Crude English stem so "Refining"/"Refined", "Horizon"/"Horizons", "Master"/"Mastery" collide. */
+export function titleStem(w: string): string {
+  const x = w.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, "");
+  if (!/^[a-z]+$/.test(x)) return x;
+  return x.length >= 5 ? x.slice(0, 5) : x;
+}
+
+/** Chapter title checks: a word twice in one title, or a lead word another chapter already used. */
+export function chapterTitleProblems(title: string, leadSeen: Set<string>): string[] {
+  const words = title.split(/[\s,&/–-]+/).filter((w) => w && !TITLE_STOP.has(w.toLowerCase()));
+  const stems = words.map(titleStem).filter((s) => s.length >= 3);
+  const out: string[] = [];
+  if (new Set(stems).size < stems.length) out.push("title_word_repeat");
+  const lead = stems[0];
+  if (lead) {
+    if (leadSeen.has(lead)) out.push("title_lead_repeat");
+    leadSeen.add(lead);
+  }
+  return out;
+}
+
+const CONTENT_STOP = new Set(["your", "you", "the", "and", "for", "with", "that", "this", "today", "from", "into", "some", "any", "one", "all", "are", "can", "will", "just", "keep", "make", "get", "use", "time", "slot", "good", "day"]);
+function contentWords(s: string): Set<string> {
+  return new Set(tokenize(s).filter((w) => w.length >= 4 && !CONTENT_STOP.has(w)).map(titleStem));
+}
+
+/** The same task told twice on one Today screen (body vs. do chips vs. window notes). */
+export function screenRepeat(d: V2DayCopy): boolean {
+  const body = contentWords(`${d.line ?? ""} ${d.body ?? ""}`);
+  const parts = [...(d.do ?? []), ...(d.window_notes ?? []).map((n) => n.note)].map(contentWords);
+  let hits = 0;
+  for (const p of parts) {
+    const shared = [...p].filter((w) => body.has(w)).length;
+    if (p.size && shared >= 2 && shared / p.size >= 0.5) hits += 1;
+  }
+  for (let i = 0; i < parts.length; i++) {
+    for (let j = 0; j < i; j++) {
+      const shared = [...parts[i]].filter((w) => parts[j].has(w)).length;
+      if (shared >= 2) hits += 1;
+    }
+  }
+  return hits >= 2;
+}
+
 export function validateContent(c: V2Content | null, facts: V2Facts): Validation {
   const fatal: string[] = [];
   const flagMap = new Map<string, Flag>();
@@ -656,6 +704,7 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
       if (/\b(combined with|alongside)\b/i.test(d.body ?? "")) flag(section, id, "formula_phrase");
     }
     if (!d.title || !d.body || (d.body ?? "").length < 40) flag(section, id, "too_thin");
+    if (section === "days" && screenRepeat(d)) flag(section, id, "screen_repeat");
     const noteIds = new Set((d.window_notes ?? []).map((n) => n.window_id));
     if (wins.some((w) => !noteIds.has(w))) flag(section, id, "window_note_missing");
     const t = tokenize(d.title ?? "").join(" ");
@@ -681,11 +730,13 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
   }
 
   const chapterTitles = new Map<string, number>();
+  const leadSeen = new Set<string>();
   for (const ch of c.chapters ?? []) {
     checkText("chapters", Number(ch.chapter_id), [ch.title, ch.highlight, ch.body, ch.share_line].join(" "), false);
     const k = tokenize(ch.title ?? "").join(" ");
     chapterTitles.set(k, (chapterTitles.get(k) ?? 0) + 1);
     if ((chapterTitles.get(k) ?? 0) > 1) flag("chapters", Number(ch.chapter_id), "title_repeat");
+    for (const r of chapterTitleProblems(ch.title ?? "", leadSeen)) flag("chapters", Number(ch.chapter_id), r);
     if (YEAR_RE.test(`${ch.title} ${ch.highlight} ${ch.body}`)) flag("chapters", Number(ch.chapter_id), "year");
     if (TIME_RE.some((re) => re.test(ch.body ?? ""))) flag("chapters", Number(ch.chapter_id), "clock_time");
   }
@@ -752,7 +803,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     "Rewrite ONLY these items. Fix every listed problem and keep everything else about the rules.",
     "Problems:",
     ...v.flags.map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
-    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly.",
+    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters.",
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 40))}`,
     "FACTS for these items:",
     JSON.stringify(factItems),

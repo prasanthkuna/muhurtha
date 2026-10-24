@@ -4,6 +4,7 @@
  * engine-owned: the model picks a window id and the server prints the clock times.
  */
 import { DATE_RULE, polishDeep, VOICE_BLOCK } from "./voice.ts";
+import { isQuotaCap, isTransientLlmError } from "./llm_policy.ts";
 import { createResponse, primaryProvider, readingModel, type ResponseObject } from "./openai_responses.ts";
 
 export const ASK_V2_PROMPT_VERSION = "ask-v2.2";
@@ -79,21 +80,36 @@ export async function askWithLlm(
     "QUESTION:",
     question.slice(0, 900),
   ].filter(Boolean).join("\n");
-  const resp = await createResponse({
-    model,
-    system: system(ctx),
-    user,
-    schemaName: "muhurta_ask",
-    schema: schema(),
-    background: false,
-    reasoningEffort: "low",
-    maxOutputTokens: 1800,
-    timeoutMs: 45_000,
-  });
-  if (resp.status !== "completed" || !resp.output_text) {
-    throw new Error(`ask_incomplete:${resp.status}:${resp.incomplete_reason ?? resp.error ?? ""}`);
+  // Same wait-and-retry idea as readings, sized for a live request: short overloads get up to
+  // two quick retries inside a ~40s budget; a free-tier daily cap fails fast (caller shows "busy").
+  let resp: ResponseObject | null = null;
+  let lastErr = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const left = 42_000 - (Date.now() - t0);
+    if (left < 8_000) break;
+    try {
+      resp = await createResponse({
+        model,
+        system: system(ctx),
+        user,
+        schemaName: "muhurta_ask",
+        schema: schema(),
+        background: false,
+        reasoningEffort: "low",
+        maxOutputTokens: 1800,
+        timeoutMs: Math.min(30_000, left),
+      });
+      if (resp.status === "completed" && resp.output_text) break;
+      lastErr = `ask_incomplete:${resp.status}:${resp.incomplete_reason ?? resp.error ?? ""}`;
+      resp = null;
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e);
+    }
+    if (isQuotaCap(lastErr) || !isTransientLlmError(lastErr)) break;
+    await new Promise((r) => setTimeout(r, attempt === 0 ? 2_000 : 5_000));
   }
-  const parsed = JSON.parse(resp.output_text) as AskLlmAnswer;
+  if (!resp) throw new Error(lastErr || "ask_failed");
+  const parsed = JSON.parse(resp.output_text ?? "{}") as AskLlmAnswer;
   const answer = scrubWindowIds(
     polishDeep(parsed, ctx.locale, new Set(["best_window", "caution_window", "suggested_date", "topic"])),
     ctx.locale,
