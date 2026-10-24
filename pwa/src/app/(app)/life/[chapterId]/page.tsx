@@ -131,7 +131,13 @@ export default function LifeChapterPage() {
       <div className="grid gap-2 sm:grid-cols-2">
         <PrimaryButton href="/today">{t("life.openToday")}</PrimaryButton>
         <PrimaryButton
-          href={`/ask?q=${encodeURIComponent(`What should I focus on during ${chapter.periodLabel}?`)}`}
+          href={`/ask?q=${encodeURIComponent(
+            locale === "te"
+              ? `${chapter.periodLabel} టైమ్‌లో నేను దేని మీద ఫోకస్ చేయాలి?`
+              : locale === "hi"
+                ? `${chapter.periodLabel} के दौरान मुझे किस पर फोकस करना चाहिए?`
+                : `What should I focus on during ${chapter.periodLabel}?`,
+          )}`}
         >
           {t("life.askChapter")}
         </PrimaryButton>

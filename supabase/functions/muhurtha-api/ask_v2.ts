@@ -3,9 +3,10 @@
  * (profile, current chapter, the day's card) and the engine's live windows. Times are
  * engine-owned: the model picks a window id and the server prints the clock times.
  */
+import { DATE_RULE, polishDeep, VOICE_BLOCK } from "./voice.ts";
 import { createResponse, readingModel, type ResponseObject } from "./openai_responses.ts";
 
-export const ASK_V2_PROMPT_VERSION = "ask-v2.1";
+export const ASK_V2_PROMPT_VERSION = "ask-v2.2";
 
 export type AskContext = {
   locale: "en" | "te" | "hi";
@@ -50,7 +51,11 @@ function schema(): Record<string, unknown> {
 
 function system(ctx: AskContext): string {
   return [
-    `You are Muhurta's Ask guide. Answer in ${LANG[ctx.locale]} only, warm and specific, like a wise friend who knows Jyotisha.`,
+    `You are Muhurta's Ask guide. Answer in ${LANG[ctx.locale]} only, like a friend who knows Jyotisha: warm, direct, specific, a little playful.`,
+    VOICE_BLOCK[ctx.locale],
+    DATE_RULE,
+    "Start direct_answer with the answer itself (yes / not yet / better on <day>), not with a restatement of the question. No 'Based on your chart' openers.",
+    "share_hook: a line someone would actually post, max one emoji. No emoji anywhere else.",
     "Ground every answer in the CONTEXT (profile, current chapter, today's card, upcoming days). Do not invent planets, dashas, dates or times beyond it.",
     "Never write clock times; pick best_window / caution_window ids instead and the app shows the times.",
     "No fear, no guarantees, no medical/legal/financial certainty; for health or legal questions suggest a professional too.",
@@ -87,7 +92,8 @@ export async function askWithLlm(
   if (resp.status !== "completed" || !resp.output_text) {
     throw new Error(`ask_incomplete:${resp.status}:${resp.incomplete_reason ?? resp.error ?? ""}`);
   }
-  const answer = JSON.parse(resp.output_text) as AskLlmAnswer;
+  const parsed = JSON.parse(resp.output_text) as AskLlmAnswer;
+  const answer = polishDeep(parsed, ctx.locale, new Set(["best_window", "caution_window", "suggested_date", "topic"]));
   return { answer, resp, latencyMs: Date.now() - t0, model };
 }
 

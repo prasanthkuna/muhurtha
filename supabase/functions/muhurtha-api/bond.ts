@@ -584,7 +584,7 @@ export const BOND_ACTIONS = new Set([
   "match_get", "bond_month_get", "bond_action_done", "calendar_month_get", "calendar_year_get",
 ]);
 
-const proRequired = (code = "pro_required_bond") => new BondError(code, "This is part of Pro.", 403);
+const proRequired = (code = "pro_required_bond") => new BondError(code, "This is a Pro thing.", 403);
 
 export async function handleBondAction(
   action: string,

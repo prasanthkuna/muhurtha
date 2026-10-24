@@ -5,8 +5,24 @@
 import * as Astronomy from "astronomy-engine";
 import { nakshatraIndex, NAKSHATRAS } from "./vimshottari.ts";
 
-/** Lahiri ayanamsa (degrees), UT Julian Day. */
+/**
+ * Lahiri (Chitrapaksha) ayanamsa (degrees), UT Julian Day. Same fit as grahas.ts lahiriTrueDeg
+ * (Swiss Ephemeris, 1900-2100, error < 0.01"). The older formula here used the 1900 constant with
+ * a J2000 epoch and read about 1.39° low, which pushed sidereal Moon/Sun about 1.39° too far.
+ */
 export function lahiriAyanamsaDeg(jdUt: number): number {
+  const t = (jdUt - 2451545.0) / 36525;
+  const a = 23.857092351781226 + 1.3968879594616237 * t + 0.00030709079239774084 * t * t;
+  let x = a % 360;
+  if (x < 0) x += 360;
+  return x;
+}
+
+/** Gap between the corrected and the pre-fix ayanamsa around 1950-2030 (degrees). */
+export const LEGACY_AYANAMSA_GAP_DEG = 1.3967;
+
+/** The pre-2026-10-24 formula, kept only so migrations/tests can report what changed. */
+export function legacyLahiriAyanamsaDeg(jdUt: number): number {
   const t = (jdUt - 2451545.0) / 36525;
   const a = 22.460148 + 1.3960423 * t + 3.065 / 1e5 * t * t + 8.7 / 1e8 * t * t * t;
   let x = a % 360;
@@ -93,10 +109,19 @@ export function siderealMetaFromNameOrMoon(
   moonLonDeg: number | null,
 ): { idx: number; name: string; pada: number; withinFraction?: number } | null {
   const fromUser = nakshatraIndex(janmaName);
+  const fromMoon = moonLonDeg === null ? null : nakshatraMetaFromSiderealLon(moonLonDeg);
   if (fromUser != null) {
+    // Exact birth time: the ephemeris is authoritative when it agrees with the stored star, and
+    // gives the precise pada and fraction (the stored pada is often a cached value).
+    if (fromMoon && fromMoon.idx === fromUser) return fromMoon;
+    // Stored star was cached with the pre-fix ayanamsa (about 1.397° low) and now sits across a
+    // boundary: trust the corrected ephemeris.
+    if (fromMoon && moonLonDeg !== null) {
+      const legacy = nakshatraMetaFromSiderealLon((moonLonDeg + LEGACY_AYANAMSA_GAP_DEG) % 360);
+      if (legacy.idx === fromUser && (padaStored == null || legacy.pada === padaStored)) return fromMoon;
+    }
     const pada = Math.min(4, Math.max(1, padaStored ?? 2));
     return { idx: fromUser, name: NAKSHATRAS[fromUser] as string, pada };
   }
-  if (moonLonDeg === null) return null;
-  return nakshatraMetaFromSiderealLon(moonLonDeg);
+  return fromMoon;
 }

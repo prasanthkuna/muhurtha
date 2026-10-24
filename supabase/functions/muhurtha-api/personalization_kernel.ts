@@ -573,32 +573,32 @@ const DOMAIN_LABELS: Record<string, Record<AppLocale, string>> = {
 const SHORT_ACTIONS: Record<string, Record<AppLocale, string[]>> = {
   career: {
     en: ["prepare notes", "finish one output"],
-    te: ["నోట్స్ సిద్ధం చేయండి", "ఒక పని పూర్తి చేయండి"],
+    te: ["నోట్స్ రెడీ చేసుకోండి", "ఒక పని పూర్తి చేయండి"],
     hi: ["नोट्स तैयार रखें", "एक काम पूरा करें"],
   },
   money: {
     en: ["ask clearly", "write the amount"],
-    te: ["స్పష్టంగా అడగండి", "మొత్తం రాసుకోండి"],
+    te: ["క్లియర్‌గా అడగండి", "అమౌంట్ రాసుకోండి"],
     hi: ["साफ पूछें", "रकम लिख लें"],
   },
   family: {
     en: ["speak calmly", "start with facts"],
-    te: ["శాంతంగా మాట్లాడండి", "ముందు విషయాన్ని చెప్పండి"],
+    te: ["కూల్‌గా మాట్లాడండి", "ముందు విషయాన్ని చెప్పండి"],
     hi: ["शांति से बोलें", "पहले बात साफ रखें"],
   },
   relationship: {
     en: ["reply after calming down", "keep one ask"],
-    te: ["శాంతమైన తర్వాత చెప్పండి", "ఒక్క మాటపై ఉండండి"],
+    te: ["కూల్ అయ్యాక చెప్పండి", "ఒక్క టాపిక్ మీదే ఉండండి"],
     hi: ["शांत होकर जवाब दें", "एक ही बात रखें"],
   },
   property: {
     en: ["check papers", "take a second look"],
-    te: ["పేపర్లు చెక్ చేయండి", "మరొకసారి చూసుకోండి"],
+    te: ["పేపర్లు చెక్ చేయండి", "ఇంకోసారి చెక్ చేసుకోండి"],
     hi: ["कागज जांचें", "एक बार और देखें"],
   },
   health: {
     en: ["slow down", "protect sleep"],
-    te: ["నెమ్మదిగా చేయండి", "నిద్రను కాపాడుకోండి"],
+    te: ["నెమ్మదిగా చేయండి", "నిద్ర మిస్ చేయకండి"],
     hi: ["धीरे चलें", "नींद बचाएं"],
   },
   business: {
@@ -608,7 +608,7 @@ const SHORT_ACTIONS: Record<string, Record<AppLocale, string[]>> = {
   },
   personality: {
     en: ["name the pressure", "stop at enough"],
-    te: ["ఒత్తిడిని గుర్తించండి", "చాలు అనిపించిన దగ్గర ఆపండి"],
+    te: ["టెన్షన్‌ని గుర్తించండి", "చాలు అనిపించిన చోట ఆపేయండి"],
     hi: ["दबाव को पहचानें", "जहां काफी हो वहां रुकें"],
   },
 };
@@ -616,22 +616,22 @@ const SHORT_ACTIONS: Record<string, Record<AppLocale, string[]>> = {
 const SHORT_CAUTIONS: Record<string, Record<AppLocale, string[]>> = {
   career: {
     en: ["sharp words", "too many tasks"],
-    te: ["కఠినమైన మాటలు", "చాలా పనులు ఒకేసారి"],
+    te: ["గట్టి మాటలు", "చాలా పనులు ఒకేసారి"],
     hi: ["तेज शब्द", "बहुत काम एक साथ"],
   },
   money: {
     en: ["impulse spend", "risky shortcuts"],
-    te: ["తొందర ఖర్చు", "షార్ట్‌కట్ రిస్క్"],
+    te: ["తొందరపడి ఖర్చు", "షార్ట్‌కట్ రిస్క్"],
     hi: ["जल्दी खर्च", "शॉर्टकट रिस्क"],
   },
   family: {
     en: ["old issue reopening", "heated tone"],
-    te: ["పాత విషయం మళ్లీ రావడం", "వేడి మాటలు"],
+    te: ["పాత గొడవ మళ్లీ రావడం", "వేడి మాటలు"],
     hi: ["पुरानी बात खुलना", "गरम लहजा"],
   },
   relationship: {
     en: ["defensive replies", "forcing answers"],
-    te: ["డిఫెన్సివ్ రిప్లైలు", "జవాబు బలవంతం చేయడం"],
+    te: ["డిఫెన్సివ్ రిప్లైలు", "ఆన్సర్ కోసం ఫోర్స్ చేయడం"],
     hi: ["डिफेंसिव जवाब", "जवाब जबरदस्ती लेना"],
   },
   property: {
@@ -641,17 +641,17 @@ const SHORT_CAUTIONS: Record<string, Record<AppLocale, string[]>> = {
   },
   health: {
     en: ["overwork", "late-night thinking"],
-    te: ["అతి పని", "రాత్రి ఎక్కువ ఆలోచన"],
+    te: ["ఓవర్ వర్క్", "రాత్రి ఓవర్ థింకింగ్"],
     hi: ["ज्यादा काम", "रात की सोच"],
   },
   business: {
     en: ["overpromising", "unclear deal"],
-    te: ["ఎక్కువ మాట ఇవ్వడం", "క్లియర్ కాని డీల్"],
+    te: ["ఎక్కువ ప్రామిస్‌లు", "క్లారిటీ లేని డీల్"],
     hi: ["ज्यादा वादा", "अधूरी डील"],
   },
   personality: {
     en: ["perfection pressure", "old pressure"],
-    te: ["పర్ఫెక్షన్ ఒత్తిడి", "పాత ఒత్తిడి"],
+    te: ["పర్ఫెక్ట్‌గా ఉండాలనే ప్రెజర్", "పాత టెన్షన్"],
     hi: ["परफेक्शन दबाव", "पुराना दबाव"],
   },
 };
@@ -801,7 +801,7 @@ export function buildPersonalizationKernel(input: PersonalizationInput): Persona
     stageLine,
   ]);
   const shareSeed = input.locale === "te"
-    ? `${archetype.key}: పాత పని పూర్తి చేసి తర్వాతి అడుగు వేయండి.`
+    ? `${archetype.key}: పాత పని పూర్తి చేసి, నెక్స్ట్ స్టెప్ వేయండి.`
     : input.locale === "hi"
       ? `${archetype.key}: पुराना काम साफ करके अगला कदम लें.`
       : `${archetype.key}: ${archetype.strength}; today should respect ${archetype.stressPattern}.`;

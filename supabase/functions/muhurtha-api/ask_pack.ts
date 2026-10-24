@@ -98,14 +98,14 @@ export function askFallbackCopy(
   if (locale === "te") {
     return {
       direct_answer: best
-        ? "అవును, చేయొచ్చు — కానీ మాటను చిన్నగా, ప్లాన్‌ను స్పష్టంగా ఉంచండి."
-        : "చేయొచ్చు, కానీ చిన్న స్టెప్‌గా మొదలుపెట్టండి.",
-      best_time: best ? `మంచి సమయం: ${best}` : "మంచి సమయం స్పష్టంగా లేదు. చిన్నగా మొదలుపెట్టండి.",
-      caution_time: careful ? `జాగ్రత్త సమయం: ${careful}` : "రాహు కాలం ఉంటే పెద్ద నిర్ణయం పెట్టొద్దు.",
+        ? "అవును, చేయొచ్చు — మాట షార్ట్‌గా, ప్లాన్ క్లియర్‌గా ఉంచండి."
+        : "చేయొచ్చు, కానీ చిన్న స్టెప్‌తో స్టార్ట్ చేయండి.",
+      best_time: best ? `మంచి టైమ్: ${best}` : "ఈరోజు పెద్ద మంచి టైమ్ ఏమీ లేదు. చిన్నగా స్టార్ట్ చేయండి.",
+      caution_time: careful ? `జాగ్రత్త టైమ్: ${careful}` : "రాహుకాలంలో పెద్ద నిర్ణయం పెట్టుకోకండి.",
       better_option: "ముందు రెండు పాయింట్లు రాసుకోండి, తర్వాత మాట్లాడండి.",
-      simple_why: "ఈరోజు టైమింగ్‌లో స్పష్టత కంటే క్రమం ముఖ్యం.",
-      action_line: "పని చిన్నది, మాట సూటిగా, నిర్ణయం ప్రశాంతంగా ఉంచండి.",
-      share_hook: "ఈరోజు తొందర కాదు; సరైన సమయం చూసి అడుగు వేయండి.",
+      simple_why: "ఈరోజు టైమింగ్ బట్టి, వేగం కంటే ఆర్డర్ ముఖ్యం.",
+      action_line: "పని చిన్నగా, మాట సూటిగా, నిర్ణయం కూల్‌గా.",
+      share_hook: "ఈరోజు తొందర వద్దు — సరైన టైమ్ చూసి స్టెప్ వేయండి.",
     };
   }
   if (locale === "hi") {
@@ -123,16 +123,16 @@ export function askFallbackCopy(
   }
   return {
     direct_answer: best
-      ? "Yes, you can — keep the ask clear and the plan small."
-      : "You can move, but keep it as a small first step.",
-    best_time: best ? `Good time: ${best}` : "No strong good window is clear. Start small.",
+      ? "Yes, go for it. Keep the ask clear and the plan small."
+      : "You can, but start with one small step.",
+    best_time: best ? `Good time: ${best}` : "No standout good time today. Start small.",
     caution_time: careful
-      ? `Caution time: ${careful}`
-      : "Avoid placing the biggest decision in Rahu Kalam.",
-    better_option: "Write two points first, then speak or act.",
-    simple_why: "Today rewards clean sequencing more than force.",
-    action_line: "Keep the work small, the words direct, and the decision calm.",
-    share_hook: "Do not rush today; choose the cleaner window and move lightly.",
+      ? `Careful time: ${careful}`
+      : "Don't put your biggest decision in Rahu Kalam.",
+    better_option: "Jot down two points first, then talk or act.",
+    simple_why: "Today rewards doing things in order, not pushing hard.",
+    action_line: "Small task, straight words, calm call.",
+    share_hook: "No rush today. Pick the better time and keep it light.",
   };
 }
 
@@ -196,16 +196,16 @@ function composeFromPackKey(
         caution: monthCaution || weekCaution,
         betterOption: safeString(week?.share_line) ||
           (locale === "te"
-            ? "అతివ్యయం, ఊహాజనిత ఆఫర్‌లు ఈ వారం వద్దు."
+            ? "ఈ వారం ఎక్కువ ఖర్చులు, ఊహల మీద ఆఫర్లు వద్దు."
             : locale === "hi"
             ? "अधिक खर्च और जल्दबाजी वाले फैसले इस हफ्ते टालें."
-            : "Skip impulse spends and rushed money calls this week."),
+            : "Skip impulse buys and rushed money calls this week."),
         actionLine: actionRemedy ||
           (locale === "te"
-            ? "ఒక చిన్న డబ్బు నిర్ణయం మాత్రమే ఈరోజు తీసుకోండి."
+            ? "ఈరోజు ఒక్క చిన్న డబ్బు నిర్ణయం మాత్రమే."
             : locale === "hi"
             ? "आज सिर्फ एक छोटा पैसे का फैसला लें."
-            : "Take only one small money decision today."),
+            : "Just one small money decision today."),
         shareLine: safeString(month?.share_line) || shareHook,
       };
     case "relationship":
@@ -215,15 +215,15 @@ function composeFromPackKey(
         bestFor: phaseUse || weekFocus,
         caution: phaseAvoid || weekCaution,
         betterOption: locale === "te"
-          ? "ముందు భావాన్ని చెప్పండి, విమర్శను తర్వాత పెట్టండి."
+          ? "ముందు మీ ఫీలింగ్ చెప్పండి, కంప్లైంట్ తర్వాత."
           : locale === "hi"
           ? "पहले इरादा बताएं, आलोचना बाद में रखें."
-          : "Lead with intent, keep criticism for later.",
+          : "Say how you feel first. Save the criticism for later.",
         actionLine: locale === "te"
-          ? "ఒక స్పష్టమైన వాక్యంతో మాట మొదలుపెట్టండి."
+          ? "ఒక్క క్లియర్ లైన్‌తో మాట స్టార్ట్ చేయండి."
           : locale === "hi"
           ? "एक साफ वाक्य से बात शुरू करें."
-          : "Start with one clear sentence.",
+          : "Open with one clear sentence.",
         shareLine: shareHook,
       };
     case "pending":
@@ -233,10 +233,10 @@ function composeFromPackKey(
         bestFor: safeString(week?.headline) || todayAdvice,
         caution: weekCaution,
         betterOption: locale === "te"
-          ? "పెండింగ్ లిస్ట్ చిన్నది చేసి ఒకటి ముగించండి."
+          ? "పెండింగ్ లిస్ట్ చిన్నది చేసి, ఒక్కటి పూర్తి చేయండి."
           : locale === "hi"
           ? "पेंडिंग लिस्ट छोटी करके एक काम पूरा करें."
-          : "Shrink the pending list and close one item.",
+          : "Shrink the pending list and finish one thing.",
         actionLine: todayAdvice || actionRemedy,
         shareLine: safeString(week?.share_line) || shareHook,
       };
@@ -246,10 +246,10 @@ function composeFromPackKey(
         bestFor: weekFocus,
         caution: weekCaution,
         betterOption: locale === "te"
-          ? "టికెట్/లావాదేవీలు మంచి సమయంలో చేయండి."
+          ? "టికెట్స్, పేమెంట్స్ మంచి టైమ్‌లో చేయండి."
           : locale === "hi"
           ? "टिकट और फॉर्मैलिटी अच्छे समय में करें."
-          : "Book tickets and paperwork in the cleaner window.",
+          : "Book tickets and do paperwork in the better time slot.",
         actionLine: actionRemedy || todayAdvice,
         shareLine: shareHook,
       };
@@ -262,7 +262,7 @@ function composeFromPackKey(
           ? "ఒక సబ్జెక్ట్, ఒక గోల్ — ఈ వారం అదే పట్టుకోండి."
           : locale === "hi"
           ? "एक विषय, एक लक्ष्य — इस हफ्ते उसी पर टिके रहें."
-          : "One subject, one goal — stay with it this week.",
+          : "One subject, one goal. Stick with it this week.",
         actionLine: todayAdvice,
         shareLine: shareHook,
       };
@@ -272,10 +272,10 @@ function composeFromPackKey(
         bestFor: weekFocus || phaseUse,
         caution: weekCaution || phaseAvoid,
         betterOption: locale === "te"
-          ? "ముందు ప్రాధాన్యం ఒకటే ఫిక్స్ చేసుకోండి."
+          ? "ముందు ఒక్క ప్రయారిటీ ఫిక్స్ చేసుకోండి."
           : locale === "hi"
           ? "पहले एक प्राथमिकता तय करें."
-          : "Fix one priority before you push.",
+          : "Pick one priority before you push.",
         actionLine: actionRemedy || todayAdvice,
         shareLine: safeString(todayOne?.share_hook) || shareHook,
       };

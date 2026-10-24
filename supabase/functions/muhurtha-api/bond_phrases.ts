@@ -16,26 +16,26 @@ type Copy = {
 export const BOND_PUSH: Record<BondLocale, Copy> = {
   en: {
     monthReadyTitle: "Your couple guide for the month is ready",
-    monthReadyBody: (p) => `Warm days, soft days and one small thing to try with ${p}. Open Bond.`,
+    monthReadyBody: (p) => `Warm days, soft days and one small thing to try with ${p}. It's in Bond.`,
     open: "Open Bond",
     headsUp: {
-      warm: { title: "Tomorrow is a warm day for you two", body: (p) => `A good day to plan time with ${p} — a walk, a meal, a long talk.` },
-      soft: { title: "Tomorrow: go gentle with each other", body: () => "Moods may run thin. Keep plans light and big talks for another day." },
-      support_a: { title: "Tomorrow may feel heavy for you", body: (p) => `Tell ${p} early if you need space. Small kindness goes a long way.` },
-      support_b: { title: "Tomorrow, be there for your partner", body: (p) => `${p} may feel low tomorrow. A check-in message will mean a lot.` },
-      talk: { title: "Tomorrow is good for the talk you have been saving", body: (p) => `Clear, calm words land well with ${p} tomorrow.` },
+      warm: { title: "Tomorrow is a warm day for you two", body: (p) => `Good day to plan time with ${p}: a walk, a meal, a long chat.` },
+      soft: { title: "Tomorrow: go easy on each other", body: () => "Moods may run thin. Keep plans light and save big talks for later." },
+      support_a: { title: "Tomorrow may feel heavy for you", body: (p) => `Tell ${p} early if you need space. A little kindness goes a long way.` },
+      support_b: { title: "Tomorrow, be there for your partner", body: (p) => `${p} may feel low tomorrow. A quick check-in text will mean a lot 💛` },
+      talk: { title: "Tomorrow's good for that talk you've been saving", body: (p) => `Calm, clear words land well with ${p} tomorrow.` },
     },
   },
   te: {
     monthReadyTitle: "ఈ నెల మీ జంట గైడ్ రెడీ",
-    monthReadyBody: (p) => `${p}తో ప్రేమగా గడిపే రోజులు, జాగ్రత్త రోజులు, ఒక చిన్న ప్రయత్నం — Bond లో చూడండి.`,
-    open: "Bond తెరవండి",
+    monthReadyBody: (p) => `${p}తో ప్రేమగా గడిపే రోజులు, జాగ్రత్త రోజులు, ట్రై చేయాల్సిన ఒక చిన్న పని — Bond లో చూడండి.`,
+    open: "Bond ఓపెన్ చేయండి",
     headsUp: {
-      warm: { title: "రేపు మీ ఇద్దరికీ మంచి రోజు", body: (p) => `${p}తో టైమ్ ప్లాన్ చేయండి — నడక, భోజనం, మనసు విప్పి మాట.` },
-      soft: { title: "రేపు ఒకరితో ఒకరు సున్నితంగా", body: () => "మూడ్స్ త్వరగా మారొచ్చు. ప్లాన్లు తేలికగా, పెద్ద చర్చలు ఇంకో రోజు." },
+      warm: { title: "రేపు మీ ఇద్దరికీ మంచి రోజు", body: (p) => `${p}తో టైమ్ ప్లాన్ చేయండి — వాక్, భోజనం, మనసు విప్పి మాట్లాడటం.` },
+      soft: { title: "రేపు ఒకరితో ఒకరు సాఫ్ట్‌గా", body: () => "మూడ్స్ త్వరగా మారొచ్చు. ప్లాన్స్ లైట్‌గా, పెద్ద డిస్కషన్స్ ఇంకో రోజు." },
       support_a: { title: "రేపు మీకు కొంచెం బరువుగా అనిపించొచ్చు", body: (p) => `స్పేస్ కావాలంటే ${p}కి ముందే చెప్పండి. చిన్న ప్రేమ చాలు.` },
-      support_b: { title: "రేపు మీ భాగస్వామికి తోడుగా ఉండండి", body: (p) => `రేపు ${p} కొంచెం డల్‌గా ఉండొచ్చు. ఒక చిన్న మెసేజ్ చాలా అర్థం.` },
-      talk: { title: "దాచుకున్న మాట రేపు చెప్పొచ్చు", body: (p) => `రేపు ${p}తో ప్రశాంతంగా మాట్లాడితే బాగా అర్థమవుతుంది.` },
+      support_b: { title: "రేపు మీ పార్ట్‌నర్‌కి తోడుగా ఉండండి", body: (p) => `రేపు ${p} కొంచెం డల్‌గా ఉండొచ్చు. ఒక చిన్న మెసేజ్ చాలు 💛` },
+      talk: { title: "దాచుకున్న మాట రేపు చెప్పొచ్చు", body: (p) => `రేపు ${p}తో కూల్‌గా మాట్లాడితే బాగా అర్థమవుతుంది.` },
     },
   },
   hi: {

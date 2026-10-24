@@ -27,7 +27,7 @@ function buildDeepLink(
 }
 
 function mark(loc: AppLocale): string {
-  if (loc === "te") return "ముహూర్త";
+  if (loc === "te") return "Muhūrta";
   if (loc === "hi") return "मुहूर्त";
   return "Muhūrta";
 }
@@ -38,15 +38,15 @@ function text(
   fallback = "",
 ): string {
   const te: Record<string, string> = {
-    based_on_phase: "మీ ప్రస్తుత దశ ఆధారంగా",
-    based_on_today: "ఈరోజు జ్యోతిష్య సమయంపై ఆధారంగా",
-    check_yours: "నీదీ చూడండి",
-    past_phase: "నా గత దశ గురించి ఇది చెప్పింది",
+    based_on_phase: "మీ ఇప్పటి దశ బట్టి",
+    based_on_today: "ఈరోజు పంచాంగం బట్టి",
+    check_yours: "మీది కూడా చూడండి",
+    past_phase: "నా పాత దశ గురించి ఇది చెప్పింది",
     today_line: "ఈరోజు ఒక లైన్",
     purpose: "ఈ పని కోసం ఇది చెప్పింది",
     journey: "నా జీవన దశ గురించి ఇది చెప్పింది",
     remedy: "ఈరోజు నాకు ఇది సూచించింది",
-    insight: "ఈ రోజు సూచన",
+    insight: "ఈరోజు టిప్",
   };
   const hi: Record<string, string> = {
     based_on_phase: "आपकी मौजूदा दशा के आधार पर",
@@ -61,14 +61,14 @@ function text(
   };
   const en: Record<string, string> = {
     based_on_phase: "Based on your current phase",
-    based_on_today: "Based on today's Jyotish timing",
+    based_on_today: "Based on today's panchang",
     check_yours: "Check yours",
-    past_phase: "This is what it said about my past phase",
+    past_phase: "What it said about my last chapter",
     today_line: "Today's one line",
-    purpose: "This is what it said for this purpose",
-    journey: "This is what it said about my current life phase",
-    remedy: "This is the remedy it suggested for me today",
-    insight: "Today’s insight",
+    purpose: "What it said about this plan",
+    journey: "What it said about my life right now",
+    remedy: "The remedy it gave me today",
+    insight: "Today's tip",
   };
   if (loc === "te") return te[key] ?? fallback;
   if (loc === "hi") return hi[key] ?? fallback;
@@ -137,7 +137,7 @@ export function buildShareCard(
     const context = fromPayload(
       payload,
       ["context", "currentLifePeriodLabel"],
-      text(loc, "based_on_today", "Based on today's Jyotish timing"),
+      text(loc, "based_on_today", "Based on today's panchang"),
     );
     return {
       shareTitle: title,
@@ -217,7 +217,7 @@ export function buildShareCard(
     const context = fromPayload(
       payload,
       ["whyNow"],
-      text(loc, "based_on_today", "Based on today's Jyotish timing"),
+      text(loc, "based_on_today", "Based on today's panchang"),
     );
     return {
       shareTitle: title,
@@ -236,12 +236,12 @@ export function buildShareCard(
     shareBody: fromPayload(
       payload,
       ["shareHook", "highlight", "body", "summary"],
-      lines[0] ?? text(loc, "insight", "Today's insight"),
+      lines[0] ?? text(loc, "insight", "Today's tip"),
     ),
     shareContext: fromPayload(
       payload,
       ["context"],
-      text(loc, "based_on_today", "Based on today's Jyotish timing"),
+      text(loc, "based_on_today", "Based on today's panchang"),
     ),
     shareText: `${brand}\n\n${fromPayload(payload, ["title"], text(loc, "insight", "Insight"))}\n${
       fromPayload(payload, ["shareHook", "highlight", "body", "summary"], lines[0] ?? "")

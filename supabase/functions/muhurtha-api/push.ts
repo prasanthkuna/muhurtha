@@ -270,34 +270,34 @@ function loc(raw: string | null | undefined): PushLocale {
 
 const COPY = {
   en: {
-    testTitle: "Test notification you requested",
-    testBody: "Muhūrta alerts are working on this phone. Your daily brief arrives at 6:45 AM.",
-    dailyTitle: "Your day in Muhūrta",
+    testTitle: "Test notification ✅",
+    testBody: "Muhūrta alerts work on this phone. Your daily brief lands at 6:45 AM.",
+    dailyTitle: "Here's your day",
     dailyBody: (good: string, rahu: string) =>
-      `Good window ${good}. Rahu Kalam ${rahu}.`,
-    goodTitle: (t: string) => `Good window from ${t}`,
-    goodBody: (range: string) => `${range} is today's supportive window.`,
+      `Good time ${good}. Rahu Kalam ${rahu}.`,
+    goodTitle: (t: string) => `Good time from ${t}`,
+    goodBody: (range: string) => `${range}. Put your important thing here.`,
     rahuTitle: (t: string) => `Rahu Kalam from ${t}`,
-    rahuBody: (range: string) => `${range}. A lighter hour for routine work.`,
+    rahuBody: (range: string) => `${range}. Skip new starts; routine stuff is fine.`,
     weeklyTitle: "Your week ahead",
-    weeklyBody: (rahuLine: string) => `Good windows and Rahu Kalam for each day are ready. Monday's Rahu Kalam: ${rahuLine}.`,
+    weeklyBody: (rahuLine: string) => `Good times and Rahu Kalam for every day are ready. Monday's Rahu Kalam: ${rahuLine}.`,
     openToday: "Open today",
     openTiming: "Check timing",
   },
   te: {
-    testTitle: "మీరు అడిగిన టెస్ట్ నోటిఫికేషన్",
-    testBody: "ఈ ఫోన్‌లో ముహూర్త అలర్ట్‌లు పనిచేస్తున్నాయి. రోజువారీ సారాంశం ఉదయం 6:45కి వస్తుంది.",
-    dailyTitle: "ముహూర్తలో మీ రోజు",
+    testTitle: "టెస్ట్ నోటిఫికేషన్ ✅",
+    testBody: "ఈ ఫోన్‌లో Muhūrta అలర్ట్స్ పని చేస్తున్నాయి. ఈరోజు సమ్మరీ ఉదయం 6:45కి వస్తుంది.",
+    dailyTitle: "ఈరోజు మీ రోజు ఇలా ఉంది",
     dailyBody: (good: string, rahu: string) =>
       `మంచి సమయం ${good}. రాహుకాలం ${rahu}.`,
-    goodTitle: (t: string) => `${t} నుండి మంచి సమయం`,
-    goodBody: (range: string) => `${range} ఈ రోజు అనుకూల సమయం.`,
-    rahuTitle: (t: string) => `${t} నుండి రాహుకాలం`,
-    rahuBody: (range: string) => `${range}. సాధారణ పనులకు తేలికైన సమయం.`,
-    weeklyTitle: "మీ వచ్చే వారం",
-    weeklyBody: (rahuLine: string) => `ప్రతి రోజు మంచి సమయాలు, రాహుకాలం సిద్ధంగా ఉన్నాయి. సోమవారం రాహుకాలం: ${rahuLine}.`,
-    openToday: "ఈ రోజు చూడండి",
-    openTiming: "సమయం చూడండి",
+    goodTitle: (t: string) => `${t} నుంచి మంచి టైమ్`,
+    goodBody: (range: string) => `${range} — ముఖ్యమైన పని ఈ టైమ్‌లో పెట్టుకోండి.`,
+    rahuTitle: (t: string) => `${t} నుంచి రాహుకాలం`,
+    rahuBody: (range: string) => `${range}. కొత్తవి స్టార్ట్ చేయకండి, రొటీన్ పనులు ఓకే.`,
+    weeklyTitle: "వచ్చే వారం మీకు ఇలా ఉంది",
+    weeklyBody: (rahuLine: string) => `ప్రతి రోజు మంచి టైమ్స్, రాహుకాలం రెడీ. సోమవారం రాహుకాలం: ${rahuLine}.`,
+    openToday: "ఈరోజు చూడండి",
+    openTiming: "టైమ్ చెక్ చేయండి",
   },
   hi: {
     testTitle: "आपकी माँगी हुई टेस्ट सूचना",
@@ -562,14 +562,14 @@ export async function sendTestToProfile(
 
 const READY_COPY: Record<PushLocale, { title: string; body: (who: string | null) => string; open: string }> = {
   en: {
-    title: "Your reading is ready",
-    body: (who) => who ? `${who}'s reading is ready. Open it to see the chapter and today's timing.` : "Your chapter, today's card and timing are ready. Tap to open.",
+    title: "Your reading is ready ✨",
+    body: (who) => who ? `${who}'s reading is ready. Open it for the chapter and today's times.` : "Your chapter, today's card and good times are ready. Tap to open.",
     open: "Open reading",
   },
   te: {
-    title: "మీ రీడింగ్ సిద్ధం",
-    body: (who) => who ? `${who} రీడింగ్ సిద్ధంగా ఉంది. అధ్యాయం, ఈరోజు సమయాలు చూడండి.` : "మీ జీవిత అధ్యాయం, ఈరోజు కార్డ్, మంచి సమయాలు సిద్ధం. తెరవండి.",
-    open: "తెరవండి",
+    title: "మీ రీడింగ్ రెడీ ✨",
+    body: (who) => who ? `${who} రీడింగ్ రెడీ. చాప్టర్, ఈరోజు టైమ్స్ చూడండి.` : "మీ లైఫ్ చాప్టర్, ఈరోజు కార్డ్, మంచి టైమ్స్ — అన్నీ రెడీ. ఓపెన్ చేయండి.",
+    open: "ఓపెన్ చేయండి",
   },
   hi: {
     title: "आपकी रीडिंग तैयार है",

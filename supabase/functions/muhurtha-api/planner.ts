@@ -102,10 +102,10 @@ function compact<T>(values: (T | null | undefined | false)[]): T[] {
 
 function pulseLabel(ratio: number, loc: AppLocale): string {
   if (loc === "te") {
-    if (ratio < 0.18) return "ప్రవేశ దశ";
-    if (ratio < 0.5) return "నిర్మాణ దశ";
+    if (ratio < 0.18) return "స్టార్టింగ్ దశ";
+    if (ratio < 0.5) return "బిల్డింగ్ దశ";
     if (ratio < 0.82) return "పీక్ దశ";
-    return "విడిచే దశ";
+    return "వదిలేసే దశ";
   }
   if (loc === "hi") {
     if (ratio < 0.18) return "प्रवेश चरण";
@@ -113,10 +113,10 @@ function pulseLabel(ratio: number, loc: AppLocale): string {
     if (ratio < 0.82) return "चरम चरण";
     return "समापन चरण";
   }
-  if (ratio < 0.18) return "Entry phase";
-  if (ratio < 0.5) return "Build phase";
-  if (ratio < 0.82) return "Peak phase";
-  return "Release phase";
+  if (ratio < 0.18) return "Starting out";
+  if (ratio < 0.5) return "Building up";
+  if (ratio < 0.82) return "Peak";
+  return "Wrapping up";
 }
 
 function phaseTransition(
@@ -126,23 +126,23 @@ function phaseTransition(
 ): string {
   if (!prev) {
     return loc === "te"
-      ? "ఇది కనిపించే మొదటి స్పష్టమైన ఉపదశల్లో ఒకటి."
+      ? "ఇది క్లియర్‌గా కనిపించే మొదటి చిన్న దశల్లో ఒకటి."
       : loc === "hi"
       ? "यह शुरुआती साफ दिखने वाले उप-चरणों में से एक है।"
-      : "This is one of the earliest clearly visible sub-phases in the current arc.";
+      : "One of the first clearly visible mini-phases in this chapter.";
   }
   if (prev.adLord === seg.adLord) {
     return loc === "te"
-      ? "మునుపటి స్వరమే ఇక్కడ మరింత స్పష్టంగా బయటపడింది."
+      ? "ముందు ఉన్న ఫీలే ఇక్కడ ఇంకా క్లియర్‌గా బయటపడుతుంది."
       : loc === "hi"
       ? "पिछले चरण का वही स्वर यहां और साफ होकर दिखा।"
-      : "The same underlying tone continued here, but in a more visible way.";
+      : "Same mood as before, just louder here.";
   }
   return loc === "te"
-    ? `${grahaLocal(prev.adLord, "te")} స్వరం నుంచి ${grahaLocal(seg.adLord, "te")} వైపు మలుపు తిరిగిన దశ.`
+    ? `${grahaLocal(prev.adLord, "te")} మూడ్ నుంచి ${grahaLocal(seg.adLord, "te")} వైపు టర్న్ తీసుకునే దశ.`
     : loc === "hi"
     ? `यह ${grahaLocal(prev.adLord, "hi")} के स्वर से ${grahaLocal(seg.adLord, "hi")} की तरफ मुड़ने वाला चरण था।`
-    : `This phase turned the story from ${prev.adLord} tone into ${seg.adLord} tone.`;
+    : `This is where the story turned from ${prev.adLord} mode to ${seg.adLord} mode.`;
 }
 
 function evidenceLine(
@@ -154,12 +154,12 @@ function evidenceLine(
   const a1 = adAreas[1] ?? mdAreas[0] ?? "";
   const m0 = mdAreas[0] ?? "";
   if (loc === "te") {
-    return `${a0}, ${a1}, మరియు ${m0} లాంటి విషయాల్లో ఇది ముందుగా కనిపిస్తుంది.`;
+    return `${a0}, ${a1}, ${m0} లాంటి విషయాల్లో ఇది ముందు కనిపిస్తుంది.`;
   }
   if (loc === "hi") {
     return `${a0}, ${a1}, और ${m0} जैसे क्षेत्रों में यह सबसे पहले महसूस होता है।`;
   }
-  return `This usually shows up first through ${a0}, ${a1}, and ${m0}.`;
+  return `You usually notice it first in ${a0}, ${a1} and ${m0}.`;
 }
 
 function blendActionBias(adAreas: string[], mdAreas: string[]): string[] {
@@ -213,12 +213,12 @@ function screenIntentSeed(scope: "today" | "weekly" | "monthly", domains: string
   const d0 = domains[0] ?? "practical decisions";
   const d1 = domains[1] ?? "speech";
   if (scope === "weekly") {
-    return `This week should separate ${d0} from ${d1} instead of mixing every pressure together.`;
+    return `This week, keep ${d0} and ${d1} separate instead of juggling every stress at once.`;
   }
   if (scope === "monthly") {
-    return `This month needs one larger theme around ${d0}, with ${d1} kept steady.`;
+    return `This month needs one bigger focus on ${d0}, with ${d1} kept steady.`;
   }
-  return `Today is mainly useful for ${d0}; keep ${d1} clean and simple.`;
+  return `Today's best for ${d0}. Keep ${d1} simple.`;
 }
 
 function personalizedOneLine(
@@ -228,11 +228,11 @@ function personalizedOneLine(
 ): string | null {
   if (!kernel) return null;
   const key = kernel.natal.archetype.key;
-  const firstAction = kernelActions(kernel, scope)[0] ?? "finish one clean step";
+  const firstAction = kernelActions(kernel, scope)[0] ?? "finish one small step";
   if (loc === "te") {
     return kernel.period.isDashaSandhi
-      ? "పాత పని ముగించండి. తర్వాతి పెద్ద అడుగు అప్పుడు వేయండి."
-      : `${firstAction}. తొందరపడి గందరగోళం చేసుకోవద్దు.`;
+      ? "పాత పని ముందు పూర్తి చేయండి. నెక్స్ట్ పెద్ద స్టెప్ ఆ తర్వాతే."
+      : `${firstAction}. తొందరపడి కన్ఫ్యూజ్ అవ్వకండి.`;
   }
   if (loc === "hi") {
     return kernel.period.isDashaSandhi
@@ -240,9 +240,9 @@ function personalizedOneLine(
       : `${firstAction}. जल्दबाजी में बात खराब न करें.`;
   }
   if (kernel.period.isDashaSandhi) {
-    return `${key}: close one loop before chasing the next chapter.`;
+    return `${key}: finish one thing before chasing the next chapter.`;
   }
-  return `${key}: ${firstAction}; stop before pressure becomes perfection.`;
+  return `${key}: ${firstAction}. Stop before pressure turns into perfectionism.`;
 }
 
 export function buildPhasePlan(
@@ -308,7 +308,7 @@ export function buildPhasePlan(
     ]).slice(0, 3),
     dailyTexture,
     phasePulse: tense === "past"
-      ? (loc === "te" ? "గత అధ్యాయం" : loc === "hi" ? "पिछला अध्याय" : "Past chapter")
+      ? (loc === "te" ? "ముందు చాప్టర్" : loc === "hi" ? "पिछला अध्याय" : "Past chapter")
       : pulseLabel(ratio, loc),
     kernelSignals,
     lifeStage: opts.kernel?.lifeStage,
@@ -361,11 +361,11 @@ export function buildTodayPlan(
 
   const oneLineSeed = personalizedOneLine(kernel, loc, scope) ??
     (loc === "te"
-      ? `${activeDomains[0] ?? "ఈరోజు"} బాగుంటుంది, కానీ ${pressureThemes[0] ?? "ఆవేశం"}లో జాగ్రత్త అవసరం.`
+      ? `${activeDomains[0] ?? "ఈరోజు"} బాగుంటుంది, కానీ ${pressureThemes[0] ?? "ఆవేశం"} విషయంలో జాగ్రత్త.`
       : loc === "hi"
       ? `${activeDomains[0] ?? "आज"} अच्छा रहेगा, लेकिन ${pressureThemes[0] ?? "आवेग"} में सावधानी रखें।`
       : `${activeDomains[0] ?? "Today"} looks stronger, but watch ${
-        pressureThemes[0] ?? "reactive decisions"
+        pressureThemes[0] ?? "knee-jerk decisions"
       }.`);
 
   return {
@@ -399,28 +399,28 @@ function purposeLabel(purposeType: string, loc: AppLocale): string {
     career_interview: {
       en: "career move",
       hi: "कैरियर बात",
-      te: "కెరీర్ అడుగు",
+      te: "కెరీర్ స్టెప్",
     },
     business_launch: { en: "launch", hi: "लॉन्च", te: "లాంచ్" },
     money_talk: { en: "money talk", hi: "पैसे की बात", te: "డబ్బు మాట" },
-    property_vehicle: { en: "property step", hi: "जायदाद कदम", te: "ఆస్తి అడుగు" },
+    property_vehicle: { en: "property step", hi: "जायदाद कदम", te: "ఆస్తి పని" },
     relationship_marriage_talk: {
       en: "relationship talk",
       hi: "रिश्ते की बात",
-      te: "సంబంధం మాట",
+      te: "రిలేషన్‌షిప్ మాట",
     },
-    family_discussion: { en: "family talk", hi: "परिवार की बात", te: "కుటుంబ మాట" },
-    travel: { en: "travel start", hi: "यात्रा शुरू", te: "ప్రయాణ ప్రారంభం" },
-    study_exam: { en: "study push", hi: "पढ़ाई जोर", te: "చదువు దృష్టి" },
-    health_routine: { en: "health routine", hi: "स्वास्थ्य दिनचर्या", te: "ఆరోగ్య అలవాటు" },
-    legal_dispute: { en: "legal step", hi: "कानूनी कदम", te: "న్యాయ అడుగు" },
+    family_discussion: { en: "family talk", hi: "परिवार की बात", te: "ఫ్యామిలీ మాట" },
+    travel: { en: "travel start", hi: "यात्रा शुरू", te: "ప్రయాణం స్టార్ట్" },
+    study_exam: { en: "study push", hi: "पढ़ाई जोर", te: "చదువు ఫోకస్" },
+    health_routine: { en: "health routine", hi: "स्वास्थ्य दिनचर्या", te: "హెల్త్ అలవాటు" },
+    legal_dispute: { en: "legal step", hi: "कानूनी कदम", te: "లీగల్ పని" },
     spiritual_puja: { en: "puja", hi: "पूजा", te: "పూజ" },
     creative_public: { en: "public share", hi: "सार्वजनिक प्रस्तुति", te: "పబ్లిక్ షేర్" },
     child_naming: { en: "naming ceremony", hi: "नामकरण", te: "నామకరణం" },
     child_first_food: { en: "first food", hi: "अन्नप्राशन", te: "అన్నప్రాశన" },
     child_first_haircut: { en: "first haircut", hi: "मुंडन", te: "పుట్టు వెంట్రుకలు" },
     child_doctor_visit: { en: "doctor visit", hi: "डॉक्टर विज़िट", te: "డాక్టర్ దగ్గరికి" },
-    child_school_start: { en: "school start", hi: "स्कूल की शुरुआत", te: "బడి ప్రారంభం" },
+    child_school_start: { en: "school start", hi: "स्कूल की शुरुआत", te: "స్కూల్ స్టార్ట్" },
   } as const;
   const row = map[purposeType as keyof typeof map];
   if (!row) return purposeType;
@@ -454,7 +454,7 @@ export function buildPurposePlan(
 
   const headline = loc === "te"
     ? `${label} కోసం ${
-      status === "matched" ? "మంచి సపోర్ట్" : status === "partly_matched" ? "మిక్స్ సపోర్ట్" : "వేచి చూడటం మంచిది"
+      status === "matched" ? "మంచి సపోర్ట్" : status === "partly_matched" ? "అటూ ఇటూ" : "ఆగడం బెటర్"
     }`
     : loc === "hi"
     ? `${label} के लिए ${
@@ -465,7 +465,7 @@ export function buildPurposePlan(
         : "रुकना बेहतर"
     }`
     : `${
-      status === "matched" ? "Supportive" : status === "partly_matched" ? "Mixed" : "Wait a bit"
+      status === "matched" ? "Good to go" : status === "partly_matched" ? "Mixed" : "Better wait"
     } for ${label}`;
 
   return {
@@ -481,13 +481,13 @@ export function buildPurposePlan(
       kernel?.lifeStage,
     ]).slice(0, 5),
     shareHook: purposeLens?.shareSeed ??
-      `${label}: choose a window that protects tone and follow-through.`,
+      `${label}: pick a time that keeps the mood calm and lets you follow through.`,
     betterOptionSeed: status === "not_matched"
       ? (loc === "te"
-        ? `రేపు ఉదయం ${label} మళ్లీ ప్రయత్నించండి.`
+        ? `రేపు ఉదయం ${label} మళ్లీ ట్రై చేయండి.`
         : loc === "hi"
         ? `कल सुबह ${label} फिर से आज़माएं।`
-        : `Retry ${label} tomorrow morning.`)
+        : `Try ${label} again tomorrow morning.`)
       : undefined,
   };
 }

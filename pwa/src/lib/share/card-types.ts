@@ -60,7 +60,7 @@ export const CARD_LABELS: Record<
   en: {
     eyebrow: {
       today: "Today's brief",
-      window: "Best window today",
+      window: "Best time today",
       chapter: "Life chapter",
       decode: "Birth star profile",
       timing: "Timing check",
@@ -76,19 +76,19 @@ export const CARD_LABELS: Record<
   },
   te: {
     eyebrow: {
-      today: "ఈ రోజు సారాంశం",
-      window: "ఈ రోజు మంచి సమయం",
-      chapter: "జీవన అధ్యాయం",
-      decode: "జన్మ నక్షత్ర స్వరూపం",
-      timing: "సమయ పరిశీలన",
+      today: "ఈరోజు సమ్మరీ",
+      window: "ఈరోజు మంచి టైమ్",
+      chapter: "లైఫ్ చాప్టర్",
+      decode: "మీ నక్షత్రం స్టైల్",
+      timing: "టైమ్ చెక్",
       finddate: "మంచి తేదీలు",
-      ask: "ముహూర్తాన్ని అడిగాను",
-      milestone: "పిల్లల శుభ ఘట్టం",
+      ask: "Muhūrta ని అడిగాను",
+      milestone: "పిల్లల మంచి రోజు",
       match: "గుణ మేళనం",
     },
-    cta: "మీ రోజు కూడా చూడండి · ఉచితం",
+    cta: "మీ రోజు కూడా చూడండి · ఫ్రీ",
     forName: (n) => `${n} కోసం`,
-    born: "జననం",
+    born: "పుట్టింది",
     brand: "Muhūrta",
   },
   hi: {
@@ -124,7 +124,7 @@ export const DEFAULT_GLYPH: Record<CardType, GlyphName> = {
 
 /** Per-type call to action on the card and the share landing page (falls back to `cta`). */
 export const CARD_CTA: Partial<Record<CardType, Record<CardLocale, string>>> = {
-  match: { en: "Check your match · free", te: "మీ పొంతన చూడండి · ఉచితం", hi: "अपना मिलान देखें · मुफ़्त" },
+  match: { en: "Check your match · free", te: "మీ జోడీ మ్యాచ్ చూడండి · ఫ్రీ", hi: "अपना मिलान देखें · मुफ़्त" },
 };
 
 function clean(raw: unknown, max: number): string | undefined {

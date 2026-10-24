@@ -347,20 +347,20 @@ function lifeChapterInfo(
     const monthsLeft = months != null && months <= 18 ? Math.max(1, Math.round(months)) : null;
     if (loc === "te") {
       return {
-        title: `${md} అధ్యాయం: ఎదుగుతున్న వయసు`,
+        title: `${md} చాప్టర్: ఎదిగే వయసు`,
         summary: isInfant
-          ? `ఈ పసి వయసుకు ${md} దశ పునాది వేస్తోంది; ఇప్పుడు ${ad} ఉప దశ నడుస్తోంది. ఈ సమయంలో ముఖ్యమైనవి: నిద్ర, పాలు/ఆహారం సమయానికి, ఆరోగ్య పరీక్షలు, ప్రశాంతమైన, ప్రేమ నిండిన ఇల్లు.`
-          : `ఈ బాల్యానికి ${md} దశ దిశ చూపుతోంది; ఇప్పుడు ${ad} ఉప దశ నడుస్తోంది. ఈ సమయంలో ముఖ్యమైనవి: ఆటల ద్వారా నేర్చుకోవడం, నిలకడైన దినచర్య, మంచి ఆరోగ్య అలవాట్లు, ఇంట్లో ప్రోత్సాహం.`,
-        qualityLabel: "ఎదుగుతున్న వయసు",
+          ? `ఈ చిన్న వయసుకి ${md} దశ బేస్ వేస్తోంది; ఇప్పుడు ${ad} చిన్న దశ నడుస్తోంది. ఇప్పుడు ముఖ్యమైనవి: నిద్ర, టైమ్‌కి పాలు/ఆహారం, హెల్త్ చెకప్స్, ప్రశాంతంగా, ప్రేమగా ఉండే ఇల్లు.`
+          : `ఈ వయసుకి ${md} దశ దారి చూపిస్తోంది; ఇప్పుడు ${ad} చిన్న దశ నడుస్తోంది. ఇప్పుడు ముఖ్యమైనవి: ఆటలతో నేర్చుకోవడం, ఫిక్స్‌డ్ రొటీన్, మంచి హెల్త్ అలవాట్లు, ఇంట్లో ఎంకరేజ్‌మెంట్.`,
+        qualityLabel: "ఎదిగే వయసు",
         timelineLabel: monthsLeft != null
           ? `${phaseSpan ? `${phaseSpan}. ` : ""}ఈ దశ ఇంకా దాదాపు ${monthsLeft} నెలలు; తర్వాత ${next} దశ.`
-          : "ఈ దశ ఇంకా కొనసాగుతోంది.",
-        currentChapterLabel: `${md} పెద్ద అధ్యాయం`,
-        currentEpisodeLabel: `${ad} ప్రస్తుత భాగం`,
-        nextChapterLabel: next ? `${next} తర్వాతి అధ్యాయం` : "",
+          : "ఈ దశ ఇంకా నడుస్తోంది.",
+        currentChapterLabel: `${md} పెద్ద చాప్టర్`,
+        currentEpisodeLabel: `${ad} ఇప్పటి భాగం`,
+        nextChapterLabel: next ? `${next} నెక్స్ట్ చాప్టర్` : "",
         actionLine: isInfant
-          ? "రోజువారీ లయ మృదువుగా, ఊహించగలిగేలా ఉంచండి; చిన్న అలవాట్లే ఇప్పుడు ముఖ్యం."
-          : "ఆసక్తిని ప్రోత్సహించండి, దినచర్య నిలకడగా ఉంచండి; ఫలితం కంటే ప్రయత్నాన్ని మెచ్చుకోండి.",
+          ? "రోజు రొటీన్ సాఫ్ట్‌గా, ముందే తెలిసేలా ఉంచండి; ఇప్పుడు చిన్న అలవాట్లే ముఖ్యం."
+          : "క్యూరియాసిటీని ఎంకరేజ్ చేయండి, రొటీన్ ఫిక్స్‌డ్‌గా ఉంచండి; రిజల్ట్ కంటే ప్రయత్నాన్ని మెచ్చుకోండి.",
         traditionalWhy: kernel.period.line,
       };
     }
@@ -384,20 +384,20 @@ function lifeChapterInfo(
       };
     }
     return {
-      title: `${md} chapter: growing years`,
+      title: `${md} chapter: the growing-up years`,
       summary: isInfant
-        ? `${md} sets the tone for these early years, with ${ad} as the current episode. What matters most now: a steady sleep and feeding rhythm, health check-ups, and a calm, loving home.`
-        : `${md} is guiding these childhood years, with ${ad} as the current episode. What matters most now: learning through play, steady routines, good health habits and encouragement at home.`,
+        ? `${md} sets the tone for these early years, and ${ad} is the current mini-chapter. What matters most now: regular sleep and feeds, health check-ups, and a calm, loving home.`
+        : `${md} is guiding these childhood years, and ${ad} is the current mini-chapter. What matters most now: learning through play, steady routines, good health habits and lots of encouragement.`,
       qualityLabel: "Growing years",
       timelineLabel: monthsLeft != null
         ? `${phaseSpan ? `${phaseSpan}. ` : ""}About ${monthsLeft} months of this period remain; ${next} follows.`
-        : "This chapter is still active.",
+        : "This chapter is still going.",
       currentChapterLabel: `${md} big chapter`,
-      currentEpisodeLabel: `${ad} current episode`,
+      currentEpisodeLabel: `${ad} right now`,
       nextChapterLabel: next ? `${next} next chapter` : "",
       actionLine: isInfant
-        ? "Keep the day's rhythm gentle and predictable; small routines matter most right now."
-        : "Encourage curiosity and keep routines steady; praise effort more than results.",
+        ? "Keep the day calm and predictable. Small routines matter most right now."
+        : "Feed their curiosity and keep routines steady. Praise the effort more than the result.",
       traditionalWhy: kernel.period.line,
     };
   }
@@ -405,26 +405,26 @@ function lifeChapterInfo(
     ? `${phaseSpan ? `${phaseSpan}. ` : ""}About ${
       Math.max(1, Math.round(months))
     } months of this chapter are left.`
-    : "This chapter is still active.";
+    : "This chapter is still going.";
   if (loc === "te") {
     const left = months != null && months <= 18
       ? `${phaseSpan ? `${phaseSpan}. ` : ""}ఇంకా దాదాపు ${
         Math.max(1, Math.round(months))
       } నెలలు మాత్రమే ఉన్నాయి.`
-      : "ఈ దశ ఇంకా కొనసాగుతోంది.";
+      : "ఈ దశ ఇంకా నడుస్తోంది.";
     return {
-      title: closing ? `${md} అధ్యాయం ముగింపు దశలో ఉంది` : `${md} అధ్యాయం కొనసాగుతోంది`,
+      title: closing ? `${md} చాప్టర్ ఎండింగ్‌లో ఉంది` : `${md} చాప్టర్ నడుస్తోంది`,
       summary: closing
-        ? `${md} దశ మీ జీవితంలో ఒక పెద్ద అధ్యాయం. ఇప్పుడు అది ముగింపు వైపు వెళ్తోంది; తర్వాత ${next} దశ మొదలవుతుంది. ఇది మంచి/చెడు అని ఒక్క మాటలో చెప్పడం కంటే, పాత పనులు పూర్తి చేసే సమయం అని చూడాలి.`
-        : `ప్రస్తుతం ${md} దశ ఈ జీవిత భాగాన్ని నడిపిస్తోంది; ${ad} ఇప్పటి ఉప దశ. ${next} దశ ఇంకా చాలా దూరంలో ఉంది.`,
-      qualityLabel: closing ? "మార్పు దశ" : "కొనసాగుతున్న దశ",
+        ? `${md} దశ మీ లైఫ్‌లో ఒక పెద్ద చాప్టర్. ఇప్పుడు అది ఎండింగ్ వైపు వెళ్తోంది; తర్వాత ${next} దశ స్టార్ట్ అవుతుంది. మంచా చెడా అని కాదు — పాత పనులు పూర్తి చేసే టైమ్ అనుకోండి.`
+        : `ఇప్పుడు ${md} దశ మీ లైఫ్‌లో ఈ భాగాన్ని నడిపిస్తోంది; ${ad} ఇప్పటి చిన్న దశ. ${next} దశకి ఇంకా చాలా టైమ్ ఉంది.`,
+      qualityLabel: closing ? "మార్పు టైమ్" : "నడుస్తున్న దశ",
       timelineLabel: left,
-      currentChapterLabel: `${md} పెద్ద అధ్యాయం`,
-      currentEpisodeLabel: `${ad} ప్రస్తుత భాగం`,
-      nextChapterLabel: next ? `${next} తర్వాతి అధ్యాయం` : "",
+      currentChapterLabel: `${md} పెద్ద చాప్టర్`,
+      currentEpisodeLabel: `${ad} ఇప్పటి భాగం`,
+      nextChapterLabel: next ? `${next} నెక్స్ట్ చాప్టర్` : "",
       actionLine: closing
-        ? "కొత్త పెద్ద పనికంటే ముందు, పెండింగ్ విషయాలు క్లియర్ చేయండి."
-        : "ఈ దశ నేర్పుతున్న దానిపై నిలకడగా ముందుకు సాగండి.",
+        ? "కొత్త పెద్ద పని ముందు, పెండింగ్ పనులు క్లియర్ చేయండి."
+        : "ఈ దశ నేర్పిస్తున్నది పట్టుకుని, స్టడీగా ముందుకెళ్లండి.",
       traditionalWhy: kernel.period.line,
     };
   }
@@ -449,18 +449,18 @@ function lifeChapterInfo(
     };
   }
   return {
-    title: closing ? `${md} chapter is closing` : `${md} chapter is active`,
+    title: closing ? `${md} chapter is wrapping up` : `${md} chapter is on`,
     summary: closing
-      ? `${md} has been the big chapter shaping this part of life. It is now moving toward closure; ${next} comes next. This is not simply good or bad. Treat it as a transition: close old loops before chasing one more big move.`
-      : `${md} is the big chapter shaping this part of life right now, with ${ad} as the current episode. ${next} follows much later, so build steadily on what this chapter is teaching.`,
+      ? `${md} has been the big chapter of this part of your life, and it's wrapping up now. ${next} is next. It's not good or bad, it's a handover: finish old stuff before you chase one more big move.`
+      : `${md} is the big chapter of your life right now, and ${ad} is the current mini-chapter. ${next} is still a long way off, so keep building on what this one's teaching you.`,
     qualityLabel: closing ? "Transition phase" : "Active chapter",
     timelineLabel: closeLineEn,
     currentChapterLabel: `${md} big chapter`,
-    currentEpisodeLabel: `${ad} current episode`,
+    currentEpisodeLabel: `${ad} right now`,
     nextChapterLabel: next ? `${next} next chapter` : "",
     actionLine: closing
-      ? "Clear pending work before starting the next big thing."
-      : "Build steadily on what this chapter is teaching.",
+      ? "Clear pending work before you start the next big thing."
+      : "Keep building on what this chapter's teaching you.",
     traditionalWhy: kernel.period.line,
   };
 }
@@ -517,10 +517,10 @@ function remedyTypeLabel(remedyType: string, locale: AppLocale): string {
       fallback: "Daily remedy",
     },
     te: {
-      behavioral: "మనసు సర్దుబాటు",
+      behavioral: "మైండ్ సెట్",
       discipline: "శరీర రీసెట్",
-      charity: "నిశ్శబ్ద సేవ",
-      fallback: "రోజు పరిహారం",
+      charity: "సైలెంట్ సాయం",
+      fallback: "ఈరోజు పరిహారం",
     },
     hi: {
       behavioral: "मन संतुलन",
@@ -541,35 +541,35 @@ function remedyWhyNow(remedyType: string, activeLord: string, locale: AppLocale)
       ? `${activeLord} चरण`
       : `${activeLord} period`
     : locale === "te"
-    ? "ప్రస్తుత లయ"
+    ? "ఇప్పటి రిథమ్"
     : locale === "hi"
     ? "मौजूदा लय"
     : "current rhythm";
   switch (remedyType) {
     case "behavioral":
       return locale === "te"
-        ? `${lordText}లో పెద్ద చర్యల కంటే చిన్న మానసిక సర్దుబాట్లు ఇప్పుడు ఎక్కువ ఉపయోగపడతాయి.`
+        ? `${lordText}లో పెద్ద పనుల కంటే చిన్న మైండ్ సెట్ మార్పులే ఇప్పుడు ఎక్కువ పనికొస్తాయి.`
         : locale === "hi"
         ? `${lordText} में इस समय बड़े कदमों से ज्यादा छोटे मानसिक सुधार काम आते हैं।`
-        : `This fits the ${lordText} because small mindset corrections help more than dramatic action right now.`;
+        : `Why this, during ${lordText}: small mindset tweaks help more than big moves right now.`;
     case "discipline":
       return locale === "te"
-        ? `${lordText}లో నిద్ర, శరీర లయ, పని వేగం నిలకడగా ఉంటే తప్పించగల పొరపాట్లు తగ్గుతాయి.`
+        ? `${lordText}లో నిద్ర, బాడీ రిథమ్, పని స్పీడ్ స్టడీగా ఉంటే అనవసరమైన తప్పులు తగ్గుతాయి.`
         : locale === "hi"
         ? `${lordText} में नींद, शरीर की लय और काम की गति स्थिर रखने से टाली जा सकने वाली गलतियां कम होती हैं।`
-        : `This fits the ${lordText} because steadier sleep, pace, and body rhythm will reduce avoidable mistakes.`;
+        : `Why this, during ${lordText}: steadier sleep, pace and body rhythm cut down silly mistakes.`;
     case "charity":
       return locale === "te"
-        ? `${lordText}లో నిశ్శబ్దంగా ఇచ్చే సహాయం అతిగా పట్టుకోవాలనే భావాన్ని చల్లబరచి దృష్టిని సమతుల్యం చేస్తుంది.`
+        ? `${lordText}లో సైలెంట్‌గా చేసే సాయం, అన్నీ పట్టుకోవాలనే ఆరాటాన్ని తగ్గించి, మనసుని బ్యాలెన్స్ చేస్తుంది.`
         : locale === "hi"
         ? `${lordText} में शांत दान पकड़ और लालसा को ठंडा करके नजरिया वापस संतुलित करता है।`
-        : `This fits the ${lordText} because quiet giving helps cool excess grasping and brings perspective back.`;
+        : `Why this, during ${lordText}: giving quietly cools the urge to grab at everything and puts things back in perspective.`;
     default:
       return locale === "te"
-        ? `${lordText}లో ఎక్కువ ఆలోచన కంటే సరళమైన స్థిర చర్యలు ఇప్పుడు బాగా పనిచేస్తాయి.`
+        ? `${lordText}లో ఓవర్ థింకింగ్ కంటే సింపుల్, స్టడీ పనులే ఇప్పుడు బాగా వర్కౌట్ అవుతాయి.`
         : locale === "hi"
         ? `${lordText} में ज्यादा सोचने से बेहतर अभी सरल और स्थिर कदम काम करते हैं।`
-        : `This fits the ${lordText} because simple grounded actions work better than overthinking right now.`;
+        : `Why this, during ${lordText}: simple, grounded actions beat overthinking right now.`;
   }
 }
 
@@ -577,28 +577,28 @@ function remedyKeepSimple(remedyType: string, locale: AppLocale): string {
   switch (remedyType) {
     case "behavioral":
       return locale === "te"
-        ? "పది నిమిషాల నిశ్శబ్ద సమయం చాలుతుంది. దాన్ని పర్ఫెక్ట్‌గా కాకుండా సాదాసీదాగా చేయండి."
+        ? "పది నిమిషాల సైలెంట్ టైమ్ చాలు. పర్ఫెక్ట్‌గా కాదు, సింపుల్‌గా చేయండి."
         : locale === "hi"
         ? "दस शांत मिनट काफी हैं। इसे परफेक्ट नहीं, बस सादगी से करें।"
-        : "Ten calm minutes is enough. Do it plainly, not perfectly.";
+        : "Ten quiet minutes is enough. Keep it plain, not perfect.";
     case "discipline":
       return locale === "te"
-        ? "మూడు రోజులు చిన్నగా, మళ్లీ చేయగలిగినట్టుగా ఉంచండి. దీనిని చాలా క్లిష్టం చేయాల్సిన అవసరం లేదు."
+        ? "మూడు రోజులు చిన్నగా, మళ్లీ మళ్లీ చేయగలిగేలా ఉంచండి. కాంప్లికేట్ చేయక్కర్లేదు."
         : locale === "hi"
         ? "इसे तीन दिन छोटा और दोहराने लायक रखें। इसे जरूरत से ज्यादा जटिल न बनाएं।"
-        : "Keep it small and repeatable for three days. No need to over-engineer it.";
+        : "Keep it small and doable for three days. Don't overcomplicate it.";
     case "charity":
       return locale === "te"
-        ? "నిశ్శబ్దంగా, నిజాయితీగా చేస్తే చాలు. దీన్ని ప్రదర్శనగా మార్చకండి."
+        ? "సైలెంట్‌గా, నిజాయితీగా చేస్తే చాలు. షో కోసం చేయకండి."
         : locale === "hi"
         ? "शांत और सच्चे मन से करना काफी है। इसे दिखावे में मत बदलें।"
-        : "Quiet and sincere is enough. Do not turn it into performance.";
+        : "Quiet and sincere is enough. It's not a performance.";
     default:
       return locale === "te"
-        ? "దాన్ని సులభంగా, ఉపయోగకరంగా ఉంచండి. ఒక్కసారి తీవ్రంగా చేయడం కంటే చిన్న స్థిరత్వం ముఖ్యం."
+        ? "ఈజీగా, పనికొచ్చేలా ఉంచండి. ఒక్కసారి గట్టిగా చేయడం కంటే రోజూ కొంచెం చేయడం ముఖ్యం."
         : locale === "hi"
         ? "इसे सरल और व्यावहारिक रखें। एक बार बहुत करने से ज्यादा छोटी निरंतरता काम आती है।"
-        : "Keep it simple and practical. Small consistency matters more than intensity.";
+        : "Keep it simple and useful. A little every day beats one big burst.";
   }
 }
 
@@ -685,7 +685,7 @@ function packTodayCard(pack: BirthPackRow | null, dateStr: string): PackTodayCar
 }
 
 const CAUTION_WINDOW_LABEL: Record<"te" | "hi", Record<string, string>> = {
-  te: { "Rahu Kalam": "రాహు కాలం", Yamagandam: "యమగండం", Gulika: "గుళిక కాలం", Caution: "జాగ్రత్త సమయం" },
+  te: { "Rahu Kalam": "రాహుకాలం", Yamagandam: "యమగండం", Gulika: "గుళిక కాలం", Caution: "జాగ్రత్త టైమ్" },
   hi: { "Rahu Kalam": "राहु काल", Yamagandam: "यमगंड", Gulika: "गुलिक काल", Caution: "सावधानी का समय" },
 };
 
@@ -906,7 +906,7 @@ function fallbackPackContent(
   return {
     me_profile: {
       title: facts.kernel?.natal.archetype.key || "Your pattern",
-      summary: facts.kernel?.natal.archetype.core || "Your reading is based on your birth rhythm.",
+      summary: facts.kernel?.natal.archetype.core || "Your reading is based on your birth chart.",
       share_hook: oneLine,
       strengths: facts.kernel ? [facts.kernel.natal.archetype.strength] : [],
       watchouts: facts.kernel ? [facts.kernel.natal.archetype.shadow] : [],
@@ -1592,13 +1592,13 @@ function fillLifeMapFutureGaps(
   const bridgeCopy: Record<AppLocale, { theme: string; career: string; avoid: string }> = {
     en: {
       theme: "Transition stretch",
-      career: "Finish loose ends before the next major phase opens.",
-      avoid: "Forcing a big new start before rhythm settles.",
+      career: "Wrap up loose ends before the next big chapter opens.",
+      avoid: "Forcing a big new start before things settle.",
     },
     te: {
-      theme: "మధ్యలో ఉన్న కాలం",
-      career: "తర్వాతి పెద్ద దశ ముందు పెండింగ్ పనులు ముగించు.",
-      avoid: "రిథమ్ సెట్టిల్ కాకముందే పెద్ద కొత్త స్టార్ట్ ఫోర్స్ చేయకు.",
+      theme: "మధ్యలో ఉన్న టైమ్",
+      career: "నెక్స్ట్ పెద్ద దశ ముందు పెండింగ్ పనులు పూర్తి చేయండి.",
+      avoid: "రిథమ్ సెట్ అవ్వకముందే పెద్ద కొత్త పని ఫోర్స్ చేయకండి.",
     },
     hi: {
       theme: "बीच का समय",
@@ -1636,18 +1636,18 @@ function fillLifeMapFutureGaps(
 
 const NOTIFY_FALLBACK: Record<AppLocale, Record<string, { title: string; body: string }>> = {
   en: {
-    today_ready: { title: "Today's card is ready", body: "Open your timing card before the day gets noisy." },
-    good_time_reminder: { title: "Good window in 10 minutes", body: "Keep one important task ready for it." },
-    good_time_start: { title: "Good time starts now", body: "Use it for the task that matters most today." },
-    caution_time_reminder: { title: "Caution window in 10 minutes", body: "Plan to go lighter: a caution interval opens soon." },
-    caution_start: { title: "Go lighter now", body: "Avoid forcing a new start in this window." },
+    today_ready: { title: "Today's card is ready ☀️", body: "Peek at your timing card before the day gets busy." },
+    good_time_reminder: { title: "Good time in 10 minutes", body: "Keep one important task ready for it." },
+    good_time_start: { title: "Good time starts now", body: "Do the thing that matters most today." },
+    caution_time_reminder: { title: "Careful time in 10 minutes", body: "Ease off soon. Save new starts for later." },
+    caution_start: { title: "Ease off now", body: "Don't force a new start right now." },
   },
   te: {
-    today_ready: { title: "ఈరోజు కార్డ్ సిద్ధం", body: "రోజు హడావిడి మొదలయ్యే ముందు మీ సమయ కార్డ్ చూడండి." },
-    good_time_reminder: { title: "10 నిమిషాల్లో మంచి సమయం", body: "ఒక ముఖ్యమైన పనిని దానికోసం సిద్ధంగా ఉంచండి." },
-    good_time_start: { title: "మంచి సమయం ఇప్పుడు", body: "ఈరోజు ముఖ్యమైన పనికి దీన్ని వాడండి." },
-    caution_time_reminder: { title: "10 నిమిషాల్లో జాగ్రత్త సమయం", body: "కొత్త మొదలుపెట్టడాలు కాసేపు ఆపండి." },
-    caution_start: { title: "ఇప్పుడు నెమ్మదిగా", body: "ఈ సమయంలో కొత్త పనులను బలవంతంగా మొదలుపెట్టకండి." },
+    today_ready: { title: "ఈరోజు కార్డ్ రెడీ ☀️", body: "రోజు హడావిడి స్టార్ట్ అయ్యే ముందే మీ టైమ్ కార్డ్ చూసేయండి." },
+    good_time_reminder: { title: "10 నిమిషాల్లో మంచి టైమ్", body: "ఒక ముఖ్యమైన పని దాని కోసం రెడీగా పెట్టుకోండి." },
+    good_time_start: { title: "మంచి టైమ్ ఇప్పుడే", body: "ఈరోజు ముఖ్యమైన పని ఇప్పుడే చేసేయండి." },
+    caution_time_reminder: { title: "10 నిమిషాల్లో జాగ్రత్త టైమ్", body: "కొత్తవి స్టార్ట్ చేయడం కాసేపు ఆపండి." },
+    caution_start: { title: "ఇప్పుడు కాస్త స్లో", body: "ఈ టైమ్‌లో కొత్త పనులు ఫోర్స్ చేసి స్టార్ట్ చేయకండి." },
   },
   hi: {
     today_ready: { title: "आज का कार्ड तैयार है", body: "दिन की भागदौड़ से पहले अपना समय कार्ड देखें।" },
@@ -2909,12 +2909,12 @@ function notificationAllowed(_tier: AccessTier, _notificationType: string): bool
 
 function lockedTeaser(locale: AppLocale) {
   if (locale === "te") {
-    return "ఈ దశ పూర్తి వివరాలు Proలో తెరుచుకుంటాయి.";
+    return "ఈ దశ పూర్తి వివరాలు Pro లో ఓపెన్ అవుతాయి.";
   }
   if (locale === "hi") {
     return "इस चरण का पूरा विवरण Pro में खुलता है.";
   }
-  return "Full detail for this phase unlocks with Pro.";
+  return "The full details for this phase unlock with Pro.";
 }
 
 // ============================================================================
@@ -3378,55 +3378,55 @@ const TIMING_COPY: Record<AppLocale, {
 }> = {
   en: {
     headline: {
-      limited_assessment: "General traditional timing factors",
-      matched: "Supportive traditional factors",
-      not_matched: "Several traditional cautions",
-      partly_matched: "Mixed traditional factors",
+      limited_assessment: "General panchang factors",
+      matched: "The panchang is on your side",
+      not_matched: "A few panchang red flags",
+      partly_matched: "Mixed panchang signals",
     },
-    summaryIntro: "This is a traditional Panchanga comparison, not an outcome prediction.",
-    actionLine: "Consider real-world availability, preparation and professional advice first.",
-    generalFactors: "General location-based traditional factors",
+    summaryIntro: "This compares traditional panchang factors. It doesn't predict the result.",
+    actionLine: "Think about availability, prep and expert advice first.",
+    generalFactors: "General panchang for your location",
     selectedCity: "Selected city",
     tarabala: "Tarabala",
     chandrabala: "Chandrabala",
     supportive: "traditionally supportive",
     mixed: "traditionally mixed",
     janmaMixed: "Tarabala: Janma (mixed)",
-    noWindow: "No assessed general daytime window",
+    noWindow: "No good daytime slot found today",
     lines: {},
   },
   te: {
     headline: {
-      limited_assessment: "సాధారణ సాంప్రదాయ సమయ అంశాలు",
-      matched: "అనుకూలమైన సాంప్రదాయ అంశాలు",
-      not_matched: "కొన్ని సాంప్రదాయ జాగ్రత్తలు",
-      partly_matched: "మిశ్రమ సాంప్రదాయ అంశాలు",
+      limited_assessment: "జనరల్ పంచాంగం విషయాలు",
+      matched: "పంచాంగం కలిసొస్తోంది",
+      not_matched: "పంచాంగంలో కొన్ని జాగ్రత్తలు",
+      partly_matched: "పంచాంగం అటూ ఇటూ",
     },
-    summaryIntro: "ఇది సాంప్రదాయ పంచాంగ పోలిక మాత్రమే, ఫలితాన్ని ఊహించడం కాదు.",
-    actionLine: "ముందుగా అందుబాటు, సిద్ధత, నిపుణుల సలహాను పరిగణించండి.",
-    generalFactors: "స్థలం ఆధారిత సాధారణ సాంప్రదాయ అంశాలు",
-    selectedCity: "ఎంచుకున్న నగరం",
+    summaryIntro: "ఇది పంచాంగం లెక్క మాత్రమే, రిజల్ట్ ఇదే అని చెప్పడం కాదు.",
+    actionLine: "ముందు మీ వీలు, ప్రిపరేషన్, ఎక్స్‌పర్ట్ సలహా చూసుకోండి.",
+    generalFactors: "మీ ఊరి జనరల్ పంచాంగం",
+    selectedCity: "ఎంచుకున్న ఊరు",
     tarabala: "తారాబలం",
     chandrabala: "చంద్రబలం",
-    supportive: "సాంప్రదాయంగా అనుకూలం",
-    mixed: "సాంప్రదాయంగా మిశ్రమం",
-    janmaMixed: "తారాబలం: జన్మ (మిశ్రమం)",
-    noWindow: "అంచనా వేసిన పగటి మంచి సమయం లేదు",
+    supportive: "సంప్రదాయంగా బాగుంది",
+    mixed: "సంప్రదాయంగా అటూ ఇటూ",
+    janmaMixed: "తారాబలం: జన్మ (అటూ ఇటూ)",
+    noWindow: "ఈరోజు పగలు మంచి టైమ్ దొరకలేదు",
     lines: {
-      "Preliminary traditional Panchanga factors; not a verified activity-specific Muhurta.":
-        "ప్రాథమిక సాంప్రదాయ పంచాంగ అంశాలు; ఇది పని-ప్రత్యేక ముహూర్తం కాదు.",
-      "General daylight windows are not individualized favourable outcomes.":
-        "సాధారణ పగటి సమయాలు వ్యక్తిగత శుభ ఫలితాలకు హామీ కావు.",
-      "Birth Nakshatra is unavailable; Tarabala was not assessed.":
-        "జన్మ నక్షత్రం లేదు; తారాబలం చూడలేదు.",
-      "Natal Rashi is unavailable; Chandrabala was not assessed.":
-        "జన్మ రాశి లేదు; చంద్రబలం చూడలేదు.",
-      "A specialist Muhurta ruleset is required for formal ceremonies and binding decisions.":
-        "శుభకార్యాలు, కీలక నిర్ణయాలకు ప్రత్యేక ముహూర్త నియమాలు అవసరం.",
-      "For the ceremony itself, confirm the final Muhurta with your family priest.":
-        "వేడుక ముహూర్తాన్ని మీ కుటుంబ పురోహితుడితో నిర్ధారించుకోండి.",
-      "Never delay a vaccination or medical care for timing; use this only to pick a calmer slot within your doctor's schedule.":
-        "సమయం కోసం టీకా లేదా వైద్యాన్ని ఎప్పుడూ ఆలస్యం చేయకండి; డాక్టర్ ఇచ్చిన సమయాల్లో ప్రశాంతమైనదాన్ని ఎంచుకోవడానికి మాత్రమే వాడండి.",
+      "Basic panchang factors. Not a priest-checked muhurtam for this specific task.":
+        "బేసిక్ పంచాంగం విషయాలు; ఇది ఈ పనికి స్పెషల్ ముహూర్తం కాదు.",
+      "General daytime slots don't promise good results for you personally.":
+        "జనరల్ పగటి టైమ్స్ మీకు మంచి రిజల్ట్ గ్యారంటీ చేయవు.",
+      "No birth star on file, so we skipped Tarabala.":
+        "జన్మ నక్షత్రం లేదు కాబట్టి తారాబలం చూడలేదు.",
+      "No Moon sign on file, so we skipped Chandrabala.":
+        "జన్మ రాశి లేదు కాబట్టి చంద్రబలం చూడలేదు.",
+      "Weddings, ceremonies and big binding decisions need a specialist muhurtam.":
+        "శుభకార్యాలు, పెద్ద నిర్ణయాలకి స్పెషల్ ముహూర్తం రూల్స్ ఉంటాయి.",
+      "For the ceremony itself, confirm the final muhurtam with your family priest.":
+        "ఫంక్షన్ ముహూర్తం మీ ఫ్యామిలీ పురోహితుడితో కన్ఫర్మ్ చేసుకోండి.",
+      "Never delay a vaccine or medical care for timing. Use this only to pick a calmer slot from what your doctor offers.":
+        "టైమ్ కోసం వ్యాక్సిన్ లేదా ట్రీట్‌మెంట్ ఎప్పుడూ ఆపకండి; డాక్టర్ ఇచ్చిన స్లాట్స్‌లో కూల్ టైమ్ ఎంచుకోవడానికి మాత్రమే వాడండి.",
     },
   },
   hi: {
@@ -3447,19 +3447,19 @@ const TIMING_COPY: Record<AppLocale, {
     janmaMixed: "ताराबल: जन्म (मिश्रित)",
     noWindow: "दिन में कोई आकलित शुभ समय नहीं",
     lines: {
-      "Preliminary traditional Panchanga factors; not a verified activity-specific Muhurta.":
+      "Basic panchang factors. Not a priest-checked muhurtam for this specific task.":
         "प्रारंभिक पारंपरिक पंचांग कारक; यह कार्य-विशेष मुहूर्त नहीं है।",
-      "General daylight windows are not individualized favourable outcomes.":
+      "General daytime slots don't promise good results for you personally.":
         "सामान्य दिन के समय व्यक्तिगत शुभ परिणाम की गारंटी नहीं हैं।",
-      "Birth Nakshatra is unavailable; Tarabala was not assessed.":
+      "No birth star on file, so we skipped Tarabala.":
         "जन्म नक्षत्र उपलब्ध नहीं; ताराबल नहीं देखा गया।",
-      "Natal Rashi is unavailable; Chandrabala was not assessed.":
+      "No Moon sign on file, so we skipped Chandrabala.":
         "जन्म राशि उपलब्ध नहीं; चंद्रबल नहीं देखा गया।",
-      "A specialist Muhurta ruleset is required for formal ceremonies and binding decisions.":
+      "Weddings, ceremonies and big binding decisions need a specialist muhurtam.":
         "संस्कारों और बड़े निर्णयों के लिए विशेष मुहूर्त नियम ज़रूरी हैं।",
-      "For the ceremony itself, confirm the final Muhurta with your family priest.":
+      "For the ceremony itself, confirm the final muhurtam with your family priest.":
         "समारोह का अंतिम मुहूर्त अपने कुल पुरोहित से पक्का करें।",
-      "Never delay a vaccination or medical care for timing; use this only to pick a calmer slot within your doctor's schedule.":
+      "Never delay a vaccine or medical care for timing. Use this only to pick a calmer slot from what your doctor offers.":
         "समय के लिए टीका या इलाज कभी न टालें; इसे केवल डॉक्टर के समय में शांत स्लॉट चुनने के लिए उपयोग करें।",
     },
   },
@@ -3471,7 +3471,7 @@ function localizeTimingLine(line: string, locale: AppLocale): string {
   const c = TIMING_COPY[locale];
   if (c.lines[line]) return c.lines[line];
   if (line === "Tarabala: Janma (mixed)") return c.janmaMixed;
-  if (line === "No assessed general daytime window") return c.noWindow;
+  if (line === "No good daytime slot found today") return c.noWindow;
   let m = /^Tarabala: (.+)$/.exec(line);
   if (m) return `${c.tarabala}: ${m[1]}`;
   m = /^Chandrabala: traditionally (supportive|mixed)$/.exec(line);
@@ -3575,7 +3575,7 @@ function buildAskContext(
   };
 }
 
-const RAHU_LABEL: Record<AppLocale, string> = { en: "Rahu Kalam", te: "రాహు కాలం", hi: "राहु काल" };
+const RAHU_LABEL: Record<AppLocale, string> = { en: "Rahu Kalam", te: "రాహుకాలం", hi: "राहु काल" };
 
 function composeAskCopy(
   a: AskLlmAnswer,
@@ -3585,7 +3585,7 @@ function composeAskCopy(
   locale: AppLocale,
 ): AskAnswerCopy {
   const prefix = locale === "te"
-    ? { good: "మంచి సమయం", caution: "జాగ్రత్త సమయం" }
+    ? { good: "మంచి టైమ్", caution: "జాగ్రత్త టైమ్" }
     : locale === "hi"
     ? { good: "अच्छा समय", caution: "सावधानी समय" }
     : { good: "Good time", caution: "Caution time" };
@@ -4448,7 +4448,7 @@ async function _handleInternal(
     if (!access.isPro && (birthCount ?? 0) > 0) {
       throw new ActionError(
         "pro_required_language",
-        "Changing the language is part of Pro. Your reading stays in your current language.",
+        "Switching languages is a Pro thing. Your reading stays in its current language.",
         403,
       );
     }
@@ -4594,7 +4594,7 @@ async function _handleInternal(
         "manage_elsewhere",
         access.provider === "revenuecat" || access.provider === "play"
           ? "This plan is billed by Google Play. Cancel it in Play Store > Payments & subscriptions."
-          : "This plan was granted manually and does not renew.",
+          : "This plan was added manually and won't renew.",
         400,
       );
     }
@@ -4665,7 +4665,7 @@ async function _handleInternal(
       if (!chartAccess.isPro) {
         throw new ActionError(
           "pro_required_charts",
-          "Adding family and friends is part of Pro.",
+          "Adding family and friends is a Pro thing.",
           403,
         );
       }
@@ -4820,7 +4820,7 @@ async function _handleInternal(
       throw new ActionError(
         code,
         limits.reason === "pro_required"
-          ? "Editing birth details is part of Pro."
+          ? "Editing birth details is a Pro thing."
           : "You've reached the birth-detail edit limit (2 per 30 days, 5 per year).",
         limits.reason === "pro_required" ? 403 : 429,
       );
@@ -5048,7 +5048,7 @@ async function _handleInternal(
     if (!pack) {
       throw new ActionError(
         "birth_pack_not_ready",
-        "Birth pack is not ready yet",
+        "Your reading isn't ready yet",
         503,
       );
     }
@@ -5056,7 +5056,7 @@ async function _handleInternal(
     if (!isClientServablePack(pack)) {
       throw new ActionError(
         "birth_pack_not_ready",
-        "Birth pack is not ready yet",
+        "Your reading isn't ready yet",
         503,
       );
     }
@@ -5350,36 +5350,36 @@ async function _handleInternal(
     let mdLord = "";
     let adLord = "";
     let rhythm_title = scope === "weekly"
-      ? locale === "te" ? "ఈ వారం లయ" : locale === "hi" ? "इस हफ्ते की लय" : "Weekly Rhythm"
+      ? locale === "te" ? "ఈ వారం రిథమ్" : locale === "hi" ? "इस हफ्ते की लय" : "Weekly Rhythm"
       : locale === "te"
-      ? "ఈ నెల దృష్టి"
+      ? "ఈ నెల ఫోకస్"
       : locale === "hi"
       ? "इस महीने का स्वर"
       : "Monthly Outlook";
     let rhythm_body = locale === "te"
-      ? "ఈ కాలం స్థిరమైన పురోగతికి దారి తీసేలా కనిపిస్తోంది."
+      ? "ఈ టైమ్ స్టడీ ప్రోగ్రెస్ వైపు వెళ్తున్నట్టు ఉంది."
       : locale === "hi"
       ? "यह दौर स्थिर प्रगति की ओर जाता हुआ दिखता है।"
-      : "The stars are aligning for a period of steady growth.";
+      : "This stretch looks set for slow, steady progress.";
     let betterFor = scope === "weekly"
       ? (locale === "te"
-        ? ["పని ప్రణాళిక", "డబ్బు క్రమం", "కుటుంబ ఫాలో-థ్రూ"]
+        ? ["పని ప్లాన్", "డబ్బు లెక్కలు", "ఫ్యామిలీ పనులు పూర్తి చేయడం"]
         : locale === "hi"
         ? ["काम की योजना", "पैसे में अनुशासन", "परिवार में निरंतरता"]
         : ["Work planning", "Money discipline", "Family follow-through"])
       : (locale === "te"
-        ? ["దీర్ఘ ప్రణాళిక", "డబ్బులో సమతుల్యం", "సంబంధ స్థిరత్వం"]
+        ? ["లాంగ్-టర్మ్ ప్లాన్", "డబ్బులో బ్యాలెన్స్", "రిలేషన్‌లో స్టెబిలిటీ"]
         : locale === "hi"
         ? ["लंबी योजना", "पैसे का संतुलन", "रिश्तों में स्थिरता"]
         : ["Long-term planning", "Money balance", "Relationship steadiness"]);
     let beCarefulWith = scope === "weekly"
       ? (locale === "te"
-        ? ["ఆవేశ స్పందనలు", "అధిక వాగ్దానాలు"]
+        ? ["ఆవేశంతో రియాక్ట్ అవ్వడం", "ఎక్కువ ప్రామిస్‌లు"]
         : locale === "hi"
         ? ["आवेग वाली प्रतिक्रिया", "ज्यादा वादे"]
         : ["Impulsive reactions", "Overpromising"])
       : (locale === "te"
-        ? ["శక్తి తినే బాధ్యతలు", "అహంకార ఢీకొన్లు"]
+        ? ["ఎనర్జీ తినేసే బాధ్యతలు", "ఈగో గొడవలు"]
         : locale === "hi"
         ? ["ऊर्जा खींचने वाली जिम्मेदारियां", "अहम टकराव"]
         : ["Draining commitments", "Ego clashes"]);
@@ -5914,7 +5914,7 @@ async function _handleInternal(
     const lng = profile.current_lng == null ? NaN : Number(profile.current_lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       throw new ActionError("location_required",
-        "Select and save your current city in Profile to calculate its local timings.", 422);
+        "Pick and save your current city in Settings so we can work out local times.", 422);
     }
     const bi = await resolveBirthInputForRequest(supabase, profile.id, body);
     const natal = birthMoonDetails(bi, tz, locale);
@@ -6650,7 +6650,7 @@ const CHILD_MILESTONES: {
   { id: "naming", notifyAtDay: 7, purpose: "child_naming", name: { en: "Naming ceremony", te: "నామకరణం", hi: "नामकरण" } },
   { id: "first_food", notifyAtDay: 150, purpose: "child_first_food", name: { en: "Annaprashana (first rice)", te: "అన్నప్రాశన", hi: "अन्नप्राशन" } },
   { id: "first_haircut", notifyAtDay: 330, purpose: "child_first_haircut", name: { en: "First haircut", te: "పుట్టు వెంట్రుకలు", hi: "मुंडन" } },
-  { id: "school_start", notifyAtDay: 3 * 365 - 45, purpose: "child_school_start", name: { en: "Starting school", te: "అక్షరాభ్యాసం / బడి ప్రారంభం", hi: "विद्यारंभ" } },
+  { id: "school_start", notifyAtDay: 3 * 365 - 45, purpose: "child_school_start", name: { en: "Starting school", te: "అక్షరాభ్యాసం / స్కూల్ స్టార్ట్", hi: "विद्यारंभ" } },
 ];
 
 const MOMENT_COPY: Record<AppLocale, {
@@ -6667,26 +6667,26 @@ const MOMENT_COPY: Record<AppLocale, {
 }> = {
   en: {
     chapterSoonTitle: (who, lord) => who ? `${who}'s ${lord} chapter begins next week` : `Your ${lord} chapter begins next week`,
-    chapterSoonBody: (date, lord) => `A new ${lord} period starts on ${date}. Read what it brings and plan the first steps.`,
-    chapterTodayTitle: (who, lord) => who ? `${who}'s ${lord} chapter begins today` : `Your ${lord} chapter begins today`,
-    chapterTodayBody: (lord) => `The ${lord} period starts today. Your Life page has the themes for this chapter.`,
+    chapterSoonBody: (date, lord) => `A new ${lord} chapter starts on ${date}. See what it brings and plan your first steps.`,
+    chapterTodayTitle: (who, lord) => who ? `${who}'s ${lord} chapter begins today` : `Your ${lord} chapter starts today ✨`,
+    chapterTodayBody: (lord) => `The ${lord} chapter starts today. Your Life page has what it's about.`,
     milestoneTitle: (name, child) => `${name} for ${child}`,
     milestoneBody: (child) => `The usual time for this is coming up. Find a good date for ${child} in a few taps.`,
-    bdayTitle: (who) => `${who}'s birthday today`,
-    bdayBody: (w) => w ? `A good window for wishes or a small puja: ${w}.` : `Open Muhūrta for today's good window.`,
-    bdayChildTitle: (who, age) => `${who} turns ${age} today`,
+    bdayTitle: (who) => `It's ${who}'s birthday 🎂`,
+    bdayBody: (w) => w ? `Good time for wishes or a small puja: ${w}.` : `Open Muhūrta for today's good time.`,
+    bdayChildTitle: (who, age) => `${who} turns ${age} today 🎉`,
     you: "",
   },
   te: {
-    chapterSoonTitle: (who, lord) => who ? `${who}కి వచ్చే వారం ${lord} దశ మొదలు` : `వచ్చే వారం మీ ${lord} దశ మొదలు`,
-    chapterSoonBody: (date, lord) => `${date} నుండి కొత్త ${lord} కాలం. అది ఏమి తెస్తుందో చదివి, మొదటి అడుగులు ప్లాన్ చేసుకోండి.`,
-    chapterTodayTitle: (who, lord) => who ? `ఈ రోజు ${who}కి ${lord} దశ మొదలు` : `ఈ రోజు మీ ${lord} దశ మొదలు`,
-    chapterTodayBody: (lord) => `${lord} కాలం ఈ రోజు మొదలవుతుంది. ఈ అధ్యాయం విషయాలు జీవనం పేజీలో ఉన్నాయి.`,
+    chapterSoonTitle: (who, lord) => who ? `${who}కి వచ్చే వారం ${lord} దశ స్టార్ట్` : `వచ్చే వారం మీ ${lord} దశ స్టార్ట్`,
+    chapterSoonBody: (date, lord) => `${date} నుంచి కొత్త ${lord} దశ. ఏం తెస్తుందో చదివి, మొదటి స్టెప్స్ ప్లాన్ చేసుకోండి.`,
+    chapterTodayTitle: (who, lord) => who ? `ఈరోజు ${who}కి ${lord} దశ స్టార్ట్` : `ఈరోజు మీ ${lord} దశ స్టార్ట్ ✨`,
+    chapterTodayBody: (lord) => `${lord} దశ ఈరోజే స్టార్ట్. ఈ చాప్టర్ వివరాలు లైఫ్ పేజీలో ఉన్నాయి.`,
     milestoneTitle: (name, child) => `${child}కి ${name}`,
-    milestoneBody: (child) => `దీనికి సాధారణ సమయం దగ్గర పడుతోంది. ${child}కి మంచి తేదీని సులభంగా కనుగొనండి.`,
-    bdayTitle: (who) => `ఈ రోజు ${who} పుట్టినరోజు`,
-    bdayBody: (w) => w ? `శుభాకాంక్షలు లేదా చిన్న పూజకు మంచి సమయం: ${w}.` : `ఈ రోజు మంచి సమయం కోసం ముహూర్త తెరవండి.`,
-    bdayChildTitle: (who, age) => `ఈ రోజు ${who}కి ${age} ఏళ్లు`,
+    milestoneBody: (child) => `దీనికి మామూలు టైమ్ దగ్గర పడుతోంది. ${child}కి మంచి తేదీ ఈజీగా వెతకండి.`,
+    bdayTitle: (who) => `ఈరోజు ${who} బర్త్‌డే 🎂`,
+    bdayBody: (w) => w ? `విషెస్ లేదా చిన్న పూజకి మంచి టైమ్: ${w}.` : `ఈరోజు మంచి టైమ్ కోసం Muhūrta ఓపెన్ చేయండి.`,
+    bdayChildTitle: (who, age) => `ఈరోజు ${who}కి ${age} ఏళ్లు 🎉`,
     you: "",
   },
   hi: {

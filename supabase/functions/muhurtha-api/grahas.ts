@@ -23,8 +23,7 @@ const norm = (d: number) => ((d % 360) + 360) % 360;
 
 /**
  * Lahiri (Chitrapaksha) ayanamsa, fitted to the Swiss Ephemeris over 1900-2100 (error < 0.01").
- * NOTE: ephemeris.ts' older lahiriAyanamsaDeg uses the 1900 constant with a J2000 epoch and
- * reads about 1.4° low; it is kept as is for the existing readings until that is migrated.
+ * ephemeris.ts' lahiriAyanamsaDeg uses the same fit (fixed 2026-10-24).
  */
 export function lahiriTrueDeg(jdUt: number): number {
   const t = (jdUt - 2451545.0) / 36525;

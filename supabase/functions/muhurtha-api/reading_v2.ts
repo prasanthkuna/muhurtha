@@ -6,11 +6,12 @@
  * validation/repair selection, sanitizing, the legacy-compatible view and the
  * zero-call adapter for readings written by the old 6-phase pack pipeline.
  */
+import { DATE_RULE, polishDeep, VOICE_BLOCK } from "./voice.ts";
 import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 
 export const READING_SCHEMA_VERSION = 2;
-export const READING_PROMPT_VERSION = "reading-v2.2";
+export const READING_PROMPT_VERSION = "reading-v2.3";
 
 export type ReadingLocale = "en" | "te" | "hi";
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
@@ -282,6 +283,15 @@ export const BANNED_PHRASES: Record<ReadingLocale, string[]> = {
     "rahu kalam is better",
     "good vibes",
     "manifest",
+    "auspicious",
+    "favourable",
+    "favorable",
+    "energies",
+    "harness",
+    "navigate",
+    "delve",
+    "tapestry",
+    "embark",
   ],
   te: [
     "వైపు మలుపు తిరిగిన దశ",
@@ -289,6 +299,9 @@ export const BANNED_PHRASES: Record<ReadingLocale, string[]> = {
     "ఇది పిల్లల దశ కాబట్టి",
     "విశ్వం",
     "నక్షత్రాలు చెబుతున్నాయి",
+    "శుభప్రదమైన",
+    "అనుకూలమైన కాలం",
+    "సమయ విండో",
   ],
   hi: [
     "ब्रह्मांड",
@@ -304,8 +317,9 @@ export function buildSystemPrompt(facts: V2Facts): string {
   return [
     `You write a personal Vedic-astrology reading for the Muhurta app. Write EVERYTHING in ${lang}.` +
     (facts.locale === "en" ? "" : ` Write natively in ${lang} (not a translation); everyday words, not Sanskrit-heavy. Common English words like 'Pro' are fine, but sentences must be in ${lang} script.`),
-    "Voice: warm, specific, practical, calm. Short sentences. Second person ('you') for the account owner; for another person use their name." +
-    (facts.locale === "hi" ? " Hindi: always the respectful aap form (karein, rakhein), never tum/tu forms." : facts.locale === "te" ? " Telugu: always the respectful meeru form, never informal forms." : ""),
+    "Voice: warm, specific, everyday, a little playful. Short sentences. Second person ('you') for the account owner; for another person use their name.",
+    VOICE_BLOCK[facts.locale],
+    DATE_RULE,
     "Rules:",
     "1. The engine owns all facts. Never write clock times, durations in hours, years, dates, ages or planet/graha names in days, weekdays, weeks, months or push. Planet names are allowed only inside chapters and profile, and only when they help.",
     "2. Every day must read differently: use that day's tithi, nakshatra, yoga, moon sign, tara and day_tone to choose a different angle, title and chips. Never reuse a title, opening phrase or chip across days. Do not mention the weekday name in day titles.",
@@ -317,7 +331,8 @@ export function buildSystemPrompt(facts: V2Facts): string {
       ? "7. This is a child's chart: speak to the parent about the child. Areas are child areas. No career, money, romance or marriage. No fear, no medical claims; never suggest delaying care."
       : "7. No fear, no guaranteed outcomes, no medical, legal or financial certainty. Remedies are simple habits, prayers or kindness; never purchases or gemstones.",
     `8. Never use these phrases: ${BANNED_PHRASES[facts.locale].concat(facts.locale === "en" ? [] : BANNED_PHRASES.en.slice(0, 4)).map((p) => `"${p}"`).join(", ")}.`,
-    "9. Respect every max length. Be concrete; no filler.",
+    "9. Respect every max length. Be concrete; no filler. Do not copy the engine's English phrases from FACTS word for word: say the same idea in your own natural words.",
+    "10. Emoji: at most one, and only in push titles/bodies or share_line. None elsewhere.",
   ].join("\n");
 }
 
@@ -360,7 +375,13 @@ function cleanDayCopy<T extends V2DayCopy>(d: T, allowedWindows: Set<string> | n
   };
 }
 
+const POLISH_SKIP = new Set(["date", "weekday", "window_id", "area_id", "period_key", "topic"]);
+
 export function sanitizeContent(c: V2Content, facts: V2Facts): V2Content {
+  return polishDeep(sanitizeRaw(c, facts), facts.locale, POLISH_SKIP);
+}
+
+function sanitizeRaw(c: V2Content, facts: V2Facts): V2Content {
   const dayWin = new Map(facts.days.map((d) => [d.date, new Set(d.windows.map((w) => w.id))]));
   const wdWin = new Map(facts.weekdays.map((d) => [d.weekday, new Set(d.windows.map((w) => w.id))]));
   const period = (p: V2Content["weeks"][number]) => ({
@@ -686,7 +707,9 @@ function nativeView(loc: string, xs: string[] | undefined): string[] {
 }
 
 /** Build the content object today's PWA and engine readers understand. */
-export function buildReadingView(c: V2Content, facts: V2Facts, opts: ViewOptions): Record<string, unknown> {
+export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptions): Record<string, unknown> {
+  // Older stored readings (v2.2 and legacy) get the same last-mile voice fixes (human dates, no "window").
+  const c = polishDeep(raw, opts.locale, POLISH_SKIP);
   const now = DateTime.fromISO(opts.dateStr, { zone: opts.tz }).set({ hour: 12 }).toMillis();
   const byDate = new Map((c.days ?? []).map((d) => [d.date, d]));
   const byWeekday = new Map((c.weekdays ?? []).map((d) => [d.weekday, d]));
