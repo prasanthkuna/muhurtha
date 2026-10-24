@@ -67,7 +67,7 @@ function MatchInner() {
             <p className="font-serif text-lg text-ink">{t("match.full")}</p>
             <p className="mt-1 text-sm text-ink-secondary">{t("match.fullSub")}</p>
             <Link href="/auth?next=/bond" className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-gold-button text-sm font-semibold text-ink" data-testid="public-full">
-              {t("match.cta")} →
+              {t("match.start")} →
             </Link>
           </div>
           <button type="button" onClick={() => setRes(null)} className="mt-3 w-full text-center text-xs font-semibold text-ink-tertiary">{t("bond.quick.again")}</button>

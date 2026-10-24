@@ -24,7 +24,7 @@ const en: Record<string, string> = {
   "bond.subtitle": "How you two flow — and small ways to make it easier.",
   "bond.quick.title": "Check your match in 10 seconds",
   "bond.quick.sub": "Their birth star or birth date is enough. Free.",
-  "bond.quick.byStar": "I know their star",
+  "bond.quick.byStar": "I know the star",
   "bond.quick.byDate": "Use birth date",
   "bond.quick.partnerName": "Their first name",
   "bond.quick.star": "Their birth star (nakshatra)",
@@ -232,6 +232,7 @@ const en: Record<string, string> = {
   "match.cta": "See our score",
   "match.full": "Get the full match free",
   "match.fullSub": "Kootas in plain words, Kuja check and a monthly couple guide.",
+  "match.start": "Start free — see the full match",
   "match.privacy": "Nothing is saved. Stars are computed on the spot.",
 
   // Calendar
@@ -518,6 +519,7 @@ const te: Record<string, string> = {
   "match.cta": "మా స్కోర్ చూడు",
   "match.full": "పూర్తి పొంతన ఉచితంగా చూడండి",
   "match.fullSub": "కూటాలు సింపుల్ మాటల్లో, కుజ చెక్, నెలవారీ జంట గైడ్.",
+  "match.start": "ఉచితంగా మొదలుపెట్టండి — పూర్తి పొంతన చూడండి",
   "match.privacy": "ఏదీ సేవ్ అవ్వదు. నక్షత్రాలు అక్కడికక్కడే లెక్కిస్తాం.",
 
   "cal.title": "క్యాలెండర్",
@@ -803,6 +805,7 @@ const hi: Record<string, string> = {
   "match.cta": "हमारा स्कोर देखें",
   "match.full": "पूरा मिलान मुफ़्त देखें",
   "match.fullSub": "कूट आसान शब्दों में, मंगल जाँच और मासिक कपल गाइड।",
+  "match.start": "मुफ़्त शुरू करें — पूरा मिलान देखें",
   "match.privacy": "कुछ सेव नहीं होता। नक्षत्र उसी समय गिने जाते हैं।",
 
   "cal.title": "कैलेंडर",
