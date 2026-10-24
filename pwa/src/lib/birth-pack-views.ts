@@ -286,6 +286,7 @@ export function normalizePackResponse(j: Record<string, unknown>): BirthPackPayl
     displayName: j.displayName?.toString() ?? "",
     locationLabel: j.locationLabel?.toString() ?? "",
     status: j.status?.toString() ?? "ready",
+    readingVersion: j.readingVersion?.toString() ?? j.readingId?.toString() ?? undefined,
     content,
     access,
     packMeta:

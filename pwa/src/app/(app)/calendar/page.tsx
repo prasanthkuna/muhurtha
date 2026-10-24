@@ -10,17 +10,19 @@ import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { usePaywall } from "@/context/paywall-context";
 import { bondPost, clock, monthLabel, shortDate, type AreaId, type CalDay, type YearMonth } from "@/lib/bond";
-import { fill } from "@/lib/messages-bond";
+import { fill, nakLabel } from "@/lib/messages-bond";
+import { AREA_ICON as AREA_GLYPH, AREA_ORDER, calWhyLine, tithiLabel } from "@/lib/cal-text";
 
 type MonthResp = { locked: boolean; month: string; today: string; days: CalDay[]; approximate: boolean };
 type YearResp = { locked: boolean; from: string; months: YearMonth[]; approximate: boolean };
 
 const TONE: Record<CalDay["tone"], { cell: string; dot: string; chip: string }> = {
-  supportive: { cell: "bg-success-wash/70", dot: "bg-success-ink/70", chip: "bg-success-wash text-success-ink" },
-  mixed: { cell: "bg-paper", dot: "bg-gold-accent", chip: "bg-gold-wash text-gold-text" },
-  rest: { cell: "bg-[#ece8f7]/70", dot: "bg-[#9a8fc4]", chip: "bg-[#ece8f7] text-[#4b3f80]" },
+  supportive: { cell: "bg-success-wash/70", dot: "bg-success-wash", chip: "bg-success-wash text-success-ink" },
+  // Every tone tints its cells the same way its legend swatch does (mixed used to stay plain paper).
+  mixed: { cell: "bg-gold-wash/50", dot: "bg-gold-wash", chip: "bg-gold-wash text-gold-text" },
+  rest: { cell: "bg-[#ece8f7]/70", dot: "bg-[#ece8f7]", chip: "bg-[#ece8f7] text-[#4b3f80]" },
 };
-const AREA_ICON: Record<AreaId, string> = { money: "₹", travel: "✈", talks: "💬", love: "♥", health: "✚", rest: "☾", new_starts: "✦" };
+const AREA_ICON = AREA_GLYPH as Record<AreaId, string>;
 
 function shiftMonth(ym: string, n: number) {
   const [y, m] = ym.split("-").map(Number);
@@ -36,7 +38,15 @@ function DayDetail({ d, label }: { d: CalDay; label?: string }) {
         <p className="text-sm font-semibold text-ink">{label ? `${label} · ` : ""}{shortDate(d.date, locale)}</p>
         <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold", TONE[d.tone].chip)}>{t(`cal.tone.${d.tone}`)}</span>
       </div>
-      {d.chandrashtama ? <p className="mt-2 rounded-lg bg-warning-wash/60 px-2.5 py-1.5 text-xs font-medium text-warning-ink">{t("cal.chandrashtama")}</p> : null}
+      {calWhyLine(d, t, locale) ? (
+        <p className="mt-2 text-sm leading-relaxed text-ink-secondary" data-testid="cal-why">{calWhyLine(d, t, locale)}</p>
+      ) : null}
+      {d.chandrashtama ? (
+        <div className="mt-2 rounded-lg bg-warning-wash/60 px-2.5 py-1.5 text-xs text-warning-ink">
+          <p className="font-medium">{t("cal.chandrashtama")}</p>
+          <p className="mt-0.5">{t("cal.chandrashtamaGloss")}</p>
+        </div>
+      ) : null}
       {d.favours.length ? (
         <p className="mt-2 text-sm text-ink">
           <span className="text-ink-tertiary">{t("cal.favours")}: </span>
@@ -50,9 +60,16 @@ function DayDetail({ d, label }: { d: CalDay; label?: string }) {
         </p>
       ) : null}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-secondary">
-        {d.best ? <span>{t("cal.best")}: <b className="font-semibold text-ink">{clock(d.best.start)}–{clock(d.best.end)}</b></span> : null}
+        {d.best ? <span>{d.best_kind === "calm" ? t("cal.calm") : t("cal.best")}: <b className="font-semibold text-ink">{clock(d.best.start)}–{clock(d.best.end)}</b></span> : null}
         {d.rahu ? <span>{t("cal.rahu")}: {clock(d.rahu.start)}–{clock(d.rahu.end)}</span> : null}
       </div>
+      <p className="mt-2 text-xs text-ink-tertiary" data-testid="cal-panchang">
+        {[
+          d.nakshatra ? fill(t("cal.star"), { star: nakLabel(d.nakshatra, locale) }) : "",
+          d.tithi ? fill(t("cal.tithi"), { tithi: tithiLabel(d.tithi, locale) }) : "",
+          d.birth_star ? `★ ${t("cal.birthStar")}` : "",
+        ].filter(Boolean).join(" · ")}
+      </p>
     </div>
   );
 }
@@ -197,9 +214,19 @@ export default function CalendarPage() {
             <MonthGrid data={data} picked={picked} onPick={setPicked} />
             <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px] text-ink-secondary">
               {(["supportive", "mixed", "rest"] as const).map((k) => (
-                <span key={k} className="inline-flex items-center gap-1"><span className={cn("h-2 w-2 rounded-full", TONE[k].dot)} />{t(`cal.tone.${k}`)}</span>
+                <span key={k} className="inline-flex items-center gap-1"><span className={cn("h-3 w-3 rounded border border-line", TONE[k].dot)} />{t(`cal.tone.${k}`)}</span>
               ))}
             </div>
+            <details className="rounded-2xl border border-line bg-paper px-4 py-2 text-xs text-ink-secondary" data-testid="cal-legend">
+              <summary className="cursor-pointer py-1 font-semibold text-ink-tertiary">{t("cal.legend.title")}</summary>
+              <p className="mt-1">{t("cal.legend.icon")}</p>
+              <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                {AREA_ORDER.map((a) => (
+                  <span key={a}>{AREA_ICON[a as AreaId]} {t(`cal.area.${a}`)}</span>
+                ))}
+              </div>
+              <p className="mt-1.5 inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-warning-ink/70" />{t("cal.legend.dot")}</p>
+            </details>
             {pickedDay ? <DayDetail d={pickedDay} label={pickedDay.date === data.today ? t("cal.today") : undefined} /> : null}
           </div>
         )

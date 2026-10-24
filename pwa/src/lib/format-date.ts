@@ -3,6 +3,11 @@ import type { AppLocale } from "./locale";
 
 const INTL_LOCALE: Record<AppLocale, string> = { en: "en-IN", te: "te-IN", hi: "hi-IN" };
 
+/** en-IN spells September "Sept"; every other month is three letters, so use "Sep" everywhere. */
+export function fixSept(s: string): string {
+  return s.replace(/\bSept\b\.?/g, "Sep");
+}
+
 /** One date style everywhere: "Thu, 23 Oct 2026" (localized). Input is YYYY-MM-DD or ISO. */
 export function formatDisplayDate(
   value: string | null | undefined,
@@ -12,12 +17,12 @@ export function formatDisplayDate(
   if (!value) return "";
   const dt = DateTime.fromISO(value.slice(0, 10));
   if (!dt.isValid) return value;
-  return dt.setLocale(INTL_LOCALE[locale] ?? "en-IN").toLocaleString({
+  return fixSept(dt.setLocale(INTL_LOCALE[locale] ?? "en-IN").toLocaleString({
     ...(opts.weekday === false ? {} : { weekday: "short" }),
     day: "numeric",
     month: "short",
     ...(opts.year === false ? {} : { year: "numeric" }),
-  });
+  }));
 }
 
 /** "Mon YYYY" for life chapter boundaries. */
@@ -25,10 +30,10 @@ export function formatMonthYear(value: string | null | undefined, locale: AppLoc
   if (!value) return "";
   const dt = DateTime.fromISO(value.slice(0, 10));
   if (!dt.isValid) return value;
-  return dt.setLocale(INTL_LOCALE[locale] ?? "en-IN").toLocaleString({
+  return fixSept(dt.setLocale(INTL_LOCALE[locale] ?? "en-IN").toLocaleString({
     month: "short",
     year: "numeric",
-  });
+  }));
 }
 
 /** Normalize a chapter period to "Jan 2019 – Jul 2020" whichever source shape it has. */
@@ -42,7 +47,7 @@ export function formatPeriod(
     return `${formatMonthYear(start, locale)} – ${formatMonthYear(end, locale)}`;
   }
   const dashed = label.replace(/\s+-\s+/g, " – ");
-  return locale === "en" ? dashed : localizeMonthNames(dashed, locale);
+  return locale === "en" ? fixSept(dashed) : localizeMonthNames(dashed, locale);
 }
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];

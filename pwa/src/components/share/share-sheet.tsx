@@ -1,5 +1,6 @@
 "use client";
 
+import { fixSept } from "@/lib/format-date";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Glyph } from "@/components/ui/glyph";
 import { useAppData } from "@/context/app-data-context";
@@ -53,12 +54,12 @@ function prettyDate(iso: string | undefined, locale: string): string | undefined
   if (!iso) return undefined;
   const d = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat(locale === "te" ? "te-IN" : locale === "hi" ? "hi-IN" : "en-IN", {
+  return fixSept(new Intl.DateTimeFormat(locale === "te" ? "te-IN" : locale === "hi" ? "hi-IN" : "en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
     timeZone: "UTC",
-  }).format(d);
+  }).format(d));
 }
 
 /**

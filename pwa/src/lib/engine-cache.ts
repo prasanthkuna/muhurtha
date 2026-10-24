@@ -19,8 +19,13 @@ function todayKey(userId: string, locale: string, chartProfileId: string | null,
 
 const LAST_UID_KEY = "muh_last_uid_v1";
 const PROFILE_TZ_KEY = "muh_profile_tz_v1";
-/** Pack older than this is still rendered instantly but revalidated in the background. */
-export const PACK_REVALIDATE_MS = 60 * 60 * 1000;
+/**
+ * Pack older than this is still rendered instantly but revalidated in the background. Kept short:
+ * a regenerated or corrected reading must replace the cached one on the next open, not an hour later.
+ */
+export const PACK_REVALIDATE_MS = 60 * 1000;
+/** Today payloads embed pack text; never trust one older than this. */
+const TODAY_TTL_MS = 20 * 60 * 1000;
 
 export function readLastUserId(): string | null {
   if (typeof window === "undefined") return null;
@@ -122,6 +127,7 @@ export function readCachedToday(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedToday;
     if (parsed.today.date !== date) return null;
+    if (Date.now() - (parsed.savedAt ?? 0) > TODAY_TTL_MS) return null;
     return parsed.today;
   } catch {
     return null;
@@ -143,6 +149,17 @@ export function writeCachedToday(
     );
   } catch {
     /* quota */
+  }
+}
+
+/** Drop every cached Today/day payload for one user + locale + chart (pack text changed). */
+export function clearCachedTodays(userId: string, locale: string, chartProfileId: string | null) {
+  if (typeof window === "undefined" || !userId) return;
+  const prefix = `${TODAY_PREFIX}${userId}_${locale}_${chartProfileId ?? "self"}_`;
+  try {
+    for (const key of Object.keys(localStorage)) if (key.startsWith(prefix)) localStorage.removeItem(key);
+  } catch {
+    /* ignore */
   }
 }
 

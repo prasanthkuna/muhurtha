@@ -1,3 +1,4 @@
+import { fixSept } from "@/lib/format-date";
 /** Bond + Calendar client: types mirror the engine payloads (codes only; words come from
  *  messages-bond.ts). */
 export type Band = "very_easy" | "good" | "needs_care";
@@ -42,6 +43,7 @@ export type CalDay = {
   date: string; weekday: number; tone: "supportive" | "mixed" | "rest"; favours: AreaId[]; avoid: AreaId | null;
   chandrashtama: boolean; peak: number; scores: Record<AreaId, number>; best: { start: string; end: string } | null;
   rahu: { start: string; end: string } | null; tithi: string; nakshatra: string;
+  tara?: string | null; birth_star?: boolean; why?: string; best_kind?: "go" | "calm";
 };
 export type YearMonth = {
   month: string; theme: string; ad_lord: string | null; ad_change: boolean; supportive_days: number; rest_days: number;
@@ -86,7 +88,7 @@ export const BAND_STYLE: Record<Band, { ring: string; text: string; wash: string
 
 export function shortDate(iso: string, locale: string): string {
   const d = new Date(`${iso}T12:00:00`);
-  return d.toLocaleDateString(locale === "te" ? "te-IN" : locale === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short" });
+  return fixSept(d.toLocaleDateString(locale === "te" ? "te-IN" : locale === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short" }));
 }
 
 export function monthLabel(ym: string, locale: string, withYear = true): string {

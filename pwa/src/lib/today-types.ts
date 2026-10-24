@@ -17,6 +17,22 @@ export type TodayPayload = {
   cautionWindows: TimingWindow[];
   currentLifePeriod?: { label?: string; summary?: string };
   lifeChapter?: { title?: string; summary?: string; currentChapterLabel?: string };
+  /** Sunrise panchang for the day (engine). */
+  dayStar?: string;
+  tithi?: string;
+  tara?: string;
+  birthStarToday?: boolean;
+  /** The Calendar tab's verdict for the same date (same scoring). */
+  calendar?: TodayCalendar | null;
+};
+
+export type TodayCalendar = {
+  tone: "supportive" | "mixed" | "rest";
+  favours: string[];
+  avoid: string | null;
+  why?: string;
+  chandrashtama?: boolean;
+  birthStar?: boolean;
 };
 
 export function parseTodayPayload(raw: Record<string, unknown>): TodayPayload {
@@ -34,6 +50,8 @@ export function parseTodayPayload(raw: Record<string, unknown>): TodayPayload {
   };
 
   const clp = raw.currentLifePeriod as Record<string, unknown> | undefined;
+  const pan = (raw.panchanga ?? null) as Record<string, Record<string, unknown> | undefined> | null;
+  const cal = (raw.calendar ?? null) as Record<string, unknown> | null;
   const lc = raw.lifeChapter as Record<string, unknown> | undefined;
 
   return {
@@ -56,5 +74,20 @@ export function parseTodayPayload(raw: Record<string, unknown>): TodayPayload {
           currentChapterLabel: lc.currentChapterLabel?.toString(),
         }
       : undefined,
+    // Sunrise values from the Calendar's own scoring first, so both tabs name the same star.
+    dayStar: cal?.nakshatra?.toString() || pan?.nakshatra?.value?.toString() || raw.moonNakshatra?.toString(),
+    tithi: cal?.tithi?.toString() || pan?.tithi?.value?.toString(),
+    tara: pan?.tarabala?.value?.toString(),
+    birthStarToday: raw.birthStarToday === true || cal?.birth_star === true,
+    calendar: cal && typeof cal.tone === "string"
+      ? {
+          tone: cal.tone as TodayCalendar["tone"],
+          favours: Array.isArray(cal.favours) ? cal.favours.map(String) : [],
+          avoid: cal.avoid ? String(cal.avoid) : null,
+          why: cal.why ? String(cal.why) : undefined,
+          chandrashtama: cal.chandrashtama === true,
+          birthStar: cal.birth_star === true,
+        }
+      : null,
   };
 }

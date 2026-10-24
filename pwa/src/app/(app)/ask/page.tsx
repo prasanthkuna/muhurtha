@@ -11,6 +11,9 @@ import { useLocale } from "@/context/locale-context";
 import { usePaywall } from "@/context/paywall-context";
 import { parseAskAnswer } from "@/lib/engine-parsers";
 import type { AskMessage } from "@/lib/types";
+import { clipWords, dedupeSessions, mergeStarters } from "@/lib/ask-starters";
+import { bondPost, shortDate, type CalDay } from "@/lib/bond";
+import { fill } from "@/lib/messages-bond";
 
 type SessionRow = { id: string; title: string; updatedAt: string };
 type Thread = { messages: AskMessage[]; sessionId?: string; sessions: SessionRow[] };
@@ -25,10 +28,10 @@ const askThreads = new Map<string, Thread>();
 function AskInner() {
   const params = useSearchParams();
   const seed = params.get("q") ?? "";
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { openPaywall } = usePaywall();
   const engineBody = useEngineBody();
-  const { views, loading, error, userId, activeChartProfileId } = useAppData();
+  const { views, loading, error, userId, activeChartProfileId, today } = useAppData();
   const chartKey = `${userId ?? "anon"}:${activeChartProfileId ?? "self"}`;
   const [threads, setThreads] = useState<Record<string, Thread>>(() =>
     Object.fromEntries(askThreads),
@@ -37,6 +40,25 @@ function AskInner() {
   const { messages, sessionId, sessions } = thread;
   const [input, setInput] = useState(seed);
   const [busy, setBusy] = useState(false);
+  /** Last question that hit a busy model, offered as a one-tap retry. */
+  const [retryQ, setRetryQ] = useState<{ q: string; s: number } | null>(null);
+  const [keyDay, setKeyDay] = useState<CalDay | null>(null);
+
+  // One upcoming strong day (deterministic Calendar scoring, no LLM) for a personal starter.
+  useEffect(() => {
+    if (activeChartProfileId) return;
+    let alive = true;
+    bondPost<{ locked: boolean; today: string; days: CalDay[] }>("calendar_month_get")
+      .then((r) => {
+        if (!alive || !Array.isArray(r.days)) return;
+        const soon = r.days.filter((d) => d.date > r.today && d.tone === "supportive").sort((a, b) => b.peak - a.peak)[0];
+        setKeyDay(soon ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [activeChartProfileId]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   /** Updates one chart's thread; async results always land on the chart they were asked on. */
@@ -86,8 +108,15 @@ function AskInner() {
     return <ReadingUnavailable title={t("nav.ask")} />;
   }
 
-  const suggestions = views.askSuggestions();
   const currentChapter = views.currentChapter();
+  const todayTitle = today?.date ? views.todayCard(today.date)?.title?.toString() : "";
+  const personal = [
+    todayTitle ? fill(t("ask.starter.today"), { title: todayTitle }) : "",
+    keyDay ? fill(t("ask.starter.keyDay"), { date: shortDate(keyDay.date, locale) }) : "",
+    t("ask.starter.week"),
+  ].filter(Boolean);
+  const suggestions = mergeStarters(personal, views.askSuggestions());
+  const chips = dedupeSessions(sessions).slice(0, 8);
 
   async function send(text: string) {
     const q = text.trim();
@@ -97,6 +126,7 @@ function AskInner() {
     const userMsg: AskMessage = { id: crypto.randomUUID(), role: "user", text: q };
     updateThread(key, (t) => ({ ...t, messages: [...t.messages, userMsg] }));
     setBusy(true);
+    setRetryQ(null);
 
     try {
       const res = await fetch("/api/engine", {
@@ -125,6 +155,8 @@ function AskInner() {
         }));
         return;
       }
+      // Model busy or capped: the answer is the reading's fallback; offer a retry like readings do.
+      if (json.llmBusy === true) setRetryQ({ q, s: Number(json.retryAfterS ?? 30) || 30 });
       const parsed = parseAskAnswer(json);
       updateThread(key, (t) => ({
         ...t,
@@ -156,9 +188,10 @@ function AskInner() {
         <div className="mb-4 space-y-2">
           <p className="text-xs font-semibold uppercase text-ink-tertiary">{t("ask.priorChats")}</p>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {sessions.slice(0, 8).map((s) => (
+            {chips.map((s) => (
               <button
                 key={s.id}
+                title={s.title}
                 type="button"
                 onClick={() => {
                   const key = chartKey;
@@ -186,7 +219,8 @@ function AskInner() {
                 }}
                 className="min-h-9 shrink-0 rounded-full border border-line bg-paper px-3 py-1.5 text-sm text-ink-secondary hover:border-gold-accent/50"
               >
-                {s.title.slice(0, 42)}
+                {clipWords(s.title, 42)}
+                {s.count > 1 ? <span className="ml-1 text-ink-tertiary">×{s.count}</span> : null}
               </button>
             ))}
           </div>
@@ -203,7 +237,7 @@ function AskInner() {
             type="button"
             className="mt-2 min-h-9 text-sm font-medium text-gold-text"
             onClick={() =>
-              void send("Explain my current life chapter and its main themes.")
+              void send(fill(t("ask.chapterQ"), { title: currentChapter.title }))
             }
           >
             {t("ask.askChapter")}
@@ -255,6 +289,14 @@ function AskInner() {
             </div>
           ),
         )}
+        {retryQ && !busy ? (
+          <div className="rounded-2xl border border-gold-accent/40 bg-gold-wash/40 px-4 py-3 text-sm text-ink-secondary" data-testid="ask-busy">
+            <p>{fill(t("ask.busy"), { s: retryQ.s })}</p>
+            <button type="button" className="mt-2 min-h-9 font-medium text-gold-text" onClick={() => void send(retryQ.q)}>
+              {t("ask.retry")}
+            </button>
+          </div>
+        ) : null}
         <div ref={bottomRef} />
       </div>
 

@@ -9,6 +9,8 @@ export type BirthPackPayload = {
   content: Record<string, unknown>;
   access?: { isPro?: boolean; planCode?: string };
   packMeta?: PackMeta;
+  /** Server reading id + updated_at; a change means cached Today cards are stale. */
+  readingVersion?: string;
 };
 
 export type PackMeta = {

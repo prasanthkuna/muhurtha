@@ -4,6 +4,8 @@ import { useState } from "react";
 import { MuhField, MuhInput } from "@/components/ui/form-fields";
 import { ShareCardButton } from "@/components/share/share-button";
 import { useLocale } from "@/context/locale-context";
+import { useAppData } from "@/context/app-data-context";
+import type { ChartProfileSummary } from "@/lib/chart-profiles";
 import { bondPost, type Band } from "@/lib/bond";
 import { fill } from "@/lib/messages-bond";
 import { ScoreRing } from "./score-ring";
@@ -19,6 +21,22 @@ export function QuickMatch({ myName, onSave }: { myName: string; onSave: (r: Qui
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [result, setResult] = useState<QuickResult | null>(null);
+  const { chartProfiles } = useAppData();
+  // Saved family / partner charts as one-tap picks (fills the name and birth details).
+  const picks = (chartProfiles ?? []).filter((c) => c.label && (c.dateOfBirth || c.nakshatra)).slice(0, 6);
+  const [pickedId, setPickedId] = useState<string | null>(null);
+
+  function applyPick(c: ChartProfileSummary) {
+    setPickedId(c.id);
+    setName(c.label);
+    setMsg(null);
+    const time = /^\d{1,2}:\d{2}/.test(c.exactBirthTime ?? "") ? (c.exactBirthTime ?? "").slice(0, 5) : "";
+    setPerson(
+      c.dateOfBirth
+        ? { ...emptyPerson, mode: "date", dob: c.dateOfBirth.slice(0, 10), time }
+        : { ...emptyPerson, mode: "star", nakshatra: c.nakshatra ?? "" },
+    );
+  }
 
   async function run() {
     const b = personPayload(person);
@@ -80,6 +98,26 @@ export function QuickMatch({ myName, onSave }: { myName: string; onSave: (r: Qui
         <h2 className="font-serif text-xl text-ink">{t("bond.quick.title")}</h2>
         <p className="mt-1 text-sm text-ink-secondary">{t("bond.quick.sub")}</p>
       </div>
+      {picks.length ? (
+        <div data-testid="quick-picks">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-tertiary">{t("bond.quickPicks")}</p>
+          <div className="flex flex-wrap gap-2">
+            {picks.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => applyPick(c)}
+                className={
+                  "min-h-9 rounded-full border px-3 text-sm " +
+                  (pickedId === c.id ? "border-gold-accent bg-gold-wash text-ink" : "border-line bg-paper text-ink-secondary hover:border-gold-accent/50")
+                }
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <MuhField label={t("bond.quick.partnerName")} htmlFor="qm-name">
         <MuhInput id="qm-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" maxLength={40} />
       </MuhField>

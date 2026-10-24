@@ -24,6 +24,9 @@ import { isChildStage } from "@/lib/life-stage";
 import { todayInTimezone } from "@/lib/local-date";
 import type { TimingWindow, TodayPayload } from "@/lib/today-types";
 import { scrubList, scrubStaleTimes, windowsSummary } from "@/lib/window-text";
+import { dedupeList, mergeStems, restates, upcomingWindows } from "@/lib/day-dedupe";
+import { AREA_ICON, calWhyLine, tithiLabel } from "@/lib/cal-text";
+import { fill, nakLabel } from "@/lib/messages-bond";
 
 /** How far the day browser goes from today (days). */
 const MIN_OFFSET = -30;
@@ -139,6 +142,12 @@ export default function TodayPage() {
   const childChart = isChildStage(activeLifeStage);
   const [outlookOpen, setOutlookOpen] = useState(false);
   const [offset, setOffset] = useState(0);
+  // Re-render every minute so windows that have ended drop off Today.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [other, setOther] = useState<{
     key: string;
     data: TodayPayload | null;
@@ -219,8 +228,28 @@ export default function TodayPage() {
       [],
     allWindows,
   );
+  // Each block keeps its own angle: a block that mostly restates what is already on screen is hidden.
+  const bodyShown = detailedBody && detailedBody !== mainAdvice && !restates(detailedBody, mergeStems(mainAdvice), 0.6)
+    ? detailedBody
+    : "";
+  const seenTop = mergeStems(mainAdvice, bodyShown);
+  const betterForShown = dedupeList(betterFor, seenTop);
+  const seenAll = mergeStems(mainAdvice, bodyShown, ...betterForShown);
   const decorate = (list: TimingWindow[]) =>
-    list.map((w) => ({ ...w, whyItWorks: scrub(w.whyItWorks) || undefined }));
+    list.map((w) => {
+      const why = scrub(w.whyItWorks);
+      return { ...w, whyItWorks: why && !restates(why, seenAll) ? why : undefined };
+    });
+  // Past windows drop off today's panel (the careful time at 9 AM is noise at 9 PM).
+  const liveGood = isToday ? upcomingWindows(goodWindows, date, profileTimezone, nowMs) : goodWindows;
+  const liveCaution = isToday ? upcomingWindows(cautionWindows, date, profileTimezone, nowMs) : cautionWindows;
+  const allPassed = isToday && allWindows.length > 0 && liveGood.length + liveCaution.length === 0;
+  const cal = day?.calendar ?? null;
+  const calWhy = cal ? calWhyLine({ why: cal.why, nakshatra: day?.dayStar }, t, locale) : "";
+  const panchangLine = [
+    day?.dayStar ? fill(t("cal.star"), { star: nakLabel(day.dayStar, locale) }) : "",
+    day?.tithi ? fill(t("cal.tithi"), { tithi: tithiLabel(day.tithi, locale) }) : "",
+  ].filter(Boolean).join(" · ");
   // "Your chapter": the AI-written current chapter from the reading; the engine's template
   // line is only a fallback for readings that have no chapter text yet.
   const aiChapter = views.currentChapter();
@@ -232,6 +261,11 @@ export default function TodayPage() {
   const week = views.horizon("week");
   const month = views.horizon("month");
   const year = views.horizon("year");
+  // Outlook cards must add something: drop a body that restates the chapter, today or the card above.
+  const seenOutlook = mergeStems(chapterSummary, mainAdvice);
+  const weekBody = restates(week.body, seenOutlook) ? "" : week.body;
+  const monthBody = restates(month.body, mergeStems(chapterSummary, mainAdvice, weekBody)) ? "" : month.body;
+  const yearBody = restates(year.body, mergeStems(chapterSummary, weekBody, monthBody)) ? "" : year.body;
   const luck = views.natalLuck;
 
   const go = (next: number) => {
@@ -343,6 +377,35 @@ export default function TodayPage() {
             </p>
           ) : null}
 
+          {panchangLine || cal ? (
+            <div className="rounded-2xl border border-line bg-paper px-4 py-3 text-sm" data-testid="today-panchang">
+              {panchangLine ? (
+                <p className="text-xs text-ink-tertiary">
+                  {panchangLine}
+                  {day?.birthStarToday ? (
+                    <span className="ml-1.5 rounded-full bg-gold-wash px-2 py-0.5 font-semibold text-gold-text" data-testid="today-birth-star">
+                      ★ {t("cal.birthStar")}
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
+              {cal && cal.favours.length ? (
+                <p className="mt-1.5 text-ink" data-testid="today-calendar-tags">
+                  <span className="text-ink-tertiary">{t("cal.favours")}: </span>
+                  {cal.favours.map((a) => `${AREA_ICON[a] ?? ""} ${t(`cal.area.${a}`)}`).join(" · ")}
+                  {cal.avoid ? (
+                    <>
+                      <span className="text-ink-tertiary"> · {t("cal.avoid")}: </span>
+                      {t(`cal.area.${cal.avoid}`)}
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {calWhy ? <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{calWhy}</p> : null}
+              {cal?.chandrashtama ? <p className="mt-1 text-xs text-warning-ink">{t("cal.chandrashtamaGloss")}</p> : null}
+            </div>
+          ) : null}
+
           {isToday && chapterSummary ? (
             <ProseBlock>
               <p className="text-xs uppercase tracking-wide text-gold-text">{t("today.chapter")}</p>
@@ -354,19 +417,21 @@ export default function TodayPage() {
             </ProseBlock>
           ) : null}
 
-          {detailedBody && detailedBody !== mainAdvice ? (
+          {bodyShown ? (
             <ProseBlock>
-              <p className="text-sm leading-relaxed text-ink-secondary">{detailedBody}</p>
+              <p className="text-sm leading-relaxed text-ink-secondary">{bodyShown}</p>
             </ProseBlock>
           ) : null}
 
           <TodayTimingPanel
             key={date}
             isToday={isToday}
-            goodWindows={decorate(goodWindows)}
-            cautionWindows={decorate(cautionWindows)}
-            betterFor={betterFor}
+            goodWindows={decorate(liveGood)}
+            cautionWindows={decorate(liveCaution)}
+            betterFor={betterForShown}
             beCareful={beCareful}
+            allPassed={allPassed}
+            onTomorrow={() => go(1)}
           />
         </>
       )}
@@ -378,9 +443,9 @@ export default function TodayPage() {
           </DisclosureButton>
           {outlookOpen ? (
             <div className="mt-4 space-y-4">
-              <HorizonCard eyebrow={t("today.week")} headline={week.headline} body={week.body} />
-              <HorizonCard eyebrow={t("today.month")} headline={month.headline} body={month.body} />
-              <HorizonCard eyebrow={t("today.year")} headline={year.headline} body={year.body} />
+              <HorizonCard eyebrow={t("today.week")} headline={week.headline} body={weekBody} />
+              <HorizonCard eyebrow={t("today.month")} headline={month.headline} body={monthBody} />
+              <HorizonCard eyebrow={t("today.year")} headline={year.headline} body={yearBody} />
             </div>
           ) : null}
         </div>

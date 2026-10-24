@@ -19,6 +19,7 @@ import { CHART_PROFILE_STORAGE_KEY } from "@/lib/locale";
 import {
   clearEngineCache,
   PACK_REVALIDATE_MS,
+  clearCachedTodays,
   readCachedPackEntry,
   readCachedTimezone,
   readCachedToday,
@@ -388,9 +389,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             .maybeSingle(),
         ).then(({ data }) => data?.current_timezone?.toString() || null);
 
-        const fetchToday = async (zone: string) => {
+        const fetchToday = async (zone: string, fresh = false) => {
           const date = todayInTimezone(zone);
-          const cached = opts?.force ? null : readCachedToday(uid!, locale, chartId, date);
+          const cached = opts?.force || fresh ? null : readCachedToday(uid!, locale, chartId, date);
           if (cached) {
             if (live()) setToday(cached);
             return;
@@ -407,6 +408,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             setToday(null);
           }
         };
+
+        const fetchTodayFresh = (zone: string) => fetchToday(zone, true);
 
         const needPackFetch =
           opts?.force || !cachedEntry || cachedEntry.ageMs > PACK_REVALIDATE_MS;
@@ -445,11 +448,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               // written with the wrong name): keep polling quietly until it lands.
               setPackRefreshing(Boolean(json.refreshing));
               recordAccess(normalized.access);
+              // A regenerated or corrected reading: cached Today/day payloads carry the old text.
+              const versionChanged = Boolean(
+                cachedEntry && cachedEntry.pack.readingVersion !== normalized.readingVersion,
+              );
               setPack(normalized);
               setPreparing(null);
               markData();
               setError(null);
               writeCachedPack(uid!, locale, chartId, normalized);
+              if (versionChanged) {
+                clearCachedTodays(uid!, locale, chartId);
+                void fetchTodayFresh(tz);
+              }
             })
           : Promise.resolve();
 

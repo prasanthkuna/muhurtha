@@ -1,5 +1,6 @@
 "use client";
 
+import { fixSept } from "@/lib/format-date";
 import { useCallback, useEffect, useState } from "react";
 import { Bell, BellOff, Check, Loader2 } from "@/components/celestial/muh-icon";
 import { SettingsRow } from "@/components/editorial/settings-row";
@@ -56,14 +57,14 @@ export function PushSection() {
     if (!iso) return t("settings.pushNever");
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return t("settings.pushNever");
-    return new Intl.DateTimeFormat(locale === "te" ? "te-IN" : locale === "hi" ? "hi-IN" : "en-IN", {
+    return fixSept(new Intl.DateTimeFormat(locale === "te" ? "te-IN" : locale === "hi" ? "hi-IN" : "en-IN", {
       timeZone: profileTimezone || "Asia/Kolkata",
       day: "numeric",
       month: "short",
       hour: "numeric",
       minute: "2-digit",
       timeZoneName: "short",
-    }).format(d);
+    }).format(d));
   }
 
   async function toggle() {

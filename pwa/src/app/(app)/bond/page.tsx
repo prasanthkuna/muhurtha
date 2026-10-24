@@ -220,10 +220,8 @@ function BondInner() {
   if (!status.link) {
     return (
       <div className="space-y-5">
+        {/* One way in: the quick match (its result has the save button); no duplicate "Add your partner" link. */}
         <QuickMatch myName={t("match.you")} onSave={(r) => startAdd(r)} />
-        <button type="button" onClick={() => startAdd(null)} className="w-full text-center text-sm font-semibold text-gold-text underline-offset-4 hover:underline" data-testid="bond-add-direct">
-          {t("today.bond.add")}
-        </button>
       </div>
     );
   }

@@ -13,12 +13,17 @@ export function TodayTimingPanel({
   cautionWindows,
   betterFor,
   beCareful,
+  allPassed = false,
+  onTomorrow,
 }: {
   isToday?: boolean;
   goodWindows: TimingWindow[];
   cautionWindows: TimingWindow[];
   betterFor: string[];
   beCareful: string[];
+  /** Today's windows have all ended (only past ones existed). */
+  allPassed?: boolean;
+  onTomorrow?: () => void;
 }) {
   const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
@@ -49,6 +54,15 @@ export function TodayTimingPanel({
               <p className="mb-2 text-xs font-semibold text-warning-ink">{isToday ? t("today.nextCaution") : t("today.firstCaution")}</p>
               <WindowTimePill window={nextCaution} tone="caution" />
             </div>
+          ) : null}
+        </div>
+      ) : allPassed ? (
+        <div className="space-y-2" data-testid="today-windows-done">
+          <p className="text-sm text-ink-secondary">{t("today.windowsDone")}</p>
+          {onTomorrow ? (
+            <button type="button" onClick={onTomorrow} className="min-h-9 text-sm font-medium text-gold-text">
+              {t("today.seeTomorrow")} →
+            </button>
           ) : null}
         </div>
       ) : (

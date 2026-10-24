@@ -1,5 +1,6 @@
 "use client";
 
+import { fixSept } from "@/lib/format-date";
 import { ProseBlock } from "@/components/editorial/prose-block";
 import { WindowPillRow } from "@/components/editorial/window-time-pill";
 import { useLocale } from "@/context/locale-context";
@@ -15,12 +16,12 @@ import type { CardData } from "@/lib/share/card-types";
 function shortDate(iso: string, locale: string): string {
   const d = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat(locale === "te" ? "te-IN" : locale === "hi" ? "hi-IN" : "en-IN", {
+  return fixSept(new Intl.DateTimeFormat(locale === "te" ? "te-IN" : locale === "hi" ? "hi-IN" : "en-IN", {
     weekday: "short",
     day: "numeric",
     month: "short",
     timeZone: "UTC",
-  }).format(d);
+  }).format(d));
 }
 
 function FactorList({ title, items, tone }: { title: string; items: string[]; tone: "good" | "caution" }) {
