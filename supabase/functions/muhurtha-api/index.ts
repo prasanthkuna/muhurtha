@@ -15,11 +15,12 @@ import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
 import { runWarmup } from "./warmup.ts";
 import { geminiConfigured, geminiModel, geminiProbe, primaryProvider, readingModel } from "./openai_responses.ts";
+import { maxAttempts, openAiAllowed } from "./llm_policy.ts";
 import { buildReadingSchema, buildSystemPrompt, buildUserPrompt, type V2Facts } from "./reading_v2.ts";
 
 /** Internal: which LLM is primary and whether Gemini accepts the reading schema (no secrets out). */
 async function runLlmProbe(admin: SupabaseClient, body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = { primary: primaryProvider(), reading_model: readingModel(), gemini_configured: geminiConfigured() };
+  const out: Record<string, unknown> = { primary: primaryProvider(), reading_model: readingModel(), gemini_configured: geminiConfigured(), openai_allowed: openAiAllowed(), max_attempts: maxAttempts() };
   if (!geminiConfigured()) return out;
   const model = String(body.model ?? geminiModel());
   if (!body.skip_tiny) out.tiny = await geminiProbe(model, {

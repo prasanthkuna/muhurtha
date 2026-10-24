@@ -565,7 +565,12 @@ export function groundingProblems(
     if (n === natal && !isBirth && /today|ఈరోజు|आज/i.test(text) && /birth star|జన్మ నక్షత్ర/i.test(text) && !text.includes(fx.nakshatra) && !text.includes(NAKSHATRA_TE[fx.nakshatra] ?? "~")) { out.push("wrong_star"); continue; }
     if (n !== natal) out.push("wrong_star");
   }
-  if (!isBirth && /\(your birth star\)|your birth star (is )?(active|today)|జన్మ నక్షత్రం ఈరోజు/i.test(text)) out.push("wrong_star");
+  // Natal star named as if it were today's star ("Hasta (your birth star) shines today" on a Rohini day).
+  if (!isBirth && natal) {
+    const nat = locale === "te" ? (NAKSHATRA_TE[natal] ?? natal) : natal;
+    const asToday = new RegExp(`(today'?s star (is )?${nat}|${nat}\\s*\\(your birth star\\)\\s*(is\\s+)?(active|shines|rules|today)|your birth star (is )?(active|today)|జన్మ నక్షత్రం ఈరోజు|ఈరోజు\\s+(మీ\\s+)?జన్మ నక్షత్రం)`, "i");
+    if (asToday.test(text)) out.push("wrong_star");
+  }
   const hint = tithiHint(fx.tithi);
   if (hint && /purnima|amavasya|ekadashi/i.test(fx.tithi)) {
     const words = locale === "te" ? /(పౌర్ణమి|పున్నమి|అమావాస్య|ఏకాదశి)/ : /(full moon|purnima|new moon|amavasya|ekadashi)/i;
