@@ -3,7 +3,7 @@ import { LocaleProvider } from "@/context/locale-context";
 
 export const metadata: Metadata = {
   title: "You're invited · Muhūrta Bond",
-  description: "See how you two flow — your match, a monthly couple guide and one small thing to do together each day.",
+  description: "See how you two click: your match score, a monthly couple guide, and one small thing to do together each day.",
   robots: { index: false, follow: false },
 };
 
