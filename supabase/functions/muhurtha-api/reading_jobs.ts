@@ -31,6 +31,12 @@ import {
 } from "./openai_responses.ts";
 
 /** Attempts when OpenAI can take over; Gemini-only uses maxAttempts() from llm_policy.ts. */
+/** Gemini free-tier quota exhaustion (429 "exceeded your current quota"). */
+export function isQuotaCap(err: string): boolean {
+  return /429/.test(err) && /quota/i.test(err);
+}
+const QUOTA_PARK_MS = Number(Deno.env.get("GEMINI_QUOTA_PARK_MS") ?? String(10 * 60_000));
+
 export const MAX_ATTEMPTS = 3;
 const POLL_DEBOUNCE_MS = 2500;
 const CLAIM_MS = 150_000;
@@ -238,8 +244,12 @@ export async function submitJob(admin: SupabaseClient, job: JobRow, reading: Rea
       job_id: job.id, profile_id: job.profile_id, purpose: "reading", model, locale: reading.locale,
       status: "create_failed", error: msg.slice(0, 500),
     });
-    if (attempts >= maxAttempts()) return await failJob(admin, job, reading, msg, attempts);
-    return await updateJob(admin, job.id, { status: "queued", stage: "retrying", attempts, error: msg.slice(0, 500), last_polled_at: new Date().toISOString() });
+    const dayCap = isQuotaCap(msg);
+    if (attempts >= maxAttempts() && !dayCap) return await failJob(admin, job, reading, msg, attempts);
+    return await updateJob(admin, job.id, {
+      status: "queued", stage: "retrying", attempts: dayCap ? Math.max(1, job.attempts) : attempts, error: msg.slice(0, 500),
+      last_polled_at: new Date(Date.now() + (dayCap ? QUOTA_PARK_MS : 0)).toISOString(),
+    });
   }
 }
 
@@ -440,13 +450,17 @@ export async function advanceJob(
     const why = !content
       ? `no_content:${resp.status}:${resp.error ?? resp.incomplete_reason ?? ""}`
       : `invalid:${validation?.fatal.join(";")}`;
-    if (job.attempts >= maxAttempts()) {
+    // A free-tier daily cap is not a bad attempt: park the job (no attempt burned) and retry later.
+    const dayCap = isQuotaCap(why);
+    if (job.attempts >= maxAttempts() && !dayCap) {
       await updateJob(admin, job.id, { ...totals, validation: validation as never });
       return await failJob(admin, { ...job, ...totals }, reading, why);
     }
     const queued = await updateJob(admin, job.id, {
       ...totals, status: "queued", stage: "retrying", error: why.slice(0, 500), validation: validation as never,
-      openai_response_id: null, claimed_until: null, last_polled_at: new Date().toISOString(),
+      openai_response_id: null, claimed_until: null,
+      ...(dayCap ? { attempts: Math.max(1, job.attempts - 1) } : {}),
+      last_polled_at: new Date(Date.now() + (dayCap ? QUOTA_PARK_MS : 0)).toISOString(),
     });
     return queued; // resubmitted by the sweep after retryBackoffMs()
   }

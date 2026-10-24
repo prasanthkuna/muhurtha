@@ -36,3 +36,9 @@ Deno.test("prompt facts carry per-day hints", () => {
   assertEquals(d.is_birth_star, false);
   assert(String(d.tara_hint).startsWith("birth-star echo"));
 });
+
+Deno.test("free-tier quota cap is recognised (job is parked, not failed)", async () => {
+  const { isQuotaCap } = await import("./reading_jobs.ts");
+  if (!isQuotaCap("no_content:failed:gemini_create_failed:429:You exceeded your current quota, please check")) throw new Error("miss");
+  if (isQuotaCap("gemini_stream_error:This model is currently experiencing high demand")) throw new Error("false positive");
+});
