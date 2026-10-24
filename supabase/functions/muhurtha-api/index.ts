@@ -14,6 +14,36 @@ import {
 import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
 import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
 import { runWarmup } from "./warmup.ts";
+import { geminiConfigured, geminiModel, geminiProbe, primaryProvider, readingModel } from "./openai_responses.ts";
+import { buildReadingSchema, buildSystemPrompt, buildUserPrompt, type V2Facts } from "./reading_v2.ts";
+
+/** Internal: which LLM is primary and whether Gemini accepts the reading schema (no secrets out). */
+async function runLlmProbe(admin: SupabaseClient, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = { primary: primaryProvider(), reading_model: readingModel(), gemini_configured: geminiConfigured() };
+  if (!geminiConfigured()) return out;
+  const model = String(body.model ?? geminiModel());
+  if (!body.skip_tiny) out.tiny = await geminiProbe(model, {
+    system: "Return JSON.", user: "Say hi.", schemaName: "t",
+    schema: { type: "object", properties: { hi: { type: "string" } }, required: ["hi"], additionalProperties: false },
+    reasoningEffort: "low", maxOutputTokens: 200,
+  }, {});
+  if (body.list_models) out.models = await geminiProbe(model, { system: "", user: "", schemaName: "__models", schema: {} }, {});
+  const readingId = String(body.reading_id ?? "");
+  if (!readingId) return out;
+  const { data } = await admin.from("readings").select("facts").eq("id", readingId).maybeSingle();
+  const facts = (data as { facts: V2Facts } | null)?.facts;
+  if (!facts) return { ...out, reading: "facts_missing" };
+  const input = { system: buildSystemPrompt(facts), user: buildUserPrompt(facts), schemaName: "r", schema: buildReadingSchema(facts, { withLengths: false }), reasoningEffort: (String(body.effort ?? "low") as "low" | "medium"), maxOutputTokens: 40000 };
+  const variants = (body.variants as string[] | undefined) ?? ["base", "noItems", "noDescriptions", "schemaInPrompt"];
+  for (const v of variants) {
+    out[v] = await geminiProbe(model, input, {
+      noItems: v === "noItems" || v === "noItemsNoDesc", noDescriptions: v === "noDescriptions" || v === "noItemsNoDesc",
+      schemaInPrompt: v === "schemaInPrompt", noThinking: v === "noThinking",
+      keepItems: v === "base", timeoutMs: Number(body.timeout_ms ?? 135_000),
+    });
+  }
+  return out;
+}
 import { dispatchDuePush } from "./push.ts";
 import { invitePreview, quickMatch } from "./bond.ts";
 import { ensurePlan, type PlanCode, PRO_PLANS, razorpayConfig } from "./razorpay.ts";
@@ -178,7 +208,7 @@ Deno.serve(async (req) => {
 
     if (
       body.action === "reading_sweep" || body.action === "reading_golden" ||
-      body.action === "reading_migrate_legacy"
+      body.action === "reading_migrate_legacy" || body.action === "llm_probe"
     ) {
       // Internal reading v2 entry points: pg_cron sweep, OpenAI webhook relay, golden tests
       // and the zero-LLM legacy migration. Shared cron secret or the service role only.
@@ -191,6 +221,11 @@ Deno.serve(async (req) => {
         });
       }
       const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+      if (body.action === "llm_probe") {
+        const probe = await runLlmProbe(adminSupabase, body);
+        console.log("[llm_probe]", JSON.stringify(probe).slice(0, 3000));
+        return new Response(JSON.stringify(probe), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
       const result = body.action === "reading_sweep"
         ? await sweepReadings(adminSupabase, body)
         : body.action === "reading_golden"

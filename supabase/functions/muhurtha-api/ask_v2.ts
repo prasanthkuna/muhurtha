@@ -4,7 +4,7 @@
  * engine-owned: the model picks a window id and the server prints the clock times.
  */
 import { DATE_RULE, polishDeep, VOICE_BLOCK } from "./voice.ts";
-import { createResponse, readingModel, type ResponseObject } from "./openai_responses.ts";
+import { createResponse, primaryProvider, readingModel, type ResponseObject } from "./openai_responses.ts";
 
 export const ASK_V2_PROMPT_VERSION = "ask-v2.2";
 
@@ -69,7 +69,8 @@ export async function askWithLlm(
   ctx: AskContext,
   history: { role: string; content: string }[],
 ): Promise<{ answer: AskLlmAnswer; resp: ResponseObject; latencyMs: number; model: string }> {
-  const model = Deno.env.get("ASK_MODEL")?.trim() || readingModel();
+  const envModel = Deno.env.get(primaryProvider() === "gemini" ? "GEMINI_ASK_MODEL" : "ASK_MODEL")?.trim();
+  const model = envModel || readingModel();
   const t0 = Date.now();
   const user = [
     "CONTEXT:",
@@ -97,7 +98,7 @@ export async function askWithLlm(
     polishDeep(parsed, ctx.locale, new Set(["best_window", "caution_window", "suggested_date", "topic"])),
     ctx.locale,
   );
-  return { answer, resp, latencyMs: Date.now() - t0, model };
+  return { answer, resp, latencyMs: Date.now() - t0, model: resp.model ?? model };
 }
 
 const WINDOW_WORDS: Record<string, { good: string; caution: string }> = {

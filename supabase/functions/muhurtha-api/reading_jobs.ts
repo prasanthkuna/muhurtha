@@ -1,5 +1,5 @@
 /**
- * Reading v2 job runner: background OpenAI response -> validate -> (one targeted repair) -> ready.
+ * Reading v2 job runner: background LLM response (Gemini primary, OpenAI fallback) -> validate -> (one targeted repair) -> ready.
  * Completion is detected by whichever comes first: a client status poll, the pg_cron sweep,
  * or the OpenAI webhook (when configured). All paths call advanceJob(), which is idempotent.
  */
@@ -22,16 +22,18 @@ import {
 import {
   costUsd,
   createResponse,
+  modelForAttempt,
+  providerOf,
   readingModel,
   retrieveResponse,
   type ResponseObject,
 } from "./openai_responses.ts";
 
-export const MAX_ATTEMPTS = 2;
+export const MAX_ATTEMPTS = 3;
 const POLL_DEBOUNCE_MS = 2500;
 const CLAIM_MS = 150_000;
 /** A job stuck this long is cancelled and retried / failed. */
-const JOB_TIMEOUT_MS = 8 * 60_000;
+const JOB_TIMEOUT_MS = 10 * 60_000;
 
 export type ReadingRow = {
   id: string;
@@ -156,7 +158,7 @@ async function logCall(
     job_id: row.job_id,
     profile_id: row.profile_id,
     purpose: row.purpose,
-    provider: "openai",
+    provider: providerOf(row.model),
     model: row.model,
     response_id: row.response_id ?? null,
     locale: row.locale ?? null,
@@ -177,11 +179,11 @@ export { logCall as logLlmCall };
 
 async function createWithSchema(
   facts: V2Facts,
-  args: { system: string; user: string; scope?: Parameters<typeof buildReadingSchema>[1]["scope"]; background: boolean; metadata?: Record<string, string> },
+  args: { system: string; user: string; scope?: Parameters<typeof buildReadingSchema>[1]["scope"]; background: boolean; metadata?: Record<string, string>; model?: string },
 ): Promise<ResponseObject> {
   const attempt = (withLengths: boolean) =>
     createResponse({
-      model: readingModel(),
+      model: args.model ?? readingModel(),
       system: args.system,
       user: args.user,
       schemaName: args.scope ? "muhurta_reading_repair" : "muhurta_reading",
@@ -208,9 +210,10 @@ async function createWithSchema(
 /** Submit (or re-submit) the background response for a job. */
 export async function submitJob(admin: SupabaseClient, job: JobRow, reading: ReadingRow): Promise<JobRow> {
   const facts = reading.facts!;
-  const model = readingModel();
+  const model = modelForAttempt(job.attempts);
   try {
     const r = await createWithSchema(facts, {
+      model,
       system: buildSystemPrompt(facts),
       user: buildUserPrompt(facts),
       background: true,
@@ -291,7 +294,7 @@ export async function startReading(
       status: "generating",
       facts: args.facts,
       source: "llm",
-      provider: "openai",
+      provider: providerOf(readingModel()),
       model: readingModel(),
       prompt_version: READING_PROMPT_VERSION,
       generated_for_date: args.facts.generation_date,
@@ -451,6 +454,7 @@ export async function advanceJob(
     const t0 = Date.now();
     try {
       const r = await createWithSchema(facts, {
+        model: job.model ?? model,
         system: buildSystemPrompt(facts),
         user: repairPrompt(facts, content, validation, scope),
         scope,
@@ -488,6 +492,7 @@ export async function advanceJob(
     content,
     validation,
     model,
+    provider: providerOf(model),
     ready_at: readyAt,
     updated_at: readyAt,
   }).eq("id", reading.id).eq("status", "generating").select(READING_COLS).maybeSingle();

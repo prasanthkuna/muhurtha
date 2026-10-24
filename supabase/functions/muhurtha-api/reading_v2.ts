@@ -322,7 +322,7 @@ export function buildSystemPrompt(facts: V2Facts): string {
     DATE_RULE,
     "Rules:",
     "1. The engine owns all facts. Never write clock times, durations in hours, years, dates, ages or planet/graha names in days, weekdays, weeks, months or push. Planet names are allowed only inside chapters and profile, and only when they help.",
-    "2. Every day must read differently: use that day's tithi, nakshatra, yoga, moon sign, tara and day_tone to choose a different angle, title and chips. Never reuse a title, opening phrase or chip across days. Do not mention the weekday name in day titles.",
+    "2. Every day must read differently: use that day's tithi, nakshatra, yoga, moon sign, tara and day_tone to choose a different angle, title and chips (use them silently; see the voice rules on naming them). Never reuse a title, opening phrase or chip across days. Do not mention the weekday name in day titles.",
     "3. window_notes: write one note for every window id listed for that day/weekday (and no others). Good windows (g*) say what to use them for; c1 is the traditional caution window: say what to keep routine. Never write times; the app shows them.",
     "4. weekdays are evergreen cards used after the dated days run out: write for that weekday in general, no tithi/nakshatra references.",
     "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique.",

@@ -42,7 +42,7 @@ import {
   type ReadingRow,
   type ReadyHook,
 } from "./reading_jobs.ts";
-import { openAiConfigured, readingModel } from "./openai_responses.ts";
+import { llmConfigured, providerOf, readingModel } from "./openai_responses.ts";
 import { ASK_V2_PROMPT_VERSION, askWithLlm, normalizeQuestion, type AskContext, type AskLlmAnswer } from "./ask_v2.ts";
 import { sendReadingReadyToProfile } from "./push.ts";
 import {
@@ -3192,7 +3192,7 @@ async function ensureV2Reading(
         return { pack: null, progress: jobProgress(fr, await latestJob(admin, fr.id)) };
       }
     }
-    if (!openAiConfigured()) throw new ActionError("llm_unavailable", "Reading service is not configured", 503);
+    if (!llmConfigured()) throw new ActionError("llm_unavailable", "Reading service is not configured", 503);
     const facts = buildReadingFacts(profile, bi, locale, dateStr, subject);
     const started = await startReading(admin, {
       profileId: profile.id,
@@ -3482,7 +3482,7 @@ function localizeTimingLine(line: string, locale: AppLocale): string {
 function askLlmEnabled(): boolean {
   const mode = (Deno.env.get("ASK_MODE") ?? "").trim().toLowerCase();
   if (mode === "template") return false;
-  return openAiConfigured() && (mode === "llm" || readingPipeline() === "v2");
+  return llmConfigured() && (mode === "llm" || readingPipeline() === "v2");
 }
 
 async function recentChatHistory(
@@ -5808,7 +5808,7 @@ async function _handleInternal(
     const provenance = askLlm && pack
       ? buildProvenance({
         promptVersion: ASK_V2_PROMPT_VERSION,
-        provider: "openai",
+        provider: providerOf(String(askLlm.model ?? readingModel())),
         model: String(askLlm.model ?? readingModel()),
         source: "llm",
         factSignature: askCacheKey ?? "",

@@ -9,9 +9,10 @@ export const ENGLISH_VOICE = [
   "ENGLISH VOICE: write like a friend on Twitter who knows astrology. Short, warm, everyday lines; contractions (you're, it's, don't); a little wit is fine.",
   "Plain words: say 'good time' or 'slot', never 'window'; 'good' or 'lucky', never 'auspicious' or 'favourable'; never 'energies', 'harness', 'navigate', 'delve', 'embark', 'journey', 'tapestry', 'realm', 'align', 'resonate', 'unlock your potential'.",
   "No LinkedIn or fortune-cookie lines (no 'clarity', 'momentum', 'follow-through', 'structure', 'steady' stacked together). Give one concrete, real-life example instead (a text you've been putting off, the bill, the gym, a call with mom).",
-  "Astro words only when needed, with a 2-4 word gloss the first time: 'Jupiter–Saturn (your current planet period)', 'nakshatra (birth star)', 'Rahu Kalam (the daily ~90-min no-new-starts slot)'.",
+  "Astro words only when needed, with a 2-4 word gloss the first time: 'Jupiter–Saturn (your current planet period)', '<natal nakshatra> (your birth star)', 'Rahu Kalam (the daily ~90-min no-new-starts slot)'.",
   "Don't lean on pet words: 'routine', 'clean', 'practical', 'calm', 'gentle', 'clear' at most 3 times each across the whole reading. Vary them.",
   "No em-dash chains, no 'not X, but Y' templates, no rhetorical triplets, no fear, no doom.",
+  "'Birth star' means only the natal nakshatra. Don't name the day's tithi, yoga or tara in the text (never the word 'tara'); name the day's nakshatra on at most 3 days, as 'today's star', never as a birth star.",
 ].join(" ");
 
 export const TELUGU_VOICE = [
@@ -20,6 +21,7 @@ export const TELUGU_VOICE = [
   "Use spoken forms: చేయొచ్చు (not చేయవచ్చు), వద్దు/చేయకండి, అయిపోయింది, కాస్త, కొంచెం. Never use bookish words: మరియు (use commas), కిటికీ (use టైమ్), సమయ విండో, అనుకూలమైన కాలం, ప్రయత్నించండి (use ట్రై చేయండి), శుభప్రదమైన, దయచేసి, తదుపరి (use నెక్స్ట్), అధ్యాయం (use చాప్టర్).",
   "Neutral dialect, no regional slang. Short lines. One real-life example per idea (ఆఫీస్ మెయిల్, అమ్మకి కాల్, EMI, జిమ్).",
   "Astro words: plain Telugu names (గురువు, శని, రాహుకాలం, నక్షత్రం) with a 2-4 word gloss when it's a dasha: 'గురు–శని దశ (మీ ఇప్పటి గ్రహ దశ)'.",
+  "Don't name the day's తిథి, యోగం or తార in the text; name the day's నక్షత్రం on at most 3 days ('ఈరోజు నక్షత్రం'), never as జన్మ నక్షత్రం. Don't join words with 'అండ్' (use a comma or 'కూడా').",
 ].join(" ");
 
 export const HINDI_VOICE = [
@@ -89,6 +91,7 @@ const EN_FIX: [RegExp, string][] = [
 ];
 const TE_FIX: [RegExp, string][] = [
   [/\s*,?\s*మరియు\s+/g, ", "],
+  [/\s+అండ్\s+/g, ", "],
   [/కిటికీలు/g, "టైమ్స్"],
   [/కిటికీ/g, "టైమ్"],
   [/దయచేసి\s*/g, ""],

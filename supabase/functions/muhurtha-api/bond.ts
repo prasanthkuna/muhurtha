@@ -32,7 +32,7 @@ import { ashtakoota, type MoonStar, starFromLon } from "./koota.ts";
 import { natalGrahas } from "./grahas.ts";
 import { moonSiderealLongitudeDeg, siderealMetaFromNameOrMoon } from "./ephemeris.ts";
 import { type CalPlace, coupleDayType, dayFacts, monthDays, scoreDay, yearMonths } from "./calendar.ts";
-import { costUsd, createResponse, readingModel, type ResponseObject, retrieveResponse } from "./openai_responses.ts";
+import { costUsd, createResponse, modelForAttempt, providerOf, readingModel, type ResponseObject, retrieveResponse } from "./openai_responses.ts";
 import { sendOneOffToProfile } from "./push.ts";
 import { BOND_PUSH, bondLoc } from "./bond_phrases.ts";
 import { type MdSegment, NAKSHATRAS, vimshottariLordsAt } from "./vimshottari.ts";
@@ -126,10 +126,10 @@ export type BondDeps = {
 const DEFAULT_ZONE = "Asia/Kolkata";
 const DEFAULT_LAT = 17.385;
 const DEFAULT_LNG = 78.4867;
-const MAX_ATTEMPTS = 2;
+const MAX_ATTEMPTS = 3;
 const POLL_DEBOUNCE_MS = 2500;
 const CLAIM_MS = 120_000;
-const JOB_TIMEOUT_MS = 6 * 60_000;
+const JOB_TIMEOUT_MS = 9 * 60_000;
 const INVITE_DAYS = 14;
 
 // ------------------------------------------------------------------ small helpers
@@ -271,7 +271,7 @@ async function logCall(admin: SupabaseClient, row: {
 }): Promise<number> {
   const cost = costUsd(row.model, row.usage ?? null);
   await admin.from("llm_calls").insert({
-    job_id: null, profile_id: row.profile_id, purpose: row.purpose, provider: "openai", model: row.model,
+    job_id: null, profile_id: row.profile_id, purpose: row.purpose, provider: providerOf(row.model), model: row.model,
     response_id: row.response_id ?? null, locale: row.locale, status: row.status,
     input_tokens: row.usage?.input_tokens ?? 0, cached_tokens: row.usage?.cached_tokens ?? 0,
     output_tokens: row.usage?.output_tokens ?? 0, reasoning_tokens: row.usage?.reasoning_tokens ?? 0,
@@ -298,7 +298,7 @@ function promptsFor(row: PairRow): { system: string; user: string; schema: Recor
 
 async function submitPair(admin: SupabaseClient, row: PairRow): Promise<PairRow> {
   const p = promptsFor(row);
-  const model = readingModel();
+  const model = modelForAttempt(row.attempts);
   try {
     const r = await createResponse({
       model, system: p.system, user: p.user, schemaName: p.name, schema: p.schema, background: true,
