@@ -16,18 +16,19 @@ import {
   NavIconAsk,
   NavIconBond,
   NavIconCalendar,
+  NavIconDecode,
   NavIconLife,
   NavIconToday,
 } from "./nav-icons";
 
-/** Bond replaces Decode (Decode lives under Life); Calendar replaces Timing (Find-a-date
- *  stays at /timing, linked from Calendar, and keeps the Calendar tab lit). */
+/** Decode (your birth-star profile) is the main tab and the landing screen; Today sits next to it.
+ *  Ask moved to the header so five tabs fit at 360px. Find-a-date (/timing) keeps Calendar lit. */
 const tabKeys = [
+  { href: "/decode", key: "nav.decode", primary: true, Icon: NavIconDecode, also: [] as string[] },
+  { href: "/today", key: "nav.today", Icon: NavIconToday, also: [] as string[] },
   { href: "/bond", key: "nav.bond", Icon: NavIconBond, also: [] as string[] },
-  { href: "/life", key: "nav.life", Icon: NavIconLife, also: ["/decode"] },
-  { href: "/today", key: "nav.today", center: true, Icon: NavIconToday, also: [] as string[] },
   { href: "/calendar", key: "nav.calendar", Icon: NavIconCalendar, also: ["/timing"] },
-  { href: "/ask", key: "nav.ask", Icon: NavIconAsk, also: [] as string[] },
+  { href: "/life", key: "nav.life", Icon: NavIconLife, also: [] as string[] },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -79,6 +80,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
           <ProfileSwitcher />
         </div>
+        <div className="flex items-center gap-1">
+        <Link
+          href="/ask"
+          data-testid="header-ask"
+          aria-label={t("nav.ask")}
+          className={cn(
+            "flex h-10 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors",
+            pathname === "/ask" || pathname.startsWith("/ask/")
+              ? "border-gold-accent/60 bg-gold-wash/40 text-gold-text"
+              : "border-line text-ink-secondary hover:border-gold-accent/40 hover:text-gold-text",
+          )}
+        >
+          <NavIconAsk className="h-5 w-5" active={pathname === "/ask" || pathname.startsWith("/ask/")} />
+          <span className="hidden min-[360px]:inline">{t("nav.ask")}</span>
+        </Link>
         <Link
           href="/settings"
           className="flex h-10 w-10 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-paper hover:text-gold-text"
@@ -86,6 +102,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <Settings className="h-5 w-5" strokeWidth={1.75} aria-hidden />
         </Link>
+        </div>
       </header>
       <main className="flex-1 px-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2">
         <PendingInviteAccept />
@@ -106,10 +123,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={tab.href}
                 href={tab.href}
+                data-testid={`tab-${tab.href.slice(1)}`}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-[11px] font-medium leading-none transition-colors",
                   active ? "text-gold-text" : "text-ink-tertiary",
-                  "center" in tab && tab.center && active && "font-semibold",
+                  "primary" in tab && tab.primary && "font-semibold",
+                  "primary" in tab && tab.primary && (active ? "bg-gold-wash/50" : "text-gold-text/80"),
                 )}
               >
                 <span className="flex h-6 w-6 items-center justify-center">

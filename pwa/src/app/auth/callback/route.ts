@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const next = url.searchParams.get("next") ?? "/today";
+  const next = url.searchParams.get("next") ?? "/decode";
   const supabase = await createClient();
   if (!supabase) {
     return NextResponse.redirect(`${url.origin}/auth?error=supabase_config`);

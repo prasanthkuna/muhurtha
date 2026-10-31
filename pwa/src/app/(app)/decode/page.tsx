@@ -13,12 +13,13 @@ import { useLocale } from "@/context/locale-context";
 import { isChildStage } from "@/lib/life-stage";
 import { ShareCardButton } from "@/components/share/share-button";
 import { clip, rashiGlyph } from "@/lib/share/builders";
+import { fill, nakLabel } from "@/lib/messages-bond";
 
 const ADULT_ONLY_DOMAINS = new Set(["career", "money", "business", "relationship"]);
 
 export default function DecodePage() {
-  const { t } = useLocale();
-  const { views, loading, error, pack, preparing, activeLifeStage } = useAppData();
+  const { t, locale } = useLocale();
+  const { views, loading, error, pack, preparing, activeLifeStage, today } = useAppData();
 
   if (loading && !pack) return <LoadingState message={t("decode.opening")} />;
   if (preparing && (!views || !pack)) return <ReadingUnavailable title={t("nav.decode")} />;
@@ -38,25 +39,52 @@ export default function DecodePage() {
     ? views.domainReports().filter((d) => !ADULT_ONLY_DOMAINS.has(d.key))
     : views.domainReports();
   const luck = views.natalLuck;
+  const birthStar = today?.birthStar ? nakLabel(today.birthStar, locale) : null;
 
   return (
     <div className="space-y-6" data-testid="decode-loaded">
-      {luck?.moonSignLabel || luck?.moonSymbol ? (
-        <CelestialHeaderCard
-          heroLabel={t("decode.janmaLabel")}
-          heroTitle={views.displayHook}
-          moonSignKey={luck.moonSignKey}
-          moonSymbol={luck.moonSymbol}
-          moonSignLabel={luck.moonSignLabel}
-          heroSubline={views.identitySummary}
-        />
-      ) : (
-        <PageHeader
-          eyebrow={t("decode.janmaLabel")}
-          title={views.displayHook}
-          subtitle={views.identitySummary}
-        />
-      )}
+      <div data-testid="decode-hero" className="space-y-3">
+        {luck?.moonSignLabel || luck?.moonSymbol ? (
+          <CelestialHeaderCard
+            heroLabel={t("decode.hero.eyebrow")}
+            heroTitle={views.displayHook}
+            moonSignKey={luck.moonSignKey}
+            moonSymbol={luck.moonSymbol}
+            moonSignLabel={luck.moonSignLabel}
+            heroSubline={views.identitySummary}
+          >
+            <HeroChips birthStar={birthStar} moonSign={luck.moonSignLabel} t={t} />
+          </CelestialHeaderCard>
+        ) : (
+          <>
+            <PageHeader
+              eyebrow={t("decode.hero.eyebrow")}
+              title={views.displayHook}
+              subtitle={views.identitySummary}
+            />
+            <HeroChips birthStar={birthStar} moonSign={null} t={t} />
+          </>
+        )}
+
+        {today && !isChildStage(activeLifeStage) ? (
+          <Link
+            href="/today"
+            data-testid="decode-today"
+            className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-paper px-4 py-3 transition-colors hover:border-gold-accent/40"
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">{t("decode.hero.todayTitle")}</p>
+              <p className="mt-1 line-clamp-2 text-[15px] font-medium text-ink">
+                {today.birthStarToday ? t("decode.hero.birthStarDay") : today.oneLine || t("decode.hero.openToday")}
+              </p>
+              {today.dayStar ? (
+                <p className="mt-0.5 text-xs text-ink-tertiary">{fill(t("decode.hero.todayStar"), { star: nakLabel(today.dayStar, locale) })}</p>
+              ) : null}
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-gold-text" aria-hidden />
+          </Link>
+        ) : null}
+      </div>
 
       <div className="flex justify-end">
         <ShareCardButton
@@ -124,6 +152,26 @@ export default function DecodePage() {
           <ChevronRight className="h-4 w-4" aria-hidden />
         </Link>
       </div>
+    </div>
+  );
+}
+
+function HeroChips({ birthStar, moonSign, t }: { birthStar: string | null; moonSign: string | null; t: (k: string) => string }) {
+  if (!birthStar && !moonSign) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2" data-testid="decode-hero-chips">
+      {birthStar ? (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-gold-accent/40 bg-gold-wash/40 px-3 py-1 text-xs font-semibold text-gold-text">
+          <span className="text-ink-tertiary">{t("decode.hero.birthStar")}</span>
+          {birthStar}
+        </span>
+      ) : null}
+      {moonSign ? (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-semibold text-ink">
+          <span className="text-ink-tertiary">{t("decode.hero.moonSign")}</span>
+          {moonSign}
+        </span>
+      ) : null}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /** Mirrors Flutter `ProfileRepository.initialSignedInRoute`. */
 export async function resolveInitialAppPath(
   supabase: SupabaseClient,
-  fallbackNext = "/today",
+  fallbackNext = "/decode",
 ): Promise<string> {
   const {
     data: { user },
@@ -34,6 +34,6 @@ export async function resolveInitialAppPath(
     !fallbackNext.startsWith("/auth") &&
     !fallbackNext.startsWith("/welcome")
       ? fallbackNext
-      : "/today";
+      : "/decode";
   return next;
 }

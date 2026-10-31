@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 export function WelcomeActions() {
   const params = useSearchParams();
   const router = useRouter();
-  const next = params.get("next") || "/today";
+  const next = params.get("next") || "/decode";
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export function WelcomeActions() {
     const supabase = createClient();
     if (!supabase) return;
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-      next.startsWith("/") ? next : "/today",
+      next.startsWith("/") ? next : "/decode",
     )}`;
     await supabase.auth.signInWithOAuth({
       provider: "google",

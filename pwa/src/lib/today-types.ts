@@ -22,6 +22,8 @@ export type TodayPayload = {
   tithi?: string;
   tara?: string;
   birthStarToday?: boolean;
+  /** The natal (birth) star, for Decode's hero. */
+  birthStar?: string | null;
   /** The Calendar tab's verdict for the same date (same scoring). */
   calendar?: TodayCalendar | null;
   /** Next full / new moon dates (yyyy-MM-dd), so month cards can name the date. */
@@ -82,6 +84,7 @@ export function parseTodayPayload(raw: Record<string, unknown>): TodayPayload {
     dayStar: cal?.nakshatra?.toString() || pan?.nakshatra?.value?.toString() || raw.moonNakshatra?.toString(),
     tithi: cal?.tithi?.toString() || pan?.tithi?.value?.toString(),
     tara: pan?.tarabala?.value?.toString(),
+    birthStar: typeof raw.birthMoonNakshatra === "string" ? raw.birthMoonNakshatra : null,
     birthStarToday: raw.birthStarToday === true || cal?.birth_star === true,
     calendar: cal && typeof cal.tone === "string"
       ? {

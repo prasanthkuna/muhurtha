@@ -24,7 +24,7 @@ export default function AuthFinishPage() {
         return;
       }
 
-      const next = params.get("next") ?? "/today";
+      const next = params.get("next") ?? "/decode";
 
       // Magic links may return PKCE ?code= — server exchange lives on /auth/callback.
       if (params.get("code") && typeof window !== "undefined") {

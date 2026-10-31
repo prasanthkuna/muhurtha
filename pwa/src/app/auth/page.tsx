@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 export default function AuthPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const nextPath = params.get("next") || "/today";
+  const nextPath = params.get("next") || "/decode";
   const urlError = params.get("error");
   const urlErrorDesc = params.get("error_description");
 
@@ -54,7 +54,7 @@ export default function AuthPage() {
     }
 
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-      nextPath.startsWith("/") ? nextPath : "/today",
+      nextPath.startsWith("/") ? nextPath : "/decode",
     )}`;
 
     const { error: err } = await supabase.auth.signInWithOAuth({
@@ -88,7 +88,7 @@ export default function AuthPage() {
       setBusy(false);
       return;
     }
-    const dest = await resolveInitialAppPath(supabase, nextPath.startsWith("/") ? nextPath : "/today");
+    const dest = await resolveInitialAppPath(supabase, nextPath.startsWith("/") ? nextPath : "/decode");
     router.replace(dest);
   }
 
