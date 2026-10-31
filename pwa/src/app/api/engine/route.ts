@@ -38,7 +38,7 @@ export async function POST(req: Request) {
         : undefined;
     const status =
       !code
-        ? 400
+        ? 502
         : code === "location_required"
         ? 422
         : code === "unauthenticated" || code === "http_401"
@@ -51,9 +51,9 @@ export async function POST(req: Request) {
               ? 429
               : code.startsWith("pro_required") || code === "already_pro"
                 ? code === "already_pro" ? 409 : 403
-                : code === "payments_unavailable"
+                : code === "payments_unavailable" || code === "engine_unavailable"
                   ? 503
                   : 400;
-    return NextResponse.json({ error: message, ...(code ? { error_code: code } : {}) }, { status });
+    return NextResponse.json({ error: message, error_code: code ?? "engine_unavailable" }, { status });
   }
 }

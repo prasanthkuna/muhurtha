@@ -42,6 +42,22 @@ export const VOICE_BANNED: Record<VoiceLocale, string[]> = {
   hi: ["खिड़की", "ब्रह्मांड", "कॉस्मिक"],
 };
 
+/**
+ * Corporate / tech-job jargon that reads like a work ticket, not a personal reading
+ * ("fixing backend operational glitches", "internal workflow bottlenecks"). Allowed only when
+ * the user's own profession is known (the reading facts never carry one today).
+ */
+export const JARGON_RE: Record<VoiceLocale, RegExp> = {
+  en: /\b(back-?end|front-?end|operational|operations|workflows?|bottlenecks?|stakeholders?|deliverables?|kpis?|synerg(y|ies)|bandwidth|pipelines?|sprints?|tech stack|scal(e|ing) up|scalab\w*|optimi[sz]e\w*|leverag(e|ing)|action items?|deep dive|circle back|low-hanging fruit|glitch(es)?|debug\w*|deploy\w*|onboarding|roadmaps?|ROI|SOPs?|escalat\w*|ticket(s)?|backlogs?)\b/i,
+  te: /(బ్యాకెండ్|ఫ్రంటెండ్|వర్క్‌ఫ్లో|వర్క్ ఫ్లో|బాటిల్‌నెక్|బాటిల్ నెక్|స్టేక్‌హోల్డర్|డెలివరబుల్|ఆపరేషనల్|ఆపరేషన్స్|పైప్‌లైన్|స్ప్రింట్|బ్యాండ్‌విడ్త్|గ్లిచ్|డీబగ్|డిప్లాయ్|రోడ్‌మ్యాప్|బ్యాక్‌లాగ్)/,
+  hi: /(बैकएंड|फ्रंटएंड|वर्कफ़्लो|वर्कफ्लो|बॉटलनेक|स्टेकहोल्डर|डिलीवरेबल|ऑपरेशनल|पाइपलाइन|स्प्रिंट|बैंडविड्थ|ग्लिच|डीबग|डिप्लॉय)/,
+};
+
+export function jargonHits(text: string, locale: VoiceLocale): string[] {
+  const re = new RegExp(JARGON_RE[locale].source, JARGON_RE[locale].flags.includes("g") ? JARGON_RE[locale].flags : JARGON_RE[locale].flags + "g");
+  return [...new Set([...text.matchAll(re)].map((m) => m[0].toLowerCase()))];
+}
+
 /** Bare నువ్వు imperatives that must not appear on buttons / CTAs (word-final). */
 export const TE_BARE_IMPERATIVE_RE = /(?:^|\s)(?:చేయి|చూడు|ఉంచు|పంపు|జోడించు|తొలగించు|దాచు|ఆపు|అడుగు|గుర్తించు|తెరువు|ఎంచుకో|రాయి|వెతుకు)(?=$|[\s.!?,])/u;
 
@@ -142,6 +158,7 @@ export function voiceProblems(text: string, locale: VoiceLocale, opts: { isButto
   for (const w of VOICE_BANNED[locale]) if (low.includes(w.toLowerCase())) out.push(`banned:${w}`);
   if (locale === "en" && /\bwindows?\b/i.test(text)) out.push("banned:window");
   if (ISO_DATE_RE.test(text)) out.push("iso_date");
+  for (const j of jargonHits(text, locale)) out.push(`jargon:${j}`);
   if (locale === "te" && opts.isButton && TE_BARE_IMPERATIVE_RE.test(text)) out.push("bare_imperative");
   return out;
 }

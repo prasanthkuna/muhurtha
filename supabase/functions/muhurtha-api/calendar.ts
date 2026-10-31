@@ -191,7 +191,21 @@ export function dayFacts(date: string, p: CalPlace): QuickDayFacts | null {
   return quickDayFacts({ date, zone: p.zone, latitude: p.lat, longitude: p.lng, natalNakshatra: p.natalNakshatra, natalRashi: p.natalRashi });
 }
 
+/** Per-isolate cache: a month for one place + natal star never changes (deterministic). */
+const MONTH_CACHE = new Map<string, CalDay[]>();
+const MONTH_CACHE_MAX = 300;
+
 export function monthDays(month: string, p: CalPlace): CalDay[] {
+  const key = `${CAL_VERSION}|${month}|${p.zone}|${p.lat.toFixed(3)}|${p.lng.toFixed(3)}|${p.natalNakshatra ?? ""}|${p.natalRashi ?? ""}`;
+  const hit = MONTH_CACHE.get(key);
+  if (hit) return hit;
+  const out = computeMonthDays(month, p);
+  if (MONTH_CACHE.size >= MONTH_CACHE_MAX) MONTH_CACHE.delete(MONTH_CACHE.keys().next().value!);
+  MONTH_CACHE.set(key, out);
+  return out;
+}
+
+function computeMonthDays(month: string, p: CalPlace): CalDay[] {
   const start = DateTime.fromISO(`${month}-01`, { zone: p.zone });
   const out: CalDay[] = [];
   for (let d = start; d.month === start.month; d = d.plus({ days: 1 })) {

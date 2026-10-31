@@ -6,7 +6,7 @@
  * validation/repair selection, sanitizing, the legacy-compatible view and the
  * zero-call adapter for readings written by the old 6-phase pack pipeline.
  */
-import { DATE_RULE, polishDeep, VOICE_BLOCK } from "./voice.ts";
+import { DATE_RULE, jargonHits, polishDeep, VOICE_BLOCK } from "./voice.ts";
 import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 
@@ -335,6 +335,7 @@ export function buildSystemPrompt(facts: V2Facts): string {
       ? "7. This is a child's chart: speak to the parent about the child. Areas are child areas. No career, money, romance or marriage. No fear, no medical claims; never suggest delaying care."
       : "7. No fear, no guaranteed outcomes, no medical, legal or financial certainty. Remedies are simple habits, prayers or kindness; never purchases or gemstones.",
     `8. Never use these phrases: ${BANNED_PHRASES[facts.locale].concat(facts.locale === "en" ? [] : BANNED_PHRASES.en.slice(0, 4)).map((p) => `"${p}"`).join(", ")}.`,
+    "8b. This is a personal reading, not a work ticket: no corporate or tech-job jargon (backend, operational, workflow, bottleneck, stakeholders, deliverables, KPIs, bandwidth, pipeline, sprint, scale up, optimise, leverage, glitches) and never assume a profession or job title (no 'coding', 'your team's sprint'); the user's profession is not known. Say it in everyday words: 'what quietly slows your day', 'the people who rely on you', 'finish what you started'.",
     "9. Respect every max length. Be concrete; no filler. Do not copy the engine's English phrases from FACTS word for word: say the same idea in your own natural words.",
     "10. Emoji: at most one, and only in push titles/bodies or share_line. None elsewhere.",
   ].join("\n");
@@ -706,6 +707,7 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
     const low = text.toLowerCase();
     for (const p of banned) if (low.includes(p.toLowerCase())) flag(section, id, `banned:${p}`);
     if (scriptShare(text, locale) < 0.6) flag(section, id, "wrong_script");
+    if (jargonHits(text, locale).length) flag(section, id, "jargon");
     if (strictFacts) {
       if (TIME_RE.some((re) => re.test(text))) flag(section, id, "clock_time");
       if (PLANET_RE[locale].test(text)) flag(section, id, "planet_name");
@@ -820,6 +822,7 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
       flagged: flags.length,
       max_day_similarity: Math.round(maxSim * 100) / 100,
       panchang_reason_pct: Math.round(reasonShare * 100),
+      profile_jargon: jargonHits([c.profile?.title, c.profile?.summary, ...(c.profile?.strengths ?? []), ...(c.profile?.watchouts ?? []), c.profile?.work_style, c.profile?.relationship_style].filter(Boolean).join(" "), locale).length,
     },
   };
 }
@@ -862,7 +865,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     "Rewrite ONLY these items. Fix every listed problem and keep everything else about the rules.",
     "Problems:",
     ...v.flags.map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
-    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters; title_too_long = 2-4 words, at most 28 characters; formula_phrase (stock link) = drop 'నక్షత్రం వల్ల ఈరోజు' / 'thanks to <star>' and give the reason in fresh words; reason_missing = in the line or body name that day's star (or tithi) and say plainly WHY it suits this action (because / so / which means; Telugu కాబట్టి / అందుకే / కావడంతో), without opening the body with the star's name.",
+    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters; title_too_long = 2-4 words, at most 28 characters; formula_phrase (stock link) = drop 'నక్షత్రం వల్ల ఈరోజు' / 'thanks to <star>' and give the reason in fresh words; jargon = replace corporate/tech-job words (backend, workflow, bottleneck, operational, stakeholders ...) with everyday words and do not assume a profession; reason_missing = in the line or body name that day's star (or tithi) and say plainly WHY it suits this action (because / so / which means; Telugu కాబట్టి / అందుకే / కావడంతో), without opening the body with the star's name.",
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 40))}`,
     "FACTS for these items:",
     JSON.stringify(factItems),

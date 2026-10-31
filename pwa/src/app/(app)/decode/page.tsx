@@ -14,6 +14,7 @@ import { isChildStage } from "@/lib/life-stage";
 import { ShareCardButton } from "@/components/share/share-button";
 import { clip, rashiGlyph } from "@/lib/share/builders";
 import { fill, nakLabel } from "@/lib/messages-bond";
+import { calWhyLine } from "@/lib/cal-text";
 
 const ADULT_ONLY_DOMAINS = new Set(["career", "money", "business", "relationship"]);
 
@@ -40,6 +41,10 @@ export default function DecodePage() {
     : views.domainReports();
   const luck = views.natalLuck;
   const birthStar = today?.birthStar ? nakLabel(today.birthStar, locale) : null;
+  const todayWhy = today?.calendar?.why
+    ? calWhyLine({ why: today.calendar.why, nakshatra: today.dayStar ?? null, natal_star: today.calendar.natalStar ?? null }, t, locale)
+    : "";
+  const todayDo = today?.betterFor?.find((x) => x && x !== today.oneLine) ?? "";
 
   return (
     <div className="space-y-6" data-testid="decode-loaded">
@@ -74,11 +79,12 @@ export default function DecodePage() {
           >
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">{t("decode.hero.todayTitle")}</p>
-              <p className="mt-1 line-clamp-2 text-[15px] font-medium text-ink">
-                {today.birthStarToday ? t("decode.hero.birthStarDay") : today.oneLine || t("decode.hero.openToday")}
+              {/* The day's reason (Calendar phrase bank) and one action, never Today's own subtitle. */}
+              <p className="mt-1 line-clamp-2 text-[15px] font-medium text-ink" data-testid="decode-today-why">
+                {today.birthStarToday ? t("decode.hero.birthStarDay") : todayWhy || (today.dayStar ? fill(t("decode.hero.todayStar"), { star: nakLabel(today.dayStar, locale) }) : t("decode.hero.openToday"))}
               </p>
-              {today.dayStar ? (
-                <p className="mt-0.5 text-xs text-ink-tertiary">{fill(t("decode.hero.todayStar"), { star: nakLabel(today.dayStar, locale) })}</p>
+              {todayDo ? (
+                <p className="mt-0.5 line-clamp-1 text-xs text-ink-tertiary">{fill(t("decode.hero.goodFor"), { what: todayDo })}</p>
               ) : null}
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-gold-text" aria-hidden />

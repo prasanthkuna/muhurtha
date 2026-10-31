@@ -10,6 +10,7 @@ import { cn } from "@/components/ui/cn";
 import { useLocale } from "@/context/locale-context";
 import { useAppData } from "@/context/app-data-context";
 import { prefetchBondStatus } from "@/lib/bond";
+import { prefetchCalendar } from "@/lib/cal-cache";
 import { Settings } from "@/components/celestial/muh-icon";
 import { PendingInviteAccept } from "@/components/bond/pending-invite";
 import {
@@ -40,6 +41,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!userId || pathname?.startsWith("/bond")) return;
     const id = window.setTimeout(() => prefetchBondStatus(userId), 2500);
+    return () => window.clearTimeout(id);
+  }, [userId, isPro, pathname]);
+
+  // Warm the Calendar month while Decode / Today are on screen, so its first open is instant.
+  useEffect(() => {
+    if (!userId || pathname?.startsWith("/calendar")) return;
+    const id = window.setTimeout(() => prefetchCalendar(userId, isPro), 1500);
     return () => window.clearTimeout(id);
   }, [userId, isPro, pathname]);
 

@@ -4,18 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { PageHeader } from "@/components/editorial/page-header";
-import { LoadingState } from "@/components/editorial/loading-state";
 import { cn } from "@/components/ui/cn";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { usePaywall } from "@/context/paywall-context";
-import { bondPost, clock, monthLabel, shortDate, type AreaId, type CalDay, type YearMonth } from "@/lib/bond";
+import { clock, monthLabel, shortDate, type AreaId, type CalDay } from "@/lib/bond";
 import { fill, nakLabel } from "@/lib/messages-bond";
 import { AREA_ICON as AREA_GLYPH, AREA_ORDER, calWhyLine, tithiLabel } from "@/lib/cal-text";
 import { upcomingWindows } from "@/lib/day-dedupe";
 
-type MonthResp = { locked: boolean; month: string; today: string; zone?: string; days: CalDay[]; approximate: boolean };
-type YearResp = { locked: boolean; from: string; months: YearMonth[]; approximate: boolean };
+import { cachedMonth, cachedYear, fetchMonth, fetchYear, type MonthResp, type YearResp } from "@/lib/cal-cache";
 
 // Three clearly different tints (green / warm sand / lavender) at a strength that still reads on
 // a phone in daylight; cell, legend swatch and chip use the same colour per tone.
@@ -161,7 +159,7 @@ function YearList({ data }: { data: YearResp }) {
 
 export default function CalendarPage() {
   const { t, locale } = useLocale();
-  const { isPro } = useAppData();
+  const { isPro, userId } = useAppData();
   const { openPaywall } = usePaywall();
   const [view, setView] = useState<"month" | "year">("month");
   const [month, setMonth] = useState<string | null>(null);
@@ -176,26 +174,38 @@ export default function CalendarPage() {
     return () => clearInterval(id);
   }, []);
 
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let alive = true;
-    setData(null);
-    bondPost<MonthResp>("calendar_month_get", month ? { month } : {})
-      .then((r) => {
-        if (!alive) return;
-        setData(r);
-        setMonth((m) => m ?? r.month);
-        setPicked((p) => (p && r.days.some((d) => d.date === p) ? p : r.days.find((d) => d.date >= r.today)?.date ?? r.days[0]?.date ?? null));
-      })
-      .catch((e) => alive && setErr((e as { code?: string }).code ?? "failed"));
+    const applyMonth = (r: MonthResp) => {
+      if (!alive) return;
+      setData(r);
+      setErr(null);
+      setMonth((m) => m ?? r.month);
+      setPicked((p) => (p && r.days.some((d) => d.date === p) ? p : r.days.find((d) => d.date >= r.today)?.date ?? r.days[0]?.date ?? null));
+    };
+    // Cached copy first (instant), then a quiet refresh; the error shows only with nothing on screen.
+    const hit = cachedMonth(userId, isPro, month);
+    if (hit) applyMonth(hit);
+    else setData(null);
+    fetchMonth(userId, isPro, month)
+      .then(applyMonth)
+      .catch((e) => {
+        if (alive && !hit) setErr((e as { code?: string }).code ?? "failed");
+      });
     return () => {
       alive = false;
     };
-  }, [month, isPro, locale]);
+  }, [month, isPro, locale, userId, attempt]);
 
   useEffect(() => {
-    if (view !== "year" || year) return;
-    bondPost<YearResp>("calendar_year_get").then(setYear).catch(() => setErr("failed"));
-  }, [view, year, isPro]);
+    if (view !== "year") return;
+    const hit = cachedYear(userId, isPro);
+    if (hit) setYear(hit);
+    else if (year) return;
+    fetchYear(userId, isPro).then(setYear).catch(() => !hit && setErr("failed"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, isPro, userId, attempt]);
 
   useEffect(() => setYear(null), [isPro]);
   const pickedDay = useMemo(() => data?.days.find((d) => d.date === picked) ?? null, [data, picked]);
@@ -211,11 +221,18 @@ export default function CalendarPage() {
         ))}
       </div>
 
-      {err === "birth_required" ? <p className="rounded-2xl bg-warning-wash/50 px-4 py-3 text-sm text-warning-ink">{t("bond.needBirth")}</p> : err ? <p className="text-sm text-warning-ink">{t("bond.failed")}</p> : null}
+      {err === "birth_required" ? <p className="rounded-2xl bg-warning-wash/50 px-4 py-3 text-sm text-warning-ink">{t("bond.needBirth")}</p> : err ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl bg-warning-wash/40 px-4 py-3 text-sm text-warning-ink" data-testid="cal-error">
+          <span>{t("bond.failed")}</span>
+          <button type="button" onClick={() => { setErr(null); setAttempt((n) => n + 1); }} className="shrink-0 rounded-full border border-warning-ink/30 px-3 py-1 text-xs font-semibold">
+            {t("ask.retry")}
+          </button>
+        </div>
+      ) : null}
 
       {view === "month" ? (
         !data ? (
-          !err ? <LoadingState /> : null
+          !err ? <MonthSkeleton /> : null
         ) : data.locked ? (
           <div className="space-y-3" data-testid="cal-free">
             {data.days.map((d, i) => <DayDetail key={d.date} d={d} label={i === 0 ? t("cal.today") : t("cal.tomorrow")} today={data.today} zone={data.zone} nowMs={nowMs} />)}
@@ -260,7 +277,7 @@ export default function CalendarPage() {
           </div>
         )
       ) : !year ? (
-        !err ? <LoadingState /> : null
+        !err ? <MonthSkeleton /> : null
       ) : year.locked ? (
         <section className="rounded-3xl border border-gold-accent/30 bg-paper px-5 py-6 text-center" data-testid="cal-year-locked">
           <Lock className="mx-auto h-6 w-6 text-gold-text" aria-hidden />
@@ -273,6 +290,21 @@ export default function CalendarPage() {
 
       {data?.approximate ? <p className="mt-3 text-center text-xs text-ink-tertiary">{t("cal.approx")}</p> : null}
       <Link href="/timing" className="mt-6 block text-center text-sm font-semibold text-gold-text underline-offset-4 hover:underline">{t("cal.findDate")} →</Link>
+    </div>
+  );
+}
+
+/** Month-shaped placeholder while the first payload loads (no spinner, no layout jump). */
+function MonthSkeleton() {
+  return (
+    <div className="space-y-3" data-testid="cal-skeleton" aria-busy="true">
+      <div className="mx-auto h-6 w-40 animate-pulse rounded-full bg-line/60" />
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: 35 }, (_, i) => (
+          <span key={i} className="aspect-square animate-pulse rounded-lg bg-line/40" />
+        ))}
+      </div>
+      <div className="h-28 animate-pulse rounded-2xl bg-line/30" />
     </div>
   );
 }
