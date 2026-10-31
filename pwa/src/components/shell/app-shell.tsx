@@ -23,7 +23,9 @@ import {
 } from "./nav-icons";
 
 /** Decode (your birth-star profile) is the main tab and the landing screen; Today sits next to it.
- *  Ask moved to the header so five tabs fit at 360px. Find-a-date (/timing) keeps Calendar lit. */
+ *  Ask moved to the header so five tabs fit at 360px. Find-a-date (/timing) keeps Calendar lit.
+ *  This list is fixed: no flag, plan, locale, stored preference or route may drop a tab,
+ *  and Decode must always be first (Free and Pro alike). */
 const tabKeys = [
   { href: "/decode", key: "nav.decode", primary: true, Icon: NavIconDecode, also: [] as string[] },
   { href: "/today", key: "nav.today", Icon: NavIconToday, also: [] as string[] },
@@ -62,7 +64,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           (el as HTMLInputElement).type,
         )));
     const update = () => {
-      const shrunk = vv ? window.innerHeight - vv.height > 150 : false;
+      // Pinch-zoom also shrinks the visual viewport; only count it as a keyboard at scale 1.
+      const zoomed = vv ? Math.abs((vv.scale ?? 1) - 1) > 0.05 : false;
+      const shrunk = vv && !zoomed ? window.innerHeight - vv.height > 150 : false;
       const open = shrunk || (isField(document.activeElement) && window.innerWidth < 768);
       if (open) root.dataset.kb = "open";
       else delete root.dataset.kb;
@@ -71,7 +75,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("focusin", update);
     const onOut = () => window.setTimeout(update, 50);
     window.addEventListener("focusout", onOut);
+    const onVis = () => document.visibilityState === "visible" && update();
+    document.addEventListener("visibilitychange", onVis);
     return () => {
+      document.removeEventListener("visibilitychange", onVis);
       vv?.removeEventListener("resize", update);
       window.removeEventListener("focusin", update);
       window.removeEventListener("focusout", onOut);
@@ -120,6 +127,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 border-t border-line bg-paper/95 backdrop-blur-md [html[data-kb=open]_&]:hidden"
         aria-label="Primary"
+        data-testid="primary-nav"
+        data-build={process.env.NEXT_PUBLIC_BUILD_ID}
       >
         <div className="mx-auto grid max-w-lg grid-cols-5 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
           {tabKeys.map((tab) => {
@@ -134,7 +143,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 data-testid={`tab-${tab.href.slice(1)}`}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-[11px] font-medium leading-none transition-colors",
+                  "flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-[11px] font-medium leading-none transition-colors",
                   active ? "text-gold-text" : "text-ink-tertiary",
                   "primary" in tab && tab.primary && "font-semibold",
                   "primary" in tab && tab.primary && (active ? "bg-gold-wash/50" : "text-gold-text/80"),
@@ -143,7 +152,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="flex h-6 w-6 items-center justify-center">
                   <Icon active={active} className={active ? "text-gold-accent" : undefined} />
                 </span>
-                <span>{t(tab.key)}</span>
+                <span className="block max-w-full truncate whitespace-nowrap">{t(tab.key)}</span>
               </Link>
             );
           })}

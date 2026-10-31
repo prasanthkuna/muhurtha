@@ -7,7 +7,7 @@
  * - Web Push: shows the server's notification (icon, monochrome badge, image, actions)
  *   and deep-links taps into the right screen, reusing an open app window.
  */
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL_CACHE = `muh-shell-${VERSION}`;
 const PAGE_CACHE = `muh-pages-${VERSION}`;
 const ASSET_CACHE = `muh-assets-${VERSION}`;
@@ -30,16 +30,28 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((k) => k.startsWith("muh-") && ![SHELL_CACHE, PAGE_CACHE, ASSET_CACHE].includes(k))
-            .map((k) => caches.delete(k)),
-        ),
-      )
-      .then(() => self.clients.claim()),
+    (async () => {
+      const keys = await caches.keys();
+      const stale = keys.filter(
+        (k) => k.startsWith("muh-") && ![SHELL_CACHE, PAGE_CACHE, ASSET_CACHE].includes(k),
+      );
+      await Promise.all(stale.map((k) => caches.delete(k)));
+      await self.clients.claim();
+      // Upgrading from an older worker: open windows may still run that build's JS (which
+      // has no update check of its own), so reload them once onto the new build.
+      if (stale.length === 0) return;
+      const wins = await self.clients.matchAll({ type: "window" });
+      await Promise.all(
+        wins.map(async (client) => {
+          try {
+            if (new URL(client.url).origin !== self.location.origin) return;
+            if ("navigate" in client) await client.navigate(client.url);
+          } catch {
+            /* the page reloads itself on controllerchange / version check */
+          }
+        }),
+      );
+    })(),
   );
 });
 
@@ -63,7 +75,8 @@ async function networkFirstPage(request) {
     if (exact) return exact;
     // Any cached app shell can boot the client router and render the cached reading.
     if (isAppPage(url.pathname)) {
-      const shell = (await cache.match("/today")) || (await cache.match("/life"));
+      const shell =
+        (await cache.match("/decode")) || (await cache.match("/today")) || (await cache.match("/life"));
       if (shell) return shell;
     }
     return (await caches.match(OFFLINE_URL)) || Response.error();
