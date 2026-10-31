@@ -5,7 +5,7 @@
   "description": "Your day's good and caution windows for your city, life chapters from your birth chart, and dates for the things that matter. In English, Telugu and Hindi.",
   "lang": "en",
   "dir": "ltr",
-  "start_url": "/today?src=pwa",
+  "start_url": "/decode?src=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
