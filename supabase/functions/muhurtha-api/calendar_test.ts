@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
-import { AREA_IDS, coupleDayType, monthDays, scoreDay, yearMonths } from "./calendar.ts";
+import { AREA_IDS, coupleDayType, monthDays, moonDates, scoreDay, yearMonths } from "./calendar.ts";
 import { quickDayFacts } from "./panchanga.ts";
 
 const P = { zone: "Asia/Kolkata", lat: 17.385, lng: 78.4867, natalNakshatra: "Rohini", natalRashi: "vrishabha" };
@@ -66,4 +66,23 @@ Deno.test("owner-style chart: every day has a why code, star and best time never
   assertEquals(oct29.why, "janma"); // Rohini is a birth-star echo (9 stars) of Hasta
   const birth = monthDays("2026-11", H).find((d) => d.birth_star);
   assert(birth && birth.why === "birth_star", "birth-star day flagged");
+});
+
+Deno.test("janma-group days (birth star + sister stars) never list New starts, and name the natal star", () => {
+  const H = { zone: "Asia/Kolkata", lat: 17.385, lng: 78.4867, natalNakshatra: "Hasta", natalRashi: "kanya" };
+  for (const m of ["2026-10", "2026-11", "2026-12"]) {
+    for (const d of monthDays(m, H)) {
+      if (d.tara === "Janma") assert(!d.favours.includes("new_starts"), d.date);
+      if (d.why === "janma") assertEquals(d.natal_star, "Hasta", d.date);
+    }
+  }
+  const oct29 = monthDays("2026-10", H).find((d) => d.date === "2026-10-29")!;
+  assert(!oct29.favours.includes("new_starts"));
+});
+
+Deno.test("moon dates: next full moon from 24 Oct 2026 is 26 Oct", () => {
+  const H = { zone: "Asia/Kolkata", lat: 17.385, lng: 78.4867, natalNakshatra: "Hasta", natalRashi: "kanya" };
+  const m = moonDates("2026-10-24", H);
+  assertEquals(m.purnima, "2026-10-26");
+  assert(m.amavasya && m.amavasya > "2026-10-26", String(m.amavasya));
 });

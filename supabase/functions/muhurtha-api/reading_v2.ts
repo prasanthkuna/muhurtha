@@ -11,7 +11,7 @@ import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 
 export const READING_SCHEMA_VERSION = 2;
-export const READING_PROMPT_VERSION = "reading-v2.6";
+export const READING_PROMPT_VERSION = "reading-v2.8";
 
 export type ReadingLocale = "en" | "te" | "hi";
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
@@ -129,6 +129,7 @@ export const LIMITS = {
   share: 120,
   areaHeadline: 80,
   areaSummary: 320,
+  chapterTitle: 36,
   chapterHighlight: 170,
   chapterBody: 560,
   periodHeadline: 80,
@@ -234,7 +235,7 @@ export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean;
   if (chIds.length) {
     props.chapters = arr(obj({
       chapter_id: { type: "integer", enum: chIds },
-      title: str(LIMITS.title, wl, "chapter title, no planet names"),
+      title: str(LIMITS.chapterTitle, wl, "chapter title, 2-4 words, no planet names"),
       highlight: str(LIMITS.chapterHighlight, wl, "one sentence"),
       body: str(LIMITS.chapterBody, wl, "past: 1-2 sentences; current/future: 3-4 sentences"),
       share_line: str(LIMITS.share, wl),
@@ -251,7 +252,7 @@ export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean;
   if (!scope) {
     props.ask_starters = arr(obj({
       topic: { type: "string", enum: [...ASK_TOPICS] },
-      question: str(LIMITS.question, wl, "a question this person would actually ask, first person"),
+      question: str(LIMITS.question, wl, "a personal first-person question tied to this person's current chapter or a trait from FACTS, in plain words: no planet, dasha or period names, no generic 'how do I balance work and life'"),
     }), 4);
     props.remedies = arr(obj({
       title: str(LIMITS.remedyTitle, wl),
@@ -324,11 +325,11 @@ export function buildSystemPrompt(facts: V2Facts): string {
     DATE_RULE,
     "Rules:",
     "1. The engine owns all facts. Never write clock times, durations in hours, years, dates, ages or planet/graha names in days, weekdays, weeks, months or push. Planet names are allowed only inside chapters and profile, and only when they help.",
-    "2. Every day needs its OWN hook from that day's facts, never a mood bucket. Build body as: hook (today's star by name, or the tithi_hint, or the tara_hint in plain words) -> why it matters for THIS person (their natal signals or current period) -> one concrete action. Vary the sentence shape: open with the star's name on at most one day in three; on the others lead with the action, the person or the moment and name the star mid-sentence. Never use the formula '<star> combined with/alongside <tithi>'. Name the current period as 'your current period', never by planet names. Use tithi_hint on every day that has one (full moon, new moon, Ekadashi ...). day_tone is an internal label: never write 'mixed/careful/supportive tone', 'day tone' or 'energy' as an opener. No two day bodies may start with the same two words; no two lines may share an opener. Call a star 'your birth star' ONLY when is_birth_star is true; otherwise it is 'today's star' (use the exact nakshatra name from that day's facts, Telugu: nakshatra_te). Never reuse a title or chip across days. Never put a weekday name in a day title.",
+    "2. Every day needs its OWN hook from that day's facts, never a mood bucket. Build body as: hook (today's star by name, or the tithi_hint, or the tara_hint in plain words) -> why it matters for THIS person (their natal signals or current period) -> one concrete action. At least two days in every three must give an explicit reason tied to that day's star or tithi: name it and link it to the advice with a plain causal word (because, so, which means; Telugu కాబట్టి, అందుకే, కావడంతో; Hindi क्योंकि, इसलिए), e.g. 'Pushya is a nourishing star, so it suits a slow family lunch' / 'పుష్యమి రోజు కావడంతో ఇంట్లో పనులు సాఫీగా సాగుతాయి'. Vary the sentence shape: open with the star's name on at most one day in three; on the others lead with the action, the person or the moment and name the star mid-sentence. Never use the formula '<star> combined with/alongside <tithi>', and never lean on one stock link phrase (Telugu 'నక్షత్రం వల్ల ఈరోజు', English 'thanks to <star>') more than twice in the whole month. Name the current period as 'your current period', never by planet names. Use tithi_hint on every day that has one (full moon, new moon, Ekadashi ...). day_tone is an internal label: never write 'mixed/careful/supportive tone', 'day tone' or 'energy' as an opener. No two day bodies may start with the same two words; no two lines may share an opener. Call a star 'your birth star' ONLY when is_birth_star is true; otherwise it is 'today's star' (use the exact nakshatra name from that day's facts, Telugu: nakshatra_te). Never reuse a title or chip across days. Never put a weekday name in a day title.",
     "2b. One screen shows a day's title, line, body, do/avoid chips and window notes together, so each must take a DIFFERENT angle: line = the one-sentence verdict; body = the why + one concrete example; do/avoid = two other actions not named in the body; each window note = what that particular slot suits (no repeat of the body's example). Never reuse the same task (e.g. 'clear the inbox', 'wrap up pending work') in two of them. Each day's calendar field holds the Calendar tab's tags (favours/avoid areas); the day's angle must agree with them: lean into a favoured area, steer away from the avoid area, never contradict them.",
     "3. window_notes: write one note for every window id listed for that day/weekday (and no others). Good windows (g*) say what to use them for; c1 is the traditional caution window: say what to keep routine. Never write times; the app shows them.",
     "4. weekdays are evergreen cards used after the dated days run out: write for that weekday in general, no tithi/nakshatra references.",
-    "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique: 2-5 words, never the same word twice in one title (no 'New Horizon Horizon'), and no two chapters may start with the same word or share their main noun (avoid 'Quiet Mental Rest' vs 'Quiet Leadership', 'Refining Details' vs 'Refined Work'). Name what is specific to that chapter's lords and domains.",
+    "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique and short: 2-4 words and at most 28 characters (Telugu: 2-3 words), concrete rather than generic (not 'New Beginnings', 'Growth Phase', 'A Time of Change'), never the same word twice in one title (no 'New Horizon Horizon'), and no two chapters may start with the same word or share their main noun (avoid 'Quiet Mental Rest' vs 'Quiet Leadership', 'Refining Details' vs 'Refined Work'). Name what is specific to that chapter's lords and domains.",
     "6. weeks/months: use the counts and notable days given; each period must differ. A week or month card must not restate the current chapter's theme or the day cards' tasks: talk about the stretch itself (which days to use, which to keep light).",
     child
       ? "7. This is a child's chart: speak to the parent about the child. Areas are child areas. No career, money, romance or marriage. No fear, no medical claims; never suggest delaying care."
@@ -460,7 +461,7 @@ function sanitizeRaw(c: V2Content, facts: V2Facts): V2Content {
     })),
     chapters: (c.chapters ?? []).map((ch) => ({
       chapter_id: Number(ch.chapter_id),
-      title: clip(ch.title, LIMITS.title),
+      title: clip(ch.title, LIMITS.chapterTitle),
       highlight: clip(ch.highlight, LIMITS.chapterHighlight),
       body: clip(ch.body, LIMITS.chapterBody),
       share_line: clip(ch.share_line, LIMITS.share),
@@ -594,6 +595,47 @@ export function titleStem(w: string): string {
   return x.length >= 5 ? x.slice(0, 5) : x;
 }
 
+/** Chapter titles stay short: at most 4 words and 28 characters (36 for Indic scripts, whose marks count as chars). */
+export function chapterTitleTooLong(title: string): boolean {
+  const t = (title ?? "").trim();
+  if (!t) return false;
+  const words = t.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+  const indic = /[\u0900-\u0DFF]/.test(t);
+  return words > 4 || t.length > (indic ? 36 : 28);
+}
+
+/** Stock link phrases the model leans on ("<star> నక్షత్రం వల్ల ఈరోజు ...", "thanks to <star>"). */
+const STOCK_LINK = /నక్షత్రం వల్ల ఈరోజు|\bthanks to\b/i;
+
+/** Words that make a sentence a reason ("because", "so", "కాబట్టి" ...), per locale. */
+const REASON_RE: Record<ReadingLocale, RegExp> = {
+  en: /\b(because|since|so that|so|as (the|today|it|this|your)|which (means|makes|favours|favors|suits|helps)|that'?s why|this means|means|thanks to|with (today'?s|the|a) )\b/i,
+  te: /(కాబట్టి|వల్ల|అందుకే|కనుక|ప్రభావంతో|కారణంగా|అంటే|కావడంతో|కావడం వల్ల|కదా|ఉండటంతో)/,
+  hi: /(क्योंकि|इसलिए|के कारण|की वजह से|यानी|इस वजह से)/,
+};
+
+const TITHI_WORD_RE: Record<ReadingLocale, RegExp> = {
+  en: /\b(tithi|full moon|new moon|purnima|amavasya|ekadashi|chaturthi|ashtami|pratipada|dashami|navami|saptami|shashthi|panchami|tritiya|dwitiya|dvitiya|trayodashi|dwadashi|chaturdashi|lunar day)\b/i,
+  te: /(తిథి|పౌర్ణమి|పున్నమి|అమావాస్య|ఏకాదశి|చవితి|చతుర్థి|అష్టమి|పాడ్యమి|దశమి|నవమి|సప్తమి|షష్ఠి|పంచమి|తదియ|విదియ|త్రయోదశి|ద్వాదశి|చతుర్దశి)/,
+  hi: /(तिथि|पूर्णिमा|अमावस्या|एकादशी|चतुर्थी|अष्टमी|प्रतिपदा)/,
+};
+
+/**
+ * A day "gives a reason tied to its panchang" when its line + body name that day's star
+ * (or its tithi) AND carry a causal link (because / so / కాబట్టి ...). Target: >= 60% of days.
+ */
+export function panchangReason(d: V2DayCopy, fx: V2DayFact | undefined, locale: ReadingLocale): boolean {
+  if (!fx) return false;
+  const text = `${d.line ?? ""} ${d.body ?? ""}`;
+  const star = fx.nakshatra ? text.toLowerCase().includes(fx.nakshatra.toLowerCase().split(" ").slice(-1)[0]) || (NAKSHATRA_TE[fx.nakshatra] ? text.includes(NAKSHATRA_TE[fx.nakshatra]) : false) : false;
+  const tithiWord = (fx.tithi ?? "").split(" ").slice(-1)[0]?.toLowerCase() ?? "";
+  const tithi = TITHI_WORD_RE[locale].test(text) || (tithiWord.length >= 4 && text.toLowerCase().includes(tithiWord));
+  return (star || tithi) && REASON_RE[locale].test(text);
+}
+
+/** Minimum share of dated days whose copy gives a panchang-tied reason. */
+export const PANCHANG_REASON_MIN = 0.6;
+
 /** Chapter title checks: a word twice in one title, or a lead word another chapter already used. */
 export function chapterTitleProblems(title: string, leadSeen: Set<string>): string[] {
   const words = title.split(/[\s,&/–-]+/).filter((w) => w && !TITLE_STOP.has(w.toLowerCase()));
@@ -686,6 +728,7 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
   const natalStar = (facts.natal as { nakshatra?: string } | undefined)?.nakshatra ?? "";
   const bodyOpenSeen = new Map<string, number>();
   let starOpeners = 0;
+  let stockLinks = 0;
   for (const { section, id, d, wins } of dayLike) {
     const text = dayText(d);
     checkText(section, id, text, true);
@@ -702,6 +745,10 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
         if (starOpeners > 10) flag(section, id, "star_opener_repeat");
       }
       if (/\b(combined with|alongside)\b/i.test(d.body ?? "")) flag(section, id, "formula_phrase");
+      if (STOCK_LINK.test(d.body ?? "")) {
+        stockLinks += 1;
+        if (stockLinks > 2) flag(section, id, "formula_phrase");
+      }
     }
     if (!d.title || !d.body || (d.body ?? "").length < 40) flag(section, id, "too_thin");
     if (section === "days" && screenRepeat(d)) flag(section, id, "screen_repeat");
@@ -729,6 +776,16 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
     prior.push({ id: String(id), sh });
   }
 
+  // Usefulness: at least 60% of dated days must say WHY, tied to that day's star or tithi.
+  // Below the bar, flag just enough of the ungrounded days (earliest first, they show first) for the repair pass.
+  const reasonless = (c.days ?? []).filter((d) => !panchangReason(d, dayFact.get(d.date), locale)).map((d) => d.date).sort();
+  const totalDays = (c.days ?? []).length;
+  const reasonShare = totalDays ? (totalDays - reasonless.length) / totalDays : 1;
+  if (totalDays && reasonShare < PANCHANG_REASON_MIN) {
+    const need = Math.ceil(PANCHANG_REASON_MIN * totalDays) - (totalDays - reasonless.length);
+    for (const id of reasonless.slice(0, need + 2)) flag("days", id, "reason_missing");
+  }
+
   const chapterTitles = new Map<string, number>();
   const leadSeen = new Set<string>();
   for (const ch of c.chapters ?? []) {
@@ -737,6 +794,7 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
     chapterTitles.set(k, (chapterTitles.get(k) ?? 0) + 1);
     if ((chapterTitles.get(k) ?? 0) > 1) flag("chapters", Number(ch.chapter_id), "title_repeat");
     for (const r of chapterTitleProblems(ch.title ?? "", leadSeen)) flag("chapters", Number(ch.chapter_id), r);
+    if (chapterTitleTooLong(ch.title ?? "")) flag("chapters", Number(ch.chapter_id), "title_too_long");
     if (YEAR_RE.test(`${ch.title} ${ch.highlight} ${ch.body}`)) flag("chapters", Number(ch.chapter_id), "year");
     if (TIME_RE.some((re) => re.test(ch.body ?? ""))) flag("chapters", Number(ch.chapter_id), "clock_time");
   }
@@ -761,6 +819,7 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
       chapters: c.chapters?.length ?? 0,
       flagged: flags.length,
       max_day_similarity: Math.round(maxSim * 100) / 100,
+      panchang_reason_pct: Math.round(reasonShare * 100),
     },
   };
 }
@@ -803,7 +862,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     "Rewrite ONLY these items. Fix every listed problem and keep everything else about the rules.",
     "Problems:",
     ...v.flags.map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
-    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters.",
+    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters; title_too_long = 2-4 words, at most 28 characters; formula_phrase (stock link) = drop 'నక్షత్రం వల్ల ఈరోజు' / 'thanks to <star>' and give the reason in fresh words; reason_missing = in the line or body name that day's star (or tithi) and say plainly WHY it suits this action (because / so / which means; Telugu కాబట్టి / అందుకే / కావడంతో), without opening the body with the star's name.",
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 40))}`,
     "FACTS for these items:",
     JSON.stringify(factItems),

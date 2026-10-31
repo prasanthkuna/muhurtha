@@ -7,6 +7,7 @@
 import { DateTime } from "luxon";
 import { quickDayFacts, type QuickDayFacts } from "./panchanga.ts";
 import { houseFrom, siderealLon } from "./grahas.ts";
+import { NAKSHATRAS } from "./vimshottari.ts";
 
 export const CAL_VERSION = "cal-v1";
 export const AREA_IDS = ["money", "travel", "talks", "love", "health", "rest", "new_starts"] as const;
@@ -53,6 +54,8 @@ export type CalDay = {
   why?: CalWhy;
   /** Best is the calmest slot (rest days), not a "go" slot. */
   best_kind?: "go" | "calm";
+  /** The natal star, sent only when the reason names it (sister-star / janma days). */
+  natal_star?: string | null;
   festival?: string | null;
 };
 
@@ -121,11 +124,16 @@ export function scoreDay(q: QuickDayFacts): CalDay {
 
   const restDay = ch8 || amavasya || q.rank <= -2;
   const ranked = AREA_IDS.filter((a) => a !== "rest").sort((a, b) => s[b] - s[a] || AREA_IDS.indexOf(a) - AREA_IDS.indexOf(b));
-  let favours: AreaId[] = ranked.filter((a) => s[a] >= 1.5).slice(0, 2);
+  // Janma-group days (birth star and its two sister stars) are low-energy days in muhurta:
+  // never advertise them as good for new starts, whatever the weekday/class score says.
+  const janmaGroup = q.tara === "Janma";
+  const eligible = janmaGroup ? ranked.filter((a) => a !== "new_starts") : ranked;
+  let favours: AreaId[] = eligible.filter((a) => s[a] >= 1.5).slice(0, 2);
   if (restDay) favours = ["rest", ...favours.slice(0, 1)];
   else if (!favours.length && s.rest >= 1.5) favours = ["rest"];
-  else if (!favours.length) favours = ranked.slice(0, 1);
+  else if (!favours.length) favours = eligible.slice(0, 1);
   const low = [...ranked].reverse().find((a) => s[a] <= -1 && !favours.includes(a)) ?? null;
+  const why = whyCode(q);
   const tone: DayTone = restDay ? "rest" : q.rank >= 1 ? "supportive" : "mixed";
   return {
     date: q.date,
@@ -142,14 +150,39 @@ export function scoreDay(q: QuickDayFacts): CalDay {
     nakshatra: q.nakshatra,
     tara: q.tara,
     birth_star: isSameStar(q),
-    why: whyCode(q),
+    why,
     best_kind: restDay ? "calm" : "go",
+    ...(why === "janma" && q.natalNakIndex != null && q.natalNakIndex >= 0 ? { natal_star: NAKSHATRAS[q.natalNakIndex] ?? null } : {}),
   };
 }
 
 /** Janma tara repeats every 9 stars; the birth star itself is the 0th offset only. */
 function isSameStar(q: QuickDayFacts): boolean {
   return q.natalNakIndex != null && q.natalNakIndex >= 0 && q.natalNakIndex === q.nakIndex;
+}
+
+/**
+ * Next full moon / new moon dates (sunrise tithi) on or after `from`, within ~31 days.
+ * Estimates from today's tithi, then checks a few nearby sunrises (cheap: ~6 day evaluations).
+ */
+export function moonDates(from: string, p: CalPlace): { purnima: string | null; amavasya: string | null } {
+  const start = DateTime.fromISO(from, { zone: p.zone });
+  const q0 = dayFacts(from, p);
+  if (!q0) return { purnima: null, amavasya: null };
+  const find = (target: number): string | null => {
+    if (q0.tithiIndex === target) return from;
+    const ahead = (target - q0.tithiIndex + 30) % 30;
+    const est = Math.round(ahead * 0.984);
+    for (const off of [est, est - 1, est + 1, est - 2, est + 2]) {
+      if (off < 0 || off > 31) continue;
+      const d = start.plus({ days: off }).toISODate()!;
+      const q = dayFacts(d, p);
+      if (q && q.tithiIndex === target) return d;
+    }
+    // Kshaya tithi (never at sunrise): fall back to the estimate.
+    return est >= 0 && est <= 31 ? start.plus({ days: est }).toISODate()! : null;
+  };
+  return { purnima: find(14), amavasya: find(29) };
 }
 
 export type CalPlace = { zone: string; lat: number; lng: number; natalNakshatra: string | null; natalRashi: string | null };

@@ -12,6 +12,7 @@ import {
   bondMomentsFor,
   type BioLite,
   calendarDayForBirth,
+  moonDatesForBirth,
   handleBondAction,
   prepareBondMonths,
   sweepPairReadings,
@@ -5303,6 +5304,7 @@ async function _handleInternal(
 
     // Same verdict the Calendar tab shows for this date, so Today and Calendar never disagree.
     const calendar = bi ? calendarDayForBirth(bi as unknown as BioLite, profile, dateStr) : null;
+    const moonDates = bi ? moonDatesForBirth(bi as unknown as BioLite, profile, dateStr) : null;
     const birthStarToday = Boolean(
       natalMoon?.nakshatra && panchanga?.nakshatra?.value && natalMoon.nakshatra === panchanga.nakshatra.value,
     );
@@ -5312,6 +5314,7 @@ async function _handleInternal(
       locationVerified,
       panchanga,
       calendar,
+      moonDates,
       birthStarToday,
       readingId: pack?.id ?? null,
       readingVersion: pack?.content_version ?? pack?.id ?? null,

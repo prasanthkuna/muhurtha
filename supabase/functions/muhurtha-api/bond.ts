@@ -32,7 +32,7 @@ import {
 import { ashtakoota, type MoonStar, starFromLon } from "./koota.ts";
 import { natalGrahas } from "./grahas.ts";
 import { moonSiderealLongitudeDeg, siderealMetaFromNameOrMoon } from "./ephemeris.ts";
-import { type CalDay, type CalPlace, coupleDayType, dayFacts, monthDays, scoreDay, yearMonths } from "./calendar.ts";
+import { type CalDay, type CalPlace, coupleDayType, dayFacts, monthDays, moonDates, scoreDay, yearMonths } from "./calendar.ts";
 import { costUsd, createResponse, modelForAttempt, providerOf, readingModel, type ResponseObject, retrieveResponse } from "./openai_responses.ts";
 import { sendOneOffToProfile } from "./push.ts";
 import { BOND_PUSH, bondLoc } from "./bond_phrases.ts";
@@ -628,7 +628,7 @@ export async function handleBondAction(
     if (!pro && !days.length) {
       days = [today, tomorrow].map((d) => dayFacts(d, me.place)).filter((q) => q != null).map((q) => scoreDay(q!));
     }
-    return { locked: !pro, month, today, days, approximate: me.starApprox, version: "cal-v1" };
+    return { locked: !pro, month, today, zone: me.place.zone, days, approximate: me.starApprox, version: "cal-v1" };
   }
 
   if (action === "match_quick") {
@@ -842,6 +842,16 @@ export async function bondMomentsFor(admin: SupabaseClient, deps: BondDeps, prof
 }
 
 /** The Calendar's verdict for one date (same scoring the Calendar tab shows), for Today. */
+export function moonDatesForBirth(bi: BioLite, prof: Pick<ProfLite, "current_timezone" | "current_lat" | "current_lng">, date: string): { purnima: string | null; amavasya: string | null } | null {
+  try {
+    const base = baseOf(prof as ProfLite);
+    const me = personFrom(bi, "", base);
+    return moonDates(date, me.place);
+  } catch {
+    return null;
+  }
+}
+
 export function calendarDayForBirth(bi: BioLite, prof: Pick<ProfLite, "current_timezone" | "current_lat" | "current_lng">, date: string): CalDay | null {
   try {
     const base = baseOf(prof as ProfLite);
