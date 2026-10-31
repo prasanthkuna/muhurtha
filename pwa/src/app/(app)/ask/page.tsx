@@ -11,7 +11,7 @@ import { useLocale } from "@/context/locale-context";
 import { usePaywall } from "@/context/paywall-context";
 import { parseAskAnswer } from "@/lib/engine-parsers";
 import type { AskMessage } from "@/lib/types";
-import { clipWords, dedupeSessions, mergeStarters } from "@/lib/ask-starters";
+import { clipWords, dedupeSessions, mergeStarters, pickKeyDay, plainStarter } from "@/lib/ask-starters";
 import { bondPost, shortDate, type CalDay } from "@/lib/bond";
 import { fill } from "@/lib/messages-bond";
 
@@ -44,17 +44,29 @@ function AskInner() {
   const [retryQ, setRetryQ] = useState<{ q: string; s: number } | null>(null);
   const [keyDay, setKeyDay] = useState<CalDay | null>(null);
 
-  // One upcoming strong day (deterministic Calendar scoring, no LLM) for a personal starter.
+  // The next strong day in the coming ten days (deterministic Calendar scoring, no LLM), picked
+  // fresh on every visit; near month-end the next month is read too.
   useEffect(() => {
     if (activeChartProfileId) return;
     let alive = true;
-    bondPost<{ locked: boolean; today: string; days: CalDay[] }>("calendar_month_get")
-      .then((r) => {
+    type M = { locked: boolean; month: string; today: string; days: CalDay[] };
+    void (async () => {
+      try {
+        const r = await bondPost<M>("calendar_month_get");
         if (!alive || !Array.isArray(r.days)) return;
-        const soon = r.days.filter((d) => d.date > r.today && d.tone === "supportive").sort((a, b) => b.peak - a.peak)[0];
-        setKeyDay(soon ?? null);
-      })
-      .catch(() => {});
+        let days = r.days;
+        const left = days.filter((d) => d.date > r.today).length;
+        if (!r.locked && left < 10) {
+          const [y, m] = r.month.split("-").map(Number);
+          const next = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`;
+          const n = await bondPost<M>("calendar_month_get", { month: next }).catch(() => null);
+          if (n && Array.isArray(n.days)) days = [...days, ...n.days];
+        }
+        if (alive) setKeyDay(pickKeyDay(days, r.today));
+      } catch {
+        /* starter is optional */
+      }
+    })();
     return () => {
       alive = false;
     };
@@ -110,12 +122,20 @@ function AskInner() {
 
   const currentChapter = views.currentChapter();
   const todayTitle = today?.date ? views.todayCard(today.date)?.title?.toString() : "";
+  const areaLabel = (a: string | undefined) => (a ? t(`cal.area.${a}`).toLowerCase() : "");
+  const keyArea = keyDay?.favours.find((a) => a !== "rest");
+  const todayArea = today?.calendar?.favours.find((a) => a !== "rest");
   const personal = [
     todayTitle ? fill(t("ask.starter.today"), { title: todayTitle }) : "",
-    keyDay ? fill(t("ask.starter.keyDay"), { date: shortDate(keyDay.date, locale) }) : "",
-    t("ask.starter.week"),
+    keyDay
+      ? keyArea
+        ? fill(t("ask.starter.keyDay"), { date: shortDate(keyDay.date, locale), area: areaLabel(keyArea) })
+        : fill(t("ask.starter.keyDayPlain"), { date: shortDate(keyDay.date, locale) })
+      : "",
+    todayArea && todayArea !== keyArea ? fill(t("ask.starter.weekArea"), { area: areaLabel(todayArea) }) : t("ask.starter.week"),
   ].filter(Boolean);
-  const suggestions = mergeStarters(personal, views.askSuggestions());
+  // Reading starters with astro jargon ("Jupiter–Saturn") are skipped; the personal ones lead.
+  const suggestions = mergeStarters(personal, views.askSuggestions().filter(plainStarter));
   const chips = dedupeSessions(sessions).slice(0, 8);
 
   async function send(text: string) {
@@ -191,7 +211,7 @@ function AskInner() {
             {chips.map((s) => (
               <button
                 key={s.id}
-                title={s.title}
+                title={s.count > 1 ? `${s.title} · ${fill(t("ask.askedTimes"), { n: s.count })}` : s.title}
                 type="button"
                 onClick={() => {
                   const key = chartKey;
@@ -220,7 +240,6 @@ function AskInner() {
                 className="min-h-9 shrink-0 rounded-full border border-line bg-paper px-3 py-1.5 text-sm text-ink-secondary hover:border-gold-accent/50"
               >
                 {clipWords(s.title, 42)}
-                {s.count > 1 ? <span className="ml-1 text-ink-tertiary">×{s.count}</span> : null}
               </button>
             ))}
           </div>

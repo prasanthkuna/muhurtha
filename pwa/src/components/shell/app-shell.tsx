@@ -8,6 +8,8 @@ import { ChartProfileBanner } from "@/components/shell/chart-profile-banner";
 import { ProfileSwitcher } from "@/components/shell/profile-switcher";
 import { cn } from "@/components/ui/cn";
 import { useLocale } from "@/context/locale-context";
+import { useAppData } from "@/context/app-data-context";
+import { prefetchBondStatus } from "@/lib/bond";
 import { Settings } from "@/components/celestial/muh-icon";
 import { PendingInviteAccept } from "@/components/bond/pending-invite";
 import {
@@ -31,6 +33,14 @@ const tabKeys = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useLocale();
+  const { userId, isPro } = useAppData();
+
+  // Warm Bond's status a few seconds after the app settles, so the tab opens without a spinner.
+  useEffect(() => {
+    if (!userId || pathname?.startsWith("/bond")) return;
+    const id = window.setTimeout(() => prefetchBondStatus(userId), 2500);
+    return () => window.clearTimeout(id);
+  }, [userId, isPro, pathname]);
 
   // Flag the on-screen keyboard on <html data-kb="open"> so the tab bar can step aside and
   // composers can pin to the keyboard edge instead of hiding behind the nav.

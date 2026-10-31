@@ -43,7 +43,7 @@ export type CalDay = {
   date: string; weekday: number; tone: "supportive" | "mixed" | "rest"; favours: AreaId[]; avoid: AreaId | null;
   chandrashtama: boolean; peak: number; scores: Record<AreaId, number>; best: { start: string; end: string } | null;
   rahu: { start: string; end: string } | null; tithi: string; nakshatra: string;
-  tara?: string | null; birth_star?: boolean; why?: string; best_kind?: "go" | "calm";
+  tara?: string | null; birth_star?: boolean; why?: string; best_kind?: "go" | "calm"; natal_star?: string | null;
 };
 export type YearMonth = {
   month: string; theme: string; ad_lord: string | null; ad_change: boolean; supportive_days: number; rest_days: number;
@@ -101,4 +101,73 @@ export function clock(hhmm: string | undefined | null): string {
   if (!m) return "";
   const h = Number(m[1]);
   return `${h % 12 || 12}:${m[2]} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+// ------------------------------------------------------------------ bond_status cache + prefetch
+/**
+ * Bond opens instantly from the last status (memory, then sessionStorage) while a fresh one
+ * loads; the shell prefetches it once the app is idle. Per signed-in user; read-only action.
+ */
+const BOND_TTL_MS = 10 * 60_000;
+const bondMem = new Map<string, { at: number; v: BondStatus }>();
+let bondInflight: { key: string; p: Promise<BondStatus> } | null = null;
+const bondKey = (uid: string | null | undefined) => `muhurta.bondStatus:${uid ?? "anon"}`;
+
+export function cachedBondStatus(uid: string | null | undefined): BondStatus | null {
+  const k = bondKey(uid);
+  const mem = bondMem.get(k);
+  if (mem && Date.now() - mem.at < BOND_TTL_MS) return mem.v;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(k);
+    if (!raw) return null;
+    const j = JSON.parse(raw) as { at: number; v: BondStatus };
+    if (Date.now() - j.at > BOND_TTL_MS) return null;
+    bondMem.set(k, j);
+    return j.v;
+  } catch {
+    return null;
+  }
+}
+
+function storeBondStatus(uid: string | null | undefined, v: BondStatus) {
+  const k = bondKey(uid);
+  const entry = { at: Date.now(), v };
+  bondMem.set(k, entry);
+  try {
+    window.sessionStorage.setItem(k, JSON.stringify(entry));
+  } catch {
+    /* storage full or private mode */
+  }
+}
+
+export function clearBondStatus(uid: string | null | undefined) {
+  const k = bondKey(uid);
+  bondMem.delete(k);
+  try {
+    window.sessionStorage.removeItem(k);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Fetch bond_status once (shared by the prefetch and the page) and cache it. */
+export function fetchBondStatus(uid: string | null | undefined): Promise<BondStatus> {
+  const k = bondKey(uid);
+  if (bondInflight?.key === k) return bondInflight.p;
+  const p = bondPost<BondStatus>("bond_status")
+    .then((v) => {
+      storeBondStatus(uid, v);
+      return v;
+    })
+    .finally(() => {
+      if (bondInflight?.p === p) bondInflight = null;
+    });
+  bondInflight = { key: k, p };
+  return p;
+}
+
+export function prefetchBondStatus(uid: string | null | undefined) {
+  if (!uid || cachedBondStatus(uid)) return;
+  void fetchBondStatus(uid).catch(() => {});
 }

@@ -24,9 +24,10 @@ import { isChildStage } from "@/lib/life-stage";
 import { todayInTimezone } from "@/lib/local-date";
 import type { TimingWindow, TodayPayload } from "@/lib/today-types";
 import { scrubList, scrubStaleTimes, windowsSummary } from "@/lib/window-text";
-import { dedupeList, mergeStems, restates, upcomingWindows } from "@/lib/day-dedupe";
+import { areasIn, dateMoonMentions, dedupeByArea, dedupeList, mergeStems, restates, upcomingWindows } from "@/lib/day-dedupe";
 import { AREA_ICON, calWhyLine, tithiLabel } from "@/lib/cal-text";
 import { fill, nakLabel } from "@/lib/messages-bond";
+import { shortDate } from "@/lib/bond";
 
 /** How far the day browser goes from today (days). */
 const MIN_OFFSET = -30;
@@ -232,20 +233,31 @@ export default function TodayPage() {
   const bodyShown = detailedBody && detailedBody !== mainAdvice && !restates(detailedBody, mergeStems(mainAdvice), 0.6)
     ? detailedBody
     : "";
+  // Each life area ("Travel", "family"...) is said once per screen, in its best spot:
+  // hero first (it cannot be edited), then the Calendar tags, then the body, then the chip lists.
+  const cal = day?.calendar ?? null;
+  const areaSaid = new Set<string>(areasIn(`${cardTitle} ${mainAdvice}`));
+  const calFavours = cal ? cal.favours.filter((a) => !areaSaid.has(a)) : [];
+  const calAvoid = cal?.avoid && !areaSaid.has(cal.avoid) ? cal.avoid : null;
+  for (const a of [...calFavours, ...(calAvoid ? [calAvoid] : [])]) areaSaid.add(a);
+  for (const a of areasIn(bodyShown)) areaSaid.add(a);
   const seenTop = mergeStems(mainAdvice, bodyShown);
-  const betterForShown = dedupeList(betterFor, seenTop);
-  const seenAll = mergeStems(mainAdvice, bodyShown, ...betterForShown);
+  const betterForShown = dedupeByArea(dedupeList(betterFor, seenTop), areaSaid);
+  const beCarefulShown = dedupeByArea(dedupeList(beCareful, mergeStems(mainAdvice, bodyShown, ...betterForShown)), areaSaid);
+  const seenAll = mergeStems(mainAdvice, bodyShown, ...betterForShown, ...beCarefulShown);
   const decorate = (list: TimingWindow[]) =>
     list.map((w) => {
       const why = scrub(w.whyItWorks);
-      return { ...w, whyItWorks: why && !restates(why, seenAll) ? why : undefined };
+      const whyAreas = areasIn(why);
+      // A slot note that only repeats an area already on screen ("family time" again) is dropped.
+      const areaRepeat = whyAreas.length > 0 && whyAreas.every((a) => areaSaid.has(a)) && restates(why, seenAll, 0.34);
+      return { ...w, whyItWorks: why && !restates(why, seenAll) && !areaRepeat ? why : undefined };
     });
   // Past windows drop off today's panel (the careful time at 9 AM is noise at 9 PM).
   const liveGood = isToday ? upcomingWindows(goodWindows, date, profileTimezone, nowMs) : goodWindows;
   const liveCaution = isToday ? upcomingWindows(cautionWindows, date, profileTimezone, nowMs) : cautionWindows;
   const allPassed = isToday && allWindows.length > 0 && liveGood.length + liveCaution.length === 0;
-  const cal = day?.calendar ?? null;
-  const calWhy = cal ? calWhyLine({ why: cal.why, nakshatra: day?.dayStar }, t, locale) : "";
+  const calWhy = cal ? calWhyLine({ why: cal.why, nakshatra: day?.dayStar, natal_star: cal.natalStar }, t, locale) : "";
   const panchangLine = [
     day?.dayStar ? fill(t("cal.star"), { star: nakLabel(day.dayStar, locale) }) : "",
     day?.tithi ? fill(t("cal.tithi"), { tithi: tithiLabel(day.tithi, locale) }) : "",
@@ -263,8 +275,10 @@ export default function TodayPage() {
   const year = views.horizon("year");
   // Outlook cards must add something: drop a body that restates the chapter, today or the card above.
   const seenOutlook = mergeStems(chapterSummary, mainAdvice);
-  const weekBody = restates(week.body, seenOutlook) ? "" : week.body;
-  const monthBody = restates(month.body, mergeStems(chapterSummary, mainAdvice, weekBody)) ? "" : month.body;
+  // "Full moon" / "new moon" in a card always carries its date (engine sends the next ones).
+  const moonDate = (txt: string) => dateMoonMentions(txt, today?.moonDates, (iso) => shortDate(iso, locale));
+  const weekBody = restates(week.body, seenOutlook) ? "" : moonDate(week.body);
+  const monthBody = restates(month.body, mergeStems(chapterSummary, mainAdvice, weekBody)) ? "" : moonDate(month.body);
   const yearBody = restates(year.body, mergeStems(chapterSummary, weekBody, monthBody)) ? "" : year.body;
   const luck = views.natalLuck;
 
@@ -389,14 +403,18 @@ export default function TodayPage() {
                   ) : null}
                 </p>
               ) : null}
-              {cal && cal.favours.length ? (
+              {cal && (calFavours.length || calAvoid) ? (
                 <p className="mt-1.5 text-ink" data-testid="today-calendar-tags">
-                  <span className="text-ink-tertiary">{t("cal.favours")}: </span>
-                  {cal.favours.map((a) => `${AREA_ICON[a] ?? ""} ${t(`cal.area.${a}`)}`).join(" · ")}
-                  {cal.avoid ? (
+                  {calFavours.length ? (
                     <>
-                      <span className="text-ink-tertiary"> · {t("cal.avoid")}: </span>
-                      {t(`cal.area.${cal.avoid}`)}
+                      <span className="text-ink-tertiary">{t("cal.favours")}: </span>
+                      {calFavours.map((a) => `${AREA_ICON[a] ?? ""} ${t(`cal.area.${a}`)}`).join(" · ")}
+                    </>
+                  ) : null}
+                  {calAvoid ? (
+                    <>
+                      <span className="text-ink-tertiary">{calFavours.length ? " · " : ""}{t("cal.avoid")}: </span>
+                      {t(`cal.area.${calAvoid}`)}
                     </>
                   ) : null}
                 </p>
@@ -429,7 +447,7 @@ export default function TodayPage() {
             goodWindows={decorate(liveGood)}
             cautionWindows={decorate(liveCaution)}
             betterFor={betterForShown}
-            beCareful={beCareful}
+            beCareful={beCarefulShown}
             allPassed={allPassed}
             onTomorrow={() => go(1)}
           />

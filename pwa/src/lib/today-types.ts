@@ -24,6 +24,8 @@ export type TodayPayload = {
   birthStarToday?: boolean;
   /** The Calendar tab's verdict for the same date (same scoring). */
   calendar?: TodayCalendar | null;
+  /** Next full / new moon dates (yyyy-MM-dd), so month cards can name the date. */
+  moonDates?: { purnima: string | null; amavasya: string | null } | null;
 };
 
 export type TodayCalendar = {
@@ -33,6 +35,7 @@ export type TodayCalendar = {
   why?: string;
   chandrashtama?: boolean;
   birthStar?: boolean;
+  natalStar?: string | null;
 };
 
 export function parseTodayPayload(raw: Record<string, unknown>): TodayPayload {
@@ -53,6 +56,7 @@ export function parseTodayPayload(raw: Record<string, unknown>): TodayPayload {
   const pan = (raw.panchanga ?? null) as Record<string, Record<string, unknown> | undefined> | null;
   const cal = (raw.calendar ?? null) as Record<string, unknown> | null;
   const lc = raw.lifeChapter as Record<string, unknown> | undefined;
+  const md = (raw.moonDates ?? null) as Record<string, unknown> | null;
 
   return {
     date: raw.date?.toString() ?? "",
@@ -87,6 +91,13 @@ export function parseTodayPayload(raw: Record<string, unknown>): TodayPayload {
           why: cal.why ? String(cal.why) : undefined,
           chandrashtama: cal.chandrashtama === true,
           birthStar: cal.birth_star === true,
+          natalStar: cal.natal_star ? String(cal.natal_star) : null,
+        }
+      : null,
+    moonDates: md
+      ? {
+          purnima: typeof md.purnima === "string" ? md.purnima : null,
+          amavasya: typeof md.amavasya === "string" ? md.amavasya : null,
         }
       : null,
   };

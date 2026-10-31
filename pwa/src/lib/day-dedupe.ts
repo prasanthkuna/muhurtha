@@ -91,3 +91,69 @@ export function upcomingWindows(
     return end == null || end > nowMs;
   });
 }
+
+/**
+ * Life-area words (EN / TE / HI) so a tag like "Travel" is said once per screen even when the
+ * hero line, the Calendar tags and a "be careful" chip each word it differently.
+ */
+const AREA_WORDS: Record<string, RegExp> = {
+  travel: /\b(travel|trips?|journeys?|commut\w*|drives?|driving)\b|ప్రయాణ|ట్రిప్|జర్నీ|यात्रा|सफ़र|सफर/i,
+  money: /\b(money|financ\w*|spend\w*|budget\w*|invest\w*|deals?|purchases?|buy(ing)?)\b|డబ్బు|ఫైనాన్స్|ఖర్చు|పెట్టుబడ|पैस|ख़र्च|खर्च|निवेश/i,
+  love: /\b(love|partner|romance|romantic|date night)\b|ప్రేమ|పార్ట్‌నర్|लव|प्यार|पार्टनर/i,
+  family: /\b(family|families|parents?|siblings?|relatives?|home life)\b|కుటుంబ|ఫ్యామిలీ|ఇంట్లో వాళ్ళ|परिवार|घरवाल/i,
+  talks: /\b(talks?|conversations?|calls?|meetings?|negotiat\w*)\b|మాట్లాడ|మీటింగ్|బాతచీత|बातचीत|मीटिंग/i,
+  health: /\b(health|workouts?|exercise|doctor)\b|ఆరోగ్య|హెల్త్|వర్కౌట్|सेहत|स्वास्थ्य/i,
+  new_starts: /\b(new starts?|launch\w*|start something new|begin\w* new)\b|కొత్తగా మొదలు|కొత్త స్టార్ట్|లాంచ్|नई शुरुआत|लॉन्च/i,
+};
+
+/** Areas a line talks about (may be several). */
+export function areasIn(text: string | null | undefined): string[] {
+  if (!text) return [];
+  return Object.entries(AREA_WORDS).filter(([, re]) => re.test(text)).map(([a]) => a);
+}
+
+/**
+ * Say each area once: keep a chip only if it brings an area not yet said (or no area at all and
+ * it is not a restatement). `said` is updated in place.
+ */
+export function dedupeByArea(items: string[], said: Set<string>): string[] {
+  const out: string[] = [];
+  for (const item of items) {
+    const a = areasIn(item);
+    if (a.length && a.every((x) => said.has(x))) continue;
+    out.push(item);
+    for (const x of a) said.add(x);
+  }
+  return out;
+}
+
+const MOON_RE: Record<"purnima" | "amavasya", RegExp> = {
+  purnima: /(full[- ]moon|పౌర్ణమి|పున్నమి|पूर्णिमा)/i,
+  amavasya: /(new[- ]moon|అమావాస్య|अमावस्या)/i,
+};
+// Any day number right next to the mention means the text already dates it ("full moon on 26 Oct").
+const HAS_DATE = /(^|[^\d])([1-9]|[12]\d|3[01])([^\d]|$)/;
+
+/**
+ * "The full moon brings…" → "The full moon (26 Oct) brings…": the first mention of a full or new
+ * moon gets its date when the text names no date itself. `label` formats a yyyy-MM-dd date.
+ */
+export function dateMoonMentions(
+  text: string,
+  dates: { purnima: string | null; amavasya: string | null } | null | undefined,
+  label: (iso: string) => string,
+): string {
+  if (!text || !dates) return text;
+  let out = text;
+  for (const k of ["purnima", "amavasya"] as const) {
+    const iso = dates[k];
+    if (!iso) continue;
+    const m = out.match(MOON_RE[k]);
+    if (!m || m.index == null) continue;
+    const near = out.slice(Math.max(0, m.index - 16), m.index + m[0].length + 20);
+    if (HAS_DATE.test(near)) continue;
+    const at = m.index + m[0].length;
+    out = `${out.slice(0, at)} (${label(iso)})${out.slice(at)}`;
+  }
+  return out;
+}

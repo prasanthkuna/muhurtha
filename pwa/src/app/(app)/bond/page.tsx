@@ -18,24 +18,51 @@ import { cn } from "@/components/ui/cn";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { usePaywall } from "@/context/paywall-context";
-import { bondPost, monthLabel, type BondStatus, type MatchFull, type MatchText, type MonthFactsView, type MonthText, type Progress } from "@/lib/bond";
+import { bondPost, cachedBondStatus, clearBondStatus, fetchBondStatus, monthLabel, type BondStatus, type MatchFull, type MatchText, type MonthFactsView, type MonthText, type Progress } from "@/lib/bond";
 import { fill } from "@/lib/messages-bond";
 
 type Tab = "match" | "love" | "month";
 const POLL_MS = 3500;
 
-function useBondStatus() {
+function useBondStatus(uid: string | null) {
   const [status, setStatus] = useState<BondStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const load = useCallback(async () => {
+  // Last known status first (prefetched by the shell or from the previous visit), then fresh.
+  useEffect(() => {
+    const hit = cachedBondStatus(uid);
+    if (hit) setStatus((s) => s ?? hit);
+  }, [uid]);
+  const load = useCallback(async (fresh = false) => {
     try {
-      setStatus(await bondPost<BondStatus>("bond_status"));
+      if (fresh) clearBondStatus(uid);
+      setStatus(await fetchBondStatus(uid));
       setErr(null);
     } catch (e) {
       setErr((e as { code?: string }).code ?? "failed");
     }
-  }, []);
+  }, [uid]);
   return { status, err, load, setStatus };
+}
+
+/** Same outline as the loaded Bond screen, so the page does not jump when data lands. */
+function BondSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true" data-testid="bond-skeleton">
+      <div className="flex gap-1 rounded-full bg-canvas p-1">
+        {[0, 1, 2].map((i) => <div key={i} className="h-10 flex-1 animate-pulse rounded-full bg-line/40" />)}
+      </div>
+      <div className="flex items-center gap-4 rounded-3xl border border-line bg-paper px-5 py-5">
+        <div className="h-20 w-20 shrink-0 animate-pulse rounded-full bg-line/40" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-2/3 animate-pulse rounded bg-line/40" />
+          <div className="h-3 w-full animate-pulse rounded bg-line/30" />
+          <div className="h-3 w-5/6 animate-pulse rounded bg-line/30" />
+        </div>
+      </div>
+      <div className="h-28 animate-pulse rounded-2xl bg-line/30" />
+      <div className="h-20 animate-pulse rounded-2xl bg-line/30" />
+    </div>
+  );
 }
 
 function MatchPanel({ tab, initial }: { tab: "match" | "love"; initial: BondStatus }) {
@@ -178,8 +205,8 @@ function BondInner() {
   const params = useSearchParams();
   const { t } = useLocale();
   const { openPaywall } = usePaywall();
-  const { isPro } = useAppData();
-  const { status, err, load, setStatus } = useBondStatus();
+  const { isPro, userId } = useAppData();
+  const { status, err, load, setStatus } = useBondStatus(userId);
   const [tab, setTab] = useState<Tab>(() => (params.get("tab") === "month" ? "month" : params.get("tab") === "love" ? "love" : "match"));
   const [adding, setAdding] = useState<QuickResult | null | "blank">(null);
 
@@ -191,7 +218,7 @@ function BondInner() {
     return <p className="rounded-2xl bg-warning-wash/50 px-4 py-3 text-sm text-warning-ink">{t("bond.needBirth")}</p>;
   }
   if (err) return <p className="text-sm text-warning-ink">{t("bond.failed")}</p>;
-  if (!status) return <LoadingState />;
+  if (!status) return <BondSkeleton />;
 
   const startAdd = (r: QuickResult | null) => {
     if (!status.isPro) {
@@ -211,7 +238,7 @@ function BondInner() {
         onSaved={() => {
           setAdding(null);
           setStatus(null);
-          void load();
+          void load(true);
         }}
       />
     );
@@ -283,7 +310,7 @@ function BondInner() {
             if (!window.confirm(t("bond.unlinkConfirm"))) return;
             await bondPost("partner_unlink");
             setStatus(null);
-            void load();
+            void load(true);
           }}
           className="underline-offset-4 hover:underline"
           data-testid="bond-unlink"
@@ -300,7 +327,7 @@ export default function BondPage() {
   return (
     <div className="mx-auto max-w-lg">
       <PageHeader eyebrow={t("bond.eyebrow")} title={t("bond.title")} subtitle={t("bond.subtitle")} className="mb-6" />
-      <Suspense fallback={<LoadingState />}>
+      <Suspense fallback={<BondSkeleton />}>
         <BondInner />
       </Suspense>
     </div>

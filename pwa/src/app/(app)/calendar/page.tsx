@@ -12,15 +12,29 @@ import { usePaywall } from "@/context/paywall-context";
 import { bondPost, clock, monthLabel, shortDate, type AreaId, type CalDay, type YearMonth } from "@/lib/bond";
 import { fill, nakLabel } from "@/lib/messages-bond";
 import { AREA_ICON as AREA_GLYPH, AREA_ORDER, calWhyLine, tithiLabel } from "@/lib/cal-text";
+import { upcomingWindows } from "@/lib/day-dedupe";
 
-type MonthResp = { locked: boolean; month: string; today: string; days: CalDay[]; approximate: boolean };
+type MonthResp = { locked: boolean; month: string; today: string; zone?: string; days: CalDay[]; approximate: boolean };
 type YearResp = { locked: boolean; from: string; months: YearMonth[]; approximate: boolean };
 
+// Three clearly different tints (green / warm sand / lavender) at a strength that still reads on
+// a phone in daylight; cell, legend swatch and chip use the same colour per tone.
 const TONE: Record<CalDay["tone"], { cell: string; dot: string; chip: string }> = {
-  supportive: { cell: "bg-success-wash/70", dot: "bg-success-wash", chip: "bg-success-wash text-success-ink" },
-  // Every tone tints its cells the same way its legend swatch does (mixed used to stay plain paper).
-  mixed: { cell: "bg-gold-wash/50", dot: "bg-gold-wash", chip: "bg-gold-wash text-gold-text" },
-  rest: { cell: "bg-[#ece8f7]/70", dot: "bg-[#ece8f7]", chip: "bg-[#ece8f7] text-[#4b3f80]" },
+  supportive: {
+    cell: "bg-[#cfe7d7] text-success-ink font-semibold",
+    dot: "bg-[#cfe7d7] border-[#8fc2a1]",
+    chip: "bg-[#cfe7d7] text-success-ink",
+  },
+  mixed: {
+    cell: "bg-[#f3e2bd] text-gold-text",
+    dot: "bg-[#f3e2bd] border-[#d9b874]",
+    chip: "bg-[#f3e2bd] text-gold-text",
+  },
+  rest: {
+    cell: "bg-[#ddd5f3] text-[#4b3f80]",
+    dot: "bg-[#ddd5f3] border-[#a899d8]",
+    chip: "bg-[#ddd5f3] text-[#4b3f80]",
+  },
 };
 const AREA_ICON = AREA_GLYPH as Record<AreaId, string>;
 
@@ -30,8 +44,13 @@ function shiftMonth(ym: string, n: number) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function DayDetail({ d, label }: { d: CalDay; label?: string }) {
+function DayDetail({ d, label, today, zone, nowMs }: { d: CalDay; label?: string; today?: string; zone?: string; nowMs?: number }) {
   const { t, locale } = useLocale();
+  // Today's card follows the Today tab: a slot that has ended reads as over, never as upcoming.
+  const isToday = !!today && d.date === today;
+  const z = zone || "Asia/Kolkata";
+  const bestOver = isToday && d.best ? upcomingWindows([d.best], d.date, z, nowMs).length === 0 : false;
+  const rahuOver = isToday && d.rahu ? upcomingWindows([d.rahu], d.date, z, nowMs).length === 0 : false;
   return (
     <div className="rounded-2xl border border-line bg-paper px-4 py-4" data-testid={`cal-detail-${d.date}`}>
       <div className="flex items-center justify-between gap-2">
@@ -60,8 +79,12 @@ function DayDetail({ d, label }: { d: CalDay; label?: string }) {
         </p>
       ) : null}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-secondary">
-        {d.best ? <span>{d.best_kind === "calm" ? t("cal.calm") : t("cal.best")}: <b className="font-semibold text-ink">{clock(d.best.start)}–{clock(d.best.end)}</b></span> : null}
-        {d.rahu ? <span>{t("cal.rahu")}: {clock(d.rahu.start)}–{clock(d.rahu.end)}</span> : null}
+        {d.best && bestOver ? (
+          <span className="text-ink-tertiary" data-testid="cal-best-passed">{t("cal.bestPassed")}</span>
+        ) : d.best ? (
+          <span data-testid="cal-best">{d.best_kind === "calm" ? t("cal.calm") : t("cal.best")}: <b className="font-semibold text-ink">{clock(d.best.start)}–{clock(d.best.end)}</b></span>
+        ) : null}
+        {d.rahu && !rahuOver ? <span>{t("cal.rahu")}: {clock(d.rahu.start)}–{clock(d.rahu.end)}</span> : null}
       </div>
       <p className="mt-2 text-xs text-ink-tertiary" data-testid="cal-panchang">
         {[
@@ -91,7 +114,7 @@ function MonthGrid({ data, picked, onPick }: { data: MonthResp; picked: string |
             onClick={() => onPick(d.date)}
             className={cn(
               "relative flex aspect-square flex-col items-center justify-center rounded-xl text-sm tabular-nums",
-              d.date === picked ? "bg-ink text-paper" : TONE[d.tone].cell,
+              d.date === picked ? "bg-ink font-semibold text-paper" : TONE[d.tone].cell,
               d.date === data.today && d.date !== picked ? "ring-2 ring-gold-accent" : "",
             )}
             data-testid={`cal-day-${d.date}`}
@@ -118,8 +141,8 @@ function YearList({ data }: { data: YearResp }) {
           </div>
           <p className="mt-0.5 text-sm text-ink-secondary">{t(`cal.themeLine.${m.theme}`)}</p>
           <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-medium">
-            <span className="rounded-full bg-success-wash px-2 py-0.5 text-success-ink">{fill(t("cal.year.supportive"), { n: m.supportive_days })}</span>
-            <span className="rounded-full bg-[#ece8f7] px-2 py-0.5 text-[#4b3f80]">{fill(t("cal.year.rest"), { n: m.rest_days })}</span>
+            <span className={cn("rounded-full px-2 py-0.5", TONE.supportive.chip)}>{fill(t("cal.year.supportive"), { n: m.supportive_days })}</span>
+            <span className={cn("rounded-full px-2 py-0.5", TONE.rest.chip)}>{fill(t("cal.year.rest"), { n: m.rest_days })}</span>
             {m.jupiter_lift ? <span className="rounded-full bg-gold-wash px-2 py-0.5 text-gold-text">♃ {t("cal.year.jupiter")}</span> : null}
             {m.slow ? <span className="rounded-full bg-warning-wash px-2 py-0.5 text-warning-ink">♄ {t(`cal.year.slow.${m.slow}`)}</span> : null}
             {m.ad_change ? <span className="rounded-full bg-canvas px-2 py-0.5 text-ink-secondary">↻ {t("cal.year.adChange")}</span> : null}
@@ -146,6 +169,12 @@ export default function CalendarPage() {
   const [year, setYear] = useState<YearResp | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Minute ticker so today's best time flips to "over" without a reload.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -189,10 +218,10 @@ export default function CalendarPage() {
           !err ? <LoadingState /> : null
         ) : data.locked ? (
           <div className="space-y-3" data-testid="cal-free">
-            {data.days.map((d, i) => <DayDetail key={d.date} d={d} label={i === 0 ? t("cal.today") : t("cal.tomorrow")} />)}
+            {data.days.map((d, i) => <DayDetail key={d.date} d={d} label={i === 0 ? t("cal.today") : t("cal.tomorrow")} today={data.today} zone={data.zone} nowMs={nowMs} />)}
             <section className="relative overflow-hidden rounded-3xl border border-gold-accent/30 bg-paper px-5 py-6 text-center">
               <div className="pointer-events-none absolute inset-0 grid grid-cols-7 gap-1 p-3 opacity-25 blur-[2px]" aria-hidden>
-                {Array.from({ length: 35 }, (_, i) => <span key={i} className={cn("rounded-lg", ["bg-success-wash", "bg-gold-wash", "bg-[#ece8f7]"][(i * 7) % 3])} />)}
+                {Array.from({ length: 35 }, (_, i) => <span key={i} className={cn("rounded-lg", ["bg-[#cfe7d7]", "bg-[#f3e2bd]", "bg-[#ddd5f3]"][(i * 7) % 3])} />)}
               </div>
               <div className="relative">
                 <Lock className="mx-auto h-6 w-6 text-gold-text" aria-hidden />
@@ -214,7 +243,7 @@ export default function CalendarPage() {
             <MonthGrid data={data} picked={picked} onPick={setPicked} />
             <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px] text-ink-secondary">
               {(["supportive", "mixed", "rest"] as const).map((k) => (
-                <span key={k} className="inline-flex items-center gap-1"><span className={cn("h-3 w-3 rounded border border-line", TONE[k].dot)} />{t(`cal.tone.${k}`)}</span>
+                <span key={k} className="inline-flex items-center gap-1"><span className={cn("h-3.5 w-3.5 rounded border", TONE[k].dot)} />{t(`cal.tone.${k}`)}</span>
               ))}
             </div>
             <details className="rounded-2xl border border-line bg-paper px-4 py-2 text-xs text-ink-secondary" data-testid="cal-legend">
@@ -227,7 +256,7 @@ export default function CalendarPage() {
               </div>
               <p className="mt-1.5 inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-warning-ink/70" />{t("cal.legend.dot")}</p>
             </details>
-            {pickedDay ? <DayDetail d={pickedDay} label={pickedDay.date === data.today ? t("cal.today") : undefined} /> : null}
+            {pickedDay ? <DayDetail d={pickedDay} label={pickedDay.date === data.today ? t("cal.today") : undefined} today={data.today} zone={data.zone} nowMs={nowMs} /> : null}
           </div>
         )
       ) : !year ? (

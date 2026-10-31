@@ -40,7 +40,7 @@ type T = (key: string) => string;
 
 /** The day's one-line reason, from a fixed phrase bank (no LLM), naming the day's star. */
 export function calWhyLine(
-  d: { why?: string | null; nakshatra?: string | null },
+  d: { why?: string | null; nakshatra?: string | null; natal_star?: string | null },
   t: T,
   locale: AppLocale,
 ): string {
@@ -48,5 +48,11 @@ export function calWhyLine(
   const key = `cal.why.${d.why}`;
   const s = t(key);
   if (!s || s === key) return "";
-  return fill(s, { star: nakLabel(d.nakshatra ?? "", locale) });
+  const natal = d.natal_star ? nakLabel(d.natal_star, locale) : "";
+  // Sister-star days name both stars; without the natal star fall back to the generic line.
+  if (d.why === "janma" && !natal) {
+    const g = t("cal.why.janmaPlain");
+    if (g && g !== "cal.why.janmaPlain") return fill(g, { star: nakLabel(d.nakshatra ?? "", locale) });
+  }
+  return fill(s, { star: nakLabel(d.nakshatra ?? "", locale), natal });
 }
