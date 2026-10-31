@@ -88,20 +88,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas text-ink">
-      <header className="flex items-center justify-between px-5 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">
+      <header className="flex items-center justify-between px-4 min-[400px]:px-5 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="flex min-w-0 flex-1 items-center gap-2 min-[400px]:gap-3">
+          <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.08em] text-gold-text min-[400px]:tracking-[0.12em]">
             Muhūrta
           </span>
           <ProfileSwitcher />
         </div>
-        <div className="flex items-center gap-1">
+        <div className="ml-1.5 flex shrink-0 items-center gap-0.5 min-[400px]:ml-2 min-[400px]:gap-1">
         <Link
           href="/ask"
           data-testid="header-ask"
           aria-label={t("nav.ask")}
           className={cn(
-            "flex h-10 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors",
+            "flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 text-sm min-[400px]:gap-1.5 min-[400px]:px-3 font-medium transition-colors",
             pathname === "/ask" || pathname.startsWith("/ask/")
               ? "border-gold-accent/60 bg-gold-wash/40 text-gold-text"
               : "border-line text-ink-secondary hover:border-gold-accent/40 hover:text-gold-text",
@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
         <Link
           href="/settings"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-paper hover:text-gold-text"
+          className="flex h-10 w-9 items-center justify-center rounded-full text-ink-secondary min-[400px]:w-10 transition-colors hover:bg-paper hover:text-gold-text"
           aria-label={t("common.settings")}
         >
           <Settings className="h-5 w-5" strokeWidth={1.75} aria-hidden />

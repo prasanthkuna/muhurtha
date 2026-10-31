@@ -46,7 +46,7 @@ export function ProfileSwitcher() {
     "flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-gold-wash/40";
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -56,7 +56,7 @@ export function ProfileSwitcher() {
         aria-label={`${t("chart.switcherLabel")}: ${label}`}
         data-testid="profile-switcher"
         className={cn(
-          "flex min-h-10 max-w-[11rem] items-center gap-2 rounded-full border py-1 pl-1 pr-2.5 text-sm font-medium transition-colors",
+          "flex min-h-10 min-w-0 max-w-full items-center gap-1 rounded-full border py-1 pl-1 pr-1.5 text-sm font-medium transition-colors min-[400px]:max-w-[11rem] min-[400px]:gap-2 min-[400px]:pr-2.5",
           viewingOther
             ? "border-gold-accent/60 bg-gold-wash text-ink"
             : "border-line bg-paper text-ink-secondary hover:border-gold-accent/40",
@@ -71,8 +71,8 @@ export function ProfileSwitcher() {
         >
           {viewingOther ? initialOf(activeChartLabel) : initialOf(t("common.you"))}
         </span>
-        <span className="truncate">{label}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-ink-tertiary" aria-hidden />
+        <span className="min-w-0 truncate">{label}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 min-[400px]:h-4 min-[400px]:w-4 text-ink-tertiary" aria-hidden />
       </button>
 
       {open ? (
