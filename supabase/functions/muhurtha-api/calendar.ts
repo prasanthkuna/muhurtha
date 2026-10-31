@@ -241,17 +241,33 @@ export const THEME_BY_LORD: Record<string, string> = {
 };
 const RASHIS = ["mesha", "vrishabha", "mithuna", "karka", "simha", "kanya", "tula", "vrishchika", "dhanu", "makara", "kumbha", "meena"];
 
+/** Month theme from the Sun's house counted from the natal Moon (moves one sign a month). */
+export const SUN_HOUSE_THEME = ["", "spotlight", "money", "courage", "home", "create", "health", "partner", "inward", "luck", "career", "gains", "rest"] as const;
+export type MonthTheme = typeof SUN_HOUSE_THEME[number] | "eclipse" | "review" | "pace";
+export type MonthNote = "eclipse_solar" | "eclipse_lunar" | "merc_rx" | "jup_shift" | "sat_shift" | "rahu_moon";
+
 export type YearMonth = {
   month: string;
-  theme: string;
+  /** Transit-driven theme code (cal.mtheme.*). */
+  theme: MonthTheme;
+  /** The Sun-house theme when an override (eclipse / review / pace) took the headline. */
+  sun_theme: MonthTheme;
+  /** Dasha backdrop (cal.theme.*): the antardasha lord's flavour, constant for months at a time. */
+  backdrop: string;
   ad_lord: string | null;
   ad_change: boolean;
   supportive_days: number;
   rest_days: number;
+  chandrashtama_days: number;
+  mercury_rx_days: number;
+  notes: MonthNote[];
   best_dates: { date: string; area: AreaId }[];
   slow: "sade_sati" | "ashtama_shani" | null;
   jupiter_lift: boolean;
 };
+
+const YEAR_CACHE = new Map<string, YearMonth[]>();
+const angDiff = (a: number, b: number) => ((b - a + 540) % 360) - 180;
 
 export function yearMonths(
   fromMonth: string,
@@ -259,28 +275,72 @@ export function yearMonths(
   lordsAt: (d: Date) => { ad: string | null },
   count = 12,
 ): YearMonth[] {
+  const f0 = DateTime.fromISO(`${fromMonth}-01`, { zone: p.zone });
+  const lordKey = Array.from({ length: count }, (_, i) => {
+    const mm = f0.plus({ months: i });
+    return `${lordsAt(mm.set({ day: 1, hour: 12 }).toJSDate()).ad}.${lordsAt(mm.set({ day: 15, hour: 12 }).toJSDate()).ad}.${lordsAt(mm.endOf("month").set({ hour: 12 }).toJSDate()).ad}`;
+  }).join(",");
+  const ck = `${fromMonth}|${count}|${p.zone}|${p.lat}|${p.lng}|${p.natalRashi}|${p.natalNakshatra ?? ""}|${lordKey}`;
+  const hit = YEAR_CACHE.get(ck);
+  if (hit) return hit;
   const moonSign = p.natalRashi ? RASHIS.indexOf(p.natalRashi.toLowerCase()) : -1;
+  const ref = moonSign >= 0 ? moonSign : 0;
   const out: YearMonth[] = [];
   const first = DateTime.fromISO(`${fromMonth}-01`, { zone: p.zone });
   for (let i = 0; i < count; i++) {
     const m = first.plus({ months: i });
     const key = m.toFormat("yyyy-MM");
     const days = monthDays(key, p);
-    const mid = m.set({ day: 15, hour: 12 }).toJSDate();
-    const start = m.set({ day: 1, hour: 12 }).toJSDate();
+    const at = (day: number) => m.set({ day: Math.min(day, m.daysInMonth ?? 28), hour: 12 }).toJSDate();
+    const mid = at(15);
+    const start = at(1);
     const end = m.endOf("month").set({ hour: 12 }).toJSDate();
     const adMid = lordsAt(mid).ad;
     const adChange = lordsAt(start).ad !== lordsAt(end).ad;
+    const sign = (g: Parameters<typeof siderealLon>[0], d: Date) => Math.floor(siderealLon(g, d) / 30);
     let slow: YearMonth["slow"] = null;
     let lift = false;
+    const notes: MonthNote[] = [];
     if (moonSign >= 0) {
-      const sat = Math.floor(siderealLon("Saturn", mid) / 30);
-      const jup = Math.floor(siderealLon("Jupiter", mid) / 30);
-      const hs = houseFrom(moonSign, sat);
+      const hs = houseFrom(moonSign, sign("Saturn", mid));
       if (hs === 12 || hs === 1 || hs === 2) slow = "sade_sati";
       else if (hs === 8) slow = "ashtama_shani";
-      lift = [2, 5, 7, 9, 11].includes(houseFrom(moonSign, jup));
+      lift = [2, 5, 7, 9, 11].includes(houseFrom(moonSign, sign("Jupiter", mid)));
+      if (houseFrom(moonSign, sign("Rahu", mid)) === 1) notes.push("rahu_moon");
     }
+    if (sign("Jupiter", start) !== sign("Jupiter", end)) notes.push("jup_shift");
+    if (sign("Saturn", start) !== sign("Saturn", end)) notes.push("sat_shift");
+    // Mercury retrograde days (longitude going backwards day to day).
+    let rx = 0;
+    let prev = siderealLon("Mercury", at(1));
+    const n = m.daysInMonth ?? 30;
+    for (let d = 2; d <= n + 1; d++) {
+      const dt = d <= n ? at(d) : m.plus({ months: 1 }).set({ day: 1, hour: 12 }).toJSDate();
+      const cur = siderealLon("Mercury", dt);
+      if (angDiff(prev, cur) < 0) rx++;
+      prev = cur;
+    }
+    if (rx >= 5) notes.push("merc_rx");
+    // Eclipses: a new / full moon with the Sun close to the nodes.
+    for (const d of days) {
+      if (d.why !== "amavasya" && d.why !== "purnima") continue;
+      const dt = DateTime.fromISO(d.date, { zone: p.zone }).set({ hour: 12 }).toJSDate();
+      const off = Math.abs(angDiff(siderealLon("Sun", dt), siderealLon("Rahu", dt)));
+      if (Math.min(off, 180 - off) <= 12) {
+        const code: MonthNote = d.why === "amavasya" ? "eclipse_solar" : "eclipse_lunar";
+        if (!notes.includes(code)) notes.unshift(code);
+      }
+    }
+    const supportive = days.filter((d) => d.tone === "supportive").length;
+    const rest = days.filter((d) => d.tone === "rest").length;
+    const ch8 = days.filter((d) => d.chandrashtama).length;
+    const sunTheme = SUN_HOUSE_THEME[houseFrom(ref, sign("Sun", at(20)))] as MonthTheme;
+    let theme: MonthTheme = sunTheme;
+    const before = out[out.length - 1]?.theme;
+    const pick = (t: MonthTheme) => { if (t !== before) theme = t; };
+    if (notes.some((x) => x.startsWith("eclipse"))) pick("eclipse");
+    else if (rx >= 10) pick("review");
+    else if (rest >= 10 && rest > supportive) pick("pace");
     const best = days
       .filter((d) => d.tone === "supportive")
       .flatMap((d) => d.favours.filter((f) => f !== "rest").slice(0, 1).map((f) => ({ date: d.date, area: f, s: d.scores[f] })))
@@ -290,15 +350,22 @@ export function yearMonths(
       .map(({ date, area }) => ({ date, area }));
     out.push({
       month: key,
-      theme: adMid ? (THEME_BY_LORD[adMid] ?? "build") : "build",
+      theme,
+      sun_theme: sunTheme,
+      backdrop: adMid ? (THEME_BY_LORD[adMid] ?? "build") : "build",
       ad_lord: adMid,
       ad_change: adChange,
-      supportive_days: days.filter((d) => d.tone === "supportive").length,
-      rest_days: days.filter((d) => d.tone === "rest").length,
+      supportive_days: supportive,
+      rest_days: rest,
+      chandrashtama_days: ch8,
+      mercury_rx_days: rx,
+      notes,
       best_dates: best,
       slow,
       jupiter_lift: lift,
     });
   }
+  if (YEAR_CACHE.size > 200) YEAR_CACHE.clear();
+  YEAR_CACHE.set(ck, out);
   return out;
 }

@@ -47,6 +47,9 @@ export type CalDay = {
 };
 export type YearMonth = {
   month: string; theme: string; ad_lord: string | null; ad_change: boolean; supportive_days: number; rest_days: number;
+  /** v2: transit-driven theme + the dasha backdrop and the month's sky notes. */
+  sun_theme?: string; backdrop?: string; chandrashtama_days?: number; mercury_rx_days?: number;
+  notes?: ("eclipse_solar" | "eclipse_lunar" | "merc_rx" | "jup_shift" | "sat_shift" | "rahu_moon")[];
   best_dates: { date: string; area: AreaId }[]; slow: "sade_sati" | "ashtama_shani" | null; jupiter_lift: boolean;
 };
 

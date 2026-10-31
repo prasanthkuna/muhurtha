@@ -43,7 +43,15 @@ Deno.test("year view: 12 months with themes", () => {
   const y = yearMonths("2026-11", P, () => ({ ad: "Venus" }));
   console.log(`year computed in ${(performance.now() - t0).toFixed(0)} ms`);
   assertEquals(y.length, 12);
-  assertEquals(y[0].theme, "connect");
+  // Dasha is only the backdrop; the headline follows the month's transits.
+  for (const m of y) assertEquals(m.backdrop, "connect");
+  for (let i = 1; i < y.length; i++) assert(y[i].theme !== y[i - 1].theme, `${y[i].month} repeats ${y[i].theme}`);
+  assert(new Set(y.map((m) => m.theme)).size >= 9, "themes should vary across the year");
+  // Sun moves a sign a month, so its house theme never repeats in 12 months.
+  assertEquals(new Set(y.map((m) => m.sun_theme)).size, 12);
+  // Known sky: Mercury retrograde in Nov 2026, annular solar eclipse 6 Feb 2027.
+  assert(y[0].notes.includes("merc_rx"));
+  assert(y.find((m) => m.month === "2027-02")!.notes.includes("eclipse_solar"));
   for (const m of y) assert(m.best_dates.length <= 3);
 });
 

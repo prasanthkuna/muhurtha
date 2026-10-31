@@ -36,6 +36,8 @@ function read<T>(k: string): T | null {
   const v = e.v as { today?: string; from?: string };
   // A month payload is tied to the day it was made (free = today + tomorrow; "today" highlight).
   if (v.today && v.today !== localToday()) return null;
+  // A year payload starts at the month it was made in.
+  if (v.from && v.from !== localToday().slice(0, 7)) return null;
   mem.set(k, e);
   return e.v as T;
 }
@@ -101,15 +103,17 @@ export function fetchMonth(uid: string | null | undefined, pro: boolean, month: 
 }
 
 export function cachedYear(uid: string | null | undefined, pro: boolean): YearResp | null {
-  return read<YearResp>(key(uid, pro, "y"));
+  return read<YearResp>(key(uid, pro, "y2"));
 }
 
 export function fetchYear(uid: string | null | undefined, pro: boolean): Promise<YearResp> {
-  return load<YearResp>(key(uid, pro, "y"), "calendar_year_get", {});
+  return load<YearResp>(key(uid, pro, "y2"), "calendar_year_get", {});
 }
 
 /** Warm the Calendar while the user reads Decode / Today, so its first open is instant. */
 export function prefetchCalendar(uid: string | null | undefined, pro: boolean) {
-  if (!uid || cachedMonth(uid, pro, null)) return;
-  void fetchMonth(uid, pro, null).catch(() => {});
+  if (!uid) return;
+  if (!cachedMonth(uid, pro, null)) void fetchMonth(uid, pro, null).catch(() => {});
+  // The Year view (Pro) is warmed alongside the month so the toggle opens instantly.
+  if (pro && !cachedYear(uid, pro)) void fetchYear(uid, pro).catch(() => {});
 }

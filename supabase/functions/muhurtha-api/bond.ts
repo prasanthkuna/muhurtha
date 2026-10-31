@@ -609,16 +609,15 @@ export async function handleBondAction(
   const locale = locOf(prof.language_code);
 
   if (action === "calendar_month_get" || action === "calendar_year_get") {
-    const bi = await ownBirth(admin, profileId);
+    const [bi, pro] = await Promise.all([ownBirth(admin, profileId), deps.isPro(profileId)]);
     if (!bi) throw new BondError("birth_required", "Add your birth details first", 409);
     const me = personFrom(bi, firstName(prof.display_name, "You"), base);
-    const pro = await deps.isPro(profileId);
     if (action === "calendar_year_get") {
       const from = DateTime.now().setZone(base.zone).toFormat("yyyy-MM");
       if (!pro) return { locked: true, from, months: [], approximate: me.starApprox };
       const segs = deps.segmentsFor(bi, base.zone);
       const lordsAt = (d: Date) => ({ ad: segs.length ? vimshottariLordsAt(segs, d)?.adLord ?? null : null });
-      return { locked: false, from, months: yearMonths(from, me.place, lordsAt, 12), approximate: me.starApprox, version: "cal-v1" };
+      return { locked: false, from, months: yearMonths(from, me.place, lordsAt, 12), approximate: me.starApprox, version: "cal-v2" };
     }
     const month = typeof body.month === "string" && /^\d{4}-\d{2}$/.test(body.month) ? body.month : today.slice(0, 7);
     const tomorrow = DateTime.fromISO(today).plus({ days: 1 }).toISODate()!;

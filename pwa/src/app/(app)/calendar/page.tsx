@@ -135,16 +135,28 @@ function YearList({ data }: { data: YearResp }) {
         <section key={m.month} className="rounded-2xl border border-line bg-paper px-4 py-4">
           <div className="flex items-baseline justify-between gap-2">
             <p className="font-serif text-lg text-ink">{monthLabel(m.month, locale)}</p>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">{t(`cal.theme.${m.theme}`)}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">{t(m.sun_theme ? `cal.mtheme.${m.theme}` : `cal.theme.${m.theme}`)}</p>
           </div>
-          <p className="mt-0.5 text-sm text-ink-secondary">{t(`cal.themeLine.${m.theme}`)}</p>
+          <p className="mt-0.5 text-sm text-ink-secondary">
+            {t(m.sun_theme ? `cal.mthemeLine.${m.theme}` : `cal.themeLine.${m.theme}`)}
+            {m.sun_theme && m.sun_theme !== m.theme ? ` ${fill(t("cal.year.alsoSun"), { theme: t(`cal.mtheme.${m.sun_theme}`) })}` : ""}
+          </p>
+          {m.notes?.length ? (
+            <ul className="mt-1.5 space-y-0.5 text-[13px] text-ink">
+              {m.notes.map((n) => (
+                <li key={n}>{t(`cal.mnote.${n}`)}</li>
+              ))}
+            </ul>
+          ) : null}
           <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-medium">
             <span className={cn("rounded-full px-2 py-0.5", TONE.supportive.chip)}>{fill(t("cal.year.supportive"), { n: m.supportive_days })}</span>
             <span className={cn("rounded-full px-2 py-0.5", TONE.rest.chip)}>{fill(t("cal.year.rest"), { n: m.rest_days })}</span>
             {m.jupiter_lift ? <span className="rounded-full bg-gold-wash px-2 py-0.5 text-gold-text">♃ {t("cal.year.jupiter")}</span> : null}
             {m.slow ? <span className="rounded-full bg-warning-wash px-2 py-0.5 text-warning-ink">♄ {t(`cal.year.slow.${m.slow}`)}</span> : null}
+            {m.chandrashtama_days ? <span className="rounded-full bg-canvas px-2 py-0.5 text-ink-secondary">{fill(t("cal.year.ch8"), { n: m.chandrashtama_days })}</span> : null}
             {m.ad_change ? <span className="rounded-full bg-canvas px-2 py-0.5 text-ink-secondary">↻ {t("cal.year.adChange")}</span> : null}
           </div>
+          {m.backdrop ? <p className="mt-1.5 text-[11px] text-ink-tertiary">{fill(t("cal.year.backdrop"), { theme: t(`cal.theme.${m.backdrop}`) })}</p> : null}
           {m.best_dates.length ? (
             <p className="mt-2 text-sm text-ink">
               <span className="text-ink-tertiary">{t("cal.year.best")}: </span>
@@ -189,7 +201,11 @@ export default function CalendarPage() {
     if (hit) applyMonth(hit);
     else setData(null);
     fetchMonth(userId, isPro, month)
-      .then(applyMonth)
+      .then((r) => {
+        applyMonth(r);
+        // Warm the Year view with the month so the toggle opens from cache.
+        if (isPro && !cachedYear(userId, isPro)) void fetchYear(userId, isPro).catch(() => {});
+      })
       .catch((e) => {
         if (alive && !hit) setErr((e as { code?: string }).code ?? "failed");
       });

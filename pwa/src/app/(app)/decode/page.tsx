@@ -15,6 +15,7 @@ import { ShareCardButton } from "@/components/share/share-button";
 import { clip, rashiGlyph } from "@/lib/share/builders";
 import { fill, nakLabel } from "@/lib/messages-bond";
 import { calWhyLine } from "@/lib/cal-text";
+import { areasIn, mergeStems, restates } from "@/lib/day-dedupe";
 
 const ADULT_ONLY_DOMAINS = new Set(["career", "money", "business", "relationship"]);
 
@@ -44,7 +45,22 @@ export default function DecodePage() {
   const todayWhy = today?.calendar?.why
     ? calWhyLine({ why: today.calendar.why, nakshatra: today.dayStar ?? null, natal_star: today.calendar.natalStar ?? null }, t, locale)
     : "";
-  const todayDo = today?.betterFor?.find((x) => x && x !== today.oneLine) ?? "";
+  // "Good for" must bring a different idea than Today's subtitle (and the reason above it):
+  // skip lines that restate it or only repeat its life areas; else fall back to a calendar area
+  // the subtitle doesn't mention.
+  const todayDo = (() => {
+    if (!today) return "";
+    const seen = mergeStems(today.oneLine, todayWhy);
+    const said = new Set([...areasIn(today.oneLine), ...areasIn(todayWhy)]);
+    const line = (today.betterFor ?? []).find((x) => {
+      if (!x || restates(x, seen, 0.34)) return false;
+      const a = areasIn(x);
+      return !a.length || a.some((y) => !said.has(y));
+    });
+    if (line) return line;
+    const area = (today.calendar?.favours ?? []).find((f) => f !== "rest" && !said.has(f));
+    return area ? t(`cal.area.${area}`) : "";
+  })();
 
   return (
     <div className="space-y-6" data-testid="decode-loaded">
