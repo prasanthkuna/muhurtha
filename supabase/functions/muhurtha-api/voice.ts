@@ -48,8 +48,8 @@ export const VOICE_BANNED: Record<VoiceLocale, string[]> = {
  * the user's own profession is known (the reading facts never carry one today).
  */
 export const JARGON_RE: Record<VoiceLocale, RegExp> = {
-  en: /\b(back-?end|front-?end|operational|operations|workflows?|bottlenecks?|stakeholders?|deliverables?|kpis?|synerg(y|ies)|bandwidth|pipelines?|sprints?|tech stack|scal(e|ing) up|scalab\w*|optimi[sz]e\w*|leverag(e|ing)|action items?|deep dive|circle back|low-hanging fruit|glitch(es)?|debug\w*|deploy\w*|onboarding|roadmaps?|ROI|SOPs?|escalat\w*|ticket(s)?|backlogs?)\b/i,
-  te: /(బ్యాకెండ్|ఫ్రంటెండ్|వర్క్‌ఫ్లో|వర్క్ ఫ్లో|బాటిల్‌నెక్|బాటిల్ నెక్|స్టేక్‌హోల్డర్|డెలివరబుల్|ఆపరేషనల్|ఆపరేషన్స్|పైప్‌లైన్|స్ప్రింట్|బ్యాండ్‌విడ్త్|గ్లిచ్|డీబగ్|డిప్లాయ్|రోడ్‌మ్యాప్|బ్యాక్‌లాగ్)/,
+  en: /\b(back-?end|front-?end|operational|operations|workflows?|bottlenecks?|stakeholders?|deliverables?|kpis?|synerg(y|ies)|bandwidth|pipelines?|sprints?|tech stack|scal(e|ing) up|scalab\w*|optimi[sz]e\w*|leverag(e|ing)|action items?|deep dive|circle back|low-hanging fruit|glitch(es)?|debug\w*|deploy\w*|onboarding|roadmaps?|ROI|SOPs?|escalat\w*|ticket(s)?|backlogs?|coding)\b/i,
+  te: /(కోడింగ్|బ్యాకెండ్|ఫ్రంటెండ్|వర్క్‌ఫ్లో|వర్క్ ఫ్లో|బాటిల్‌నెక్|బాటిల్ నెక్|స్టేక్‌హోల్డర్|డెలివరబుల్|ఆపరేషనల్|ఆపరేషన్స్|పైప్‌లైన్|స్ప్రింట్|బ్యాండ్‌విడ్త్|గ్లిచ్|డీబగ్|డిప్లాయ్|రోడ్‌మ్యాప్|బ్యాక్‌లాగ్)/,
   hi: /(बैकएंड|फ्रंटएंड|वर्कफ़्लो|वर्कफ्लो|बॉटलनेक|स्टेकहोल्डर|डिलीवरेबल|ऑपरेशनल|पाइपलाइन|स्प्रिंट|बैंडविड्थ|ग्लिच|डीबग|डिप्लॉय)/,
 };
 
