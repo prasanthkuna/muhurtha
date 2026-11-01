@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Instrument_Sans, Noto_Sans_Symbols_2 } from "next/font/google";
+import { Fraunces, Instrument_Sans, Noto_Sans_Symbols_2, Noto_Sans_Telugu } from "next/font/google";
 import { SwRegister } from "@/components/pwa/sw-register";
 import { INSTALL_CAPTURE_SCRIPT } from "@/lib/install-capture";
 import "./globals.css";
@@ -16,6 +16,16 @@ const instrument = Instrument_Sans({
   display: "swap",
 });
 
+// Telugu glyphs: consistent shaping on every Android skin (only the Telugu subset is fetched,
+// and only when Telugu text is on screen thanks to unicode-range).
+const telugu = Noto_Sans_Telugu({
+  variable: "--font-telugu",
+  subsets: ["telugu"],
+  weight: ["400", "600"],
+  display: "swap",
+  preload: false,
+});
+
 const symbols = Noto_Sans_Symbols_2({
   variable: "--font-symbols",
   weight: "400",
@@ -25,8 +35,14 @@ const symbols = Noto_Sans_Symbols_2({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://pwa-lyart-phi.vercel.app"),
-  title: "Muhūrta",
-  description: "Your life has a story. Understand its chapters.",
+  title: "Muhūrta — your birth star, decoded",
+  description: "Your birth star decoded: who you are, your life in chapters, today's good hours for your city and a 36-guna match. English, తెలుగు, हिन्दी. Free.",
+  openGraph: {
+    siteName: "Muhūrta",
+    title: "Muhūrta — your birth star, decoded",
+    description: "Find your birth star in 10 seconds. English, తెలుగు, हिन्दी. Free.",
+    images: [{ url: "/icons/icon-512.png", width: 512, height: 512 }],
+  },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -58,7 +74,7 @@ export default function RootLayout({
         {/* Capture beforeinstallprompt before hydration (Chrome may fire it very early). */}
         <script dangerouslySetInnerHTML={{ __html: INSTALL_CAPTURE_SCRIPT }} />
       </head>
-      <body className={`${fraunces.variable} ${instrument.variable} ${symbols.variable} antialiased`}>
+      <body className={`${fraunces.variable} ${instrument.variable} ${symbols.variable} ${telugu.variable} antialiased`}>
         {children}
         <SwRegister />
       </body>

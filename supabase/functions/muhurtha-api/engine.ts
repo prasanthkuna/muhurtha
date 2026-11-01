@@ -2878,9 +2878,14 @@ type SubscriptionAccess = {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   planInterval: string | null;
+  /** Row id + creation time of the granting subscription (drives the one-time Pro welcome). */
+  subscriptionId?: string | null;
+  startedAt?: string | null;
 };
 
 type SubRow = {
+  id?: string | null;
+  created_at?: string | null;
   plan_code: string | null;
   status: string | null;
   provider: string | null;
@@ -2921,14 +2926,14 @@ async function getSubscriptionAccess(
 ): Promise<SubscriptionAccess> {
   let { data, error } = await supabase
     .from("subscriptions")
-    .select("plan_code, status, provider, current_period_end, cancel_at_period_end, plan_interval, updated_at")
+    .select("id, created_at, plan_code, status, provider, current_period_end, cancel_at_period_end, plan_interval, updated_at")
     .eq("profile_id", profileId)
     .limit(20);
   if (error && /cancel_at_period_end|plan_interval/.test(error.message ?? "")) {
     // Billing migration not applied yet: fall back to the original columns.
     ({ data, error } = await supabase
       .from("subscriptions")
-      .select("plan_code, status, provider, current_period_end, updated_at")
+      .select("id, created_at, plan_code, status, provider, current_period_end, updated_at")
       .eq("profile_id", profileId)
       .limit(20) as unknown as { data: typeof data; error: typeof error });
   }
@@ -2962,6 +2967,8 @@ async function getSubscriptionAccess(
     currentPeriodEnd: best.current_period_end ?? null,
     cancelAtPeriodEnd: Boolean(best.cancel_at_period_end) || best.status === "cancelled",
     planInterval: best.plan_interval ?? null,
+    subscriptionId: best.id ?? null,
+    startedAt: best.created_at ?? null,
   };
 }
 
@@ -2977,6 +2984,8 @@ function buildAccessPayload(access: SubscriptionAccess) {
     currentPeriodEnd: access.currentPeriodEnd,
     cancelAtPeriodEnd: access.cancelAtPeriodEnd,
     planInterval: access.planInterval,
+    subscriptionId: access.subscriptionId ?? null,
+    startedAt: access.startedAt ?? null,
     limits: {
       askPerDay: limits.ask,
       timingChecksPerDay: limits.timing_check,

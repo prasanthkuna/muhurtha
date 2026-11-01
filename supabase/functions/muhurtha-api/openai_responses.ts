@@ -196,6 +196,8 @@ export type CreateResponseInput = {
   previousResponseId?: string;
   metadata?: Record<string, string>;
   timeoutMs?: number;
+  /** Gemini only: how many models of the chain this call may use (1 = primary only). Default: all. */
+  chainDepth?: number;
 };
 
 export async function createResponse(input: CreateResponseInput): Promise<ResponseObject> {
@@ -421,28 +423,47 @@ export function geminiHopReason(msg: string): "cap" | "busy" | "unsupported" | n
 async function geminiCall(model: string, input: CreateResponseInput, timeoutMs: number, id?: string, variant?: GeminiVariant): Promise<ResponseObject> {
   const t0 = Date.now();
   const all = variant?.noHop ? [model] : geminiChain(model);
-  const chain = all.filter((m, i) => i === 0 && variant?.noHop ? true : !geminiCapped(m));
+  let chain = all.filter((m, i) => i === 0 && variant?.noHop ? true : !geminiCapped(m));
   if (chain.length === 0) chain.push(model);
+  if (input.chainDepth && input.chainDepth > 0) chain = chain.slice(0, input.chainDepth);
   let lastErr: unknown = null;
   for (let i = 0; i < chain.length; i++) {
     const m = chain[i];
-    const left = timeoutMs - (Date.now() - t0);
-    if (i > 0 && left < 8_000) break;
-    try {
-      return await geminiCallOnce(m, input, left, id, variant);
-    } catch (e) {
-      lastErr = e;
-      const msg = e instanceof Error ? e.message : String(e);
-      const why = geminiHopReason(msg);
-      if (!why) throw e;
-      if (why === "cap") markGeminiCapped(m);
-      const next = chain[i + 1];
-      console.warn(`[gemini] ${m}: ${why} (${msg.slice(0, 60)})${next ? `; trying ${next}` : ""}`);
-      if (why === "busy" && next) await new Promise((r) => setTimeout(r, 1_500));
+    // "High demand" on Google's side is usually gone in seconds: retry the same model with
+    // backoff before stepping down, so a busy moment doesn't hand the reading to a lite model.
+    const backoffs = i === 0 ? GEMINI_BUSY_RETRY_MS : GEMINI_BUSY_RETRY_MS.slice(0, 1);
+    for (let r = 0; r <= backoffs.length; r++) {
+      const left = timeoutMs - (Date.now() - t0);
+      if ((i > 0 || r > 0) && left < 8_000) throw lastErr ?? new Error("gemini_create_failed:503:no time left");
+      try {
+        return await geminiCallOnce(m, input, left, id, variant);
+      } catch (e) {
+        lastErr = e;
+        const msg = e instanceof Error ? e.message : String(e);
+        const why = geminiHopReason(msg);
+        if (!why) throw e;
+        if (why === "cap") markGeminiCapped(m);
+        const wait = backoffs[r];
+        const budgetAfter = timeoutMs - (Date.now() - t0) - (wait ?? 0);
+        if (why === "busy" && wait !== undefined && budgetAfter >= GEMINI_RETRY_MIN_BUDGET_MS) {
+          console.warn(`[gemini] ${m}: busy (${msg.slice(0, 60)}); retrying ${m} in ${wait}ms`);
+          await new Promise((res) => setTimeout(res, wait));
+          continue;
+        }
+        const next = chain[i + 1];
+        console.warn(`[gemini] ${m}: ${why} (${msg.slice(0, 60)})${next ? `; trying ${next}` : ""}`);
+        if (why === "busy" && next) await new Promise((res) => setTimeout(res, 1_500));
+        break;
+      }
     }
   }
   throw lastErr ?? new Error("gemini_create_failed:503:no model available");
 }
+
+/** Backoff before re-trying a busy model (primary gets both, lower models one). */
+export const GEMINI_BUSY_RETRY_MS = [2_500, 6_000];
+/** Only retry the same model when at least this much of the call budget remains after waiting. */
+const GEMINI_RETRY_MIN_BUDGET_MS = 45_000;
 
 async function geminiCallOnce(model: string, input: CreateResponseInput, timeoutMs: number, id?: string, variant?: GeminiVariant): Promise<ResponseObject> {
   const key = Deno.env.get("GEMINI_API_KEY")?.trim();

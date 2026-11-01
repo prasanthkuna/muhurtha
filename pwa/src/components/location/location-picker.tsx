@@ -65,24 +65,18 @@ export function LocationPicker({
       onChange(place);
       setSheetOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : geolocationErrorMessage(e));
+      const msg = e instanceof Error ? e.message : geolocationErrorMessage(e);
+      // detectCurrentPlace throws message keys ("geo.denied"…); anything else is shown as-is.
+      setError(msg.startsWith("geo.") ? t(msg) : msg);
     } finally {
       setBusy(false);
     }
-  }, [onChange]);
+  }, [onChange, t]);
 
-  useEffect(() => {
-    if (!mounted || !autoDetect || !allowDetect || value || detectStarted.current) return;
-    detectStarted.current = true;
-    // Auto-detect at most once per browser session; afterwards the user taps Detect.
-    try {
-      if (sessionStorage.getItem(AUTO_DETECT_KEY)) return;
-      sessionStorage.setItem(AUTO_DETECT_KEY, "1");
-    } catch {
-      /* private mode: still detect once for this mount */
-    }
-    void detect();
-  }, [mounted, autoDetect, allowDetect, value, detect]);
+  // Location is only requested when the user taps "Use my location" (no permission prompt on load).
+  void autoDetect;
+  void detectStarted;
+  void AUTO_DETECT_KEY;
 
   useEffect(() => {
     if (!sheetOpen) return;
@@ -151,7 +145,7 @@ export function LocationPicker({
   }
 
   const placeholder =
-    !mounted ? t("location.tapToSearch") : busy ? t("settings.detecting") : t("location.tapToSearch");
+    busy ? t("settings.detecting") : t("location.pickCity");
 
   const sheet =
     sheetOpen && mounted ? (
@@ -271,8 +265,8 @@ export function LocationPicker({
             </p>
             {value?.timezone ? (
               <p className="truncate text-xs text-ink-tertiary">{value.timezone}</p>
-            ) : (
-              <p className="text-xs text-ink-tertiary">{t("location.tapToSearch")}</p>
+            ) : value ? null : (
+              <p className="text-xs text-ink-tertiary">{t("location.example")}</p>
             )}
           </div>
           {busy ? (

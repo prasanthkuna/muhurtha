@@ -35,8 +35,12 @@ export async function middleware(request: NextRequest) {
   if (hasAuthCookie) return supabaseResponse;
 
   const url = request.nextUrl.clone();
-  url.pathname = "/auth";
+  // One sign-in page: the Welcome screen (Google above the fold). /auth stays for email and errors.
+  url.pathname = "/welcome";
+  const src = url.searchParams.get("src");
+  url.search = "";
   url.searchParams.set("next", pathname);
+  if (src) url.searchParams.set("src", src);
   return NextResponse.redirect(url);
 }
 

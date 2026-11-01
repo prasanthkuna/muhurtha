@@ -15,6 +15,8 @@ export type AccessDetails = {
   currentPeriodEnd?: string | null;
   cancelAtPeriodEnd?: boolean;
   planInterval?: string | null;
+  subscriptionId?: string | null;
+  startedAt?: string | null;
   limits?: {
     askPerDay: number | null;
     timingChecksPerDay: number | null;

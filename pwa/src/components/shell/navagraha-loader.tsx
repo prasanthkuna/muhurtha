@@ -31,9 +31,12 @@ const DRISHTI_CYCLE = ["Mars", "Jupiter", "Saturn", "Moon", "Sun", "Venus"];
 const R_GLYPH = 86;
 const R_RING = 112;
 
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
 function polar(sign: number, r: number) {
   const a = ((sign * 30 + 15 - 90) * Math.PI) / 180;
-  return { x: Math.cos(a) * r, y: Math.sin(a) * r };
+  // Rounded so server and client render identical attributes (no hydration mismatch).
+  return { x: Math.round(Math.cos(a) * r * 100) / 100, y: Math.round(Math.sin(a) * r * 100) / 100 };
 }
 
 function usePrefersReducedMotion() {
@@ -70,10 +73,10 @@ export function NavagrahaWheel({ active }: { active: number }) {
           return (
             <line
               key={i}
-              x1={Math.cos(a) * (R_RING - 6)}
-              y1={Math.sin(a) * (R_RING - 6)}
-              x2={Math.cos(a) * (R_RING + 6)}
-              y2={Math.sin(a) * (R_RING + 6)}
+              x1={r2(Math.cos(a) * (R_RING - 6))}
+              y1={r2(Math.sin(a) * (R_RING - 6))}
+              x2={r2(Math.cos(a) * (R_RING + 6))}
+              y2={r2(Math.sin(a) * (R_RING + 6))}
               stroke="var(--gold-accent)"
               strokeOpacity="0.5"
               strokeWidth="1"

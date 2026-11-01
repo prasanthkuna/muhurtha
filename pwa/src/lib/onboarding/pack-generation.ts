@@ -54,3 +54,18 @@ export async function runChartGeneration(
   }
   // Still generating: continue into the app; it keeps polling and shows "preparing".
 }
+
+/**
+ * Kick off the reading and return as soon as the engine accepted it. Onboarding hands off to
+ * Decode right away, where the Navagraha loader shows real job progress (no blank wait here).
+ */
+export async function startChartGeneration(locale: AppLocale, chartProfileId?: string | null): Promise<void> {
+  const scope = chartProfileId ? { chart_profile_id: chartProfileId } : {};
+  const gen = await postEngine({ action: "chart_generate", locale, ...scope });
+  if (!gen.res.ok) {
+    const code = gen.json.error_code?.toString() ?? "";
+    if (gen.res.status >= 400 && gen.res.status < 500 && code !== "birth_pack_not_ready") {
+      throw new Error(gen.json.error?.toString() ?? "Could not start your reading");
+    }
+  }
+}

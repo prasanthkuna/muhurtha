@@ -1,8 +1,8 @@
 {
   "id": "/today",
-  "name": "Muhūrta — personal Panchanga timing",
+  "name": "Muhūrta — your birth star, decoded",
   "short_name": "Muhūrta",
-  "description": "Your day's good and caution windows for your city, life chapters from your birth chart, and dates for the things that matter. In English, Telugu and Hindi.",
+  "description": "Your birth star decoded: who you are, your life in chapters, today's good hours for your city and a 36-guna match. In English, తెలుగు and हिन्दी. Free.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "/decode?src=pwa",

@@ -10,7 +10,7 @@ export default function PricingPage() {
   return (
     <PolicyPage
       title="Pricing"
-      intro="Muhūrta is a Jyotish (Vedic astrology) timing companion. Most of it is free. Muhūrta Pro adds family charts, every language and unlimited timing."
+      intro="Muhūrta is a Jyotish (Vedic astrology) timing companion. Most of it is free. Muhūrta Pro adds your full year in the Calendar, the full Bond match, every Life chapter, family charts, every language and unlimited timing."
     >
       <section className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-line p-5">
@@ -20,6 +20,8 @@ export default function PricingPage() {
             <li>Your own birth chart, Today, Decode and your current Life chapter</li>
             <li>Daily 6:45 AM brief and timing alerts</li>
             <li>Share cards</li>
+            <li>Bond quick match: your guna score out of 36, with a share card</li>
+            <li>Calendar: today and tomorrow</li>
             <li>3 Ask questions a day</li>
             <li>3 Timing checks and 3 Find-a-date searches a day</li>
             <li>Your reading in the language you choose at sign-up</li>
@@ -38,6 +40,8 @@ export default function PricingPage() {
             <li>Unlimited Timing checks and Find-a-date</li>
             <li>Up to 30 Ask questions a day (fair use)</li>
             <li>Every Life chapter, weekly and monthly guidance</li>
+            <li>Full Bond match: all 8 kootas, Kuja check, love styles and a monthly couple guide. One Pro covers both partners</li>
+            <li>The whole Calendar: every day of the month, plus the year view</li>
           </ul>
         </div>
       </section>

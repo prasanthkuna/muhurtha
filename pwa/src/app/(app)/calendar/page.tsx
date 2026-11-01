@@ -174,6 +174,10 @@ export default function CalendarPage() {
   const { isPro, userId } = useAppData();
   const { openPaywall } = usePaywall();
   const [view, setView] = useState<"month" | "year">("month");
+  // Deep link from the Pro welcome: /calendar?view=year.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("view") === "year") setView("year");
+  }, []);
   const [month, setMonth] = useState<string | null>(null);
   const [data, setData] = useState<MonthResp | null>(null);
   const [year, setYear] = useState<YearResp | null>(null);

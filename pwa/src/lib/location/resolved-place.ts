@@ -142,15 +142,14 @@ export function readDeviceLocation(): Promise<GeolocationPosition> {
   });
 }
 
+/** Message key for a geolocation failure (translated by the caller with t()). */
 export function geolocationErrorMessage(err: unknown): string {
-  if (typeof err !== "object" || err === null || !("code" in err)) {
-    return err instanceof Error ? err.message : "Could not detect location.";
-  }
+  if (typeof err !== "object" || err === null || !("code" in err)) return "geo.failed";
   const code = (err as GeolocationPositionError).code;
-  if (code === 1) return "Location permission denied. Allow location in browser settings.";
-  if (code === 2) return "Location unavailable. Try search instead.";
-  if (code === 3) return "Location timed out. Try again or search a city.";
-  return "Could not detect location.";
+  if (code === 1) return "geo.denied";
+  if (code === 2) return "geo.unavailable";
+  if (code === 3) return "geo.timeout";
+  return "geo.failed";
 }
 
 export async function detectCurrentPlace(): Promise<ResolvedPlace> {

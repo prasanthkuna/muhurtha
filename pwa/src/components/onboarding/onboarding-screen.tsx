@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GrahaMedallion } from "@/components/celestial/lord-medallion";
 import { OrbitBackdrop } from "@/components/celestial/orbit-backdrop";
@@ -10,10 +10,14 @@ import {
 } from "@/components/birth/birth-details-fields";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { LoadingState } from "@/components/editorial/loading-state";
+import { NavagrahaWheel } from "@/components/shell/navagraha-loader";
 import { useLocale } from "@/context/locale-context";
 import { APP_LOCALES, localeLabel, type AppLocale } from "@/lib/locale";
+import { fill } from "@/lib/messages-bond";
+import { logProduct } from "@/lib/product-events";
+import { readTeaser } from "@/lib/teaser";
 import { clearEngineCache } from "@/lib/engine-cache";
-import { runChartGeneration } from "@/lib/onboarding/pack-generation";
+import { startChartGeneration } from "@/lib/onboarding/pack-generation";
 import {
   initializeChartAfterOnboarding,
   saveOnboardingDraft,
@@ -38,8 +42,25 @@ export function OnboardingScreen() {
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
+  const viewed = useRef(false);
 
   useEffect(() => {
+    if (!viewed.current) {
+      viewed.current = true;
+      logProduct("onboarding_view", { teaser: Boolean(readTeaser()) });
+    }
+    // Prefill from the Welcome star teaser (same device, last 30 days).
+    const teaser = readTeaser();
+    if (teaser) {
+      setValues((v) => ({
+        ...v,
+        dateOfBirth: v.dateOfBirth || teaser.dob,
+        timeBucket: teaser.timeBucket ?? v.timeBucket,
+      }));
+      setPrefilled(true);
+    }
     void (async () => {
       const supabase = createClient();
       if (!supabase) return;
@@ -96,9 +117,12 @@ export function OnboardingScreen() {
 
       setBusy(false);
       setGenerating(true);
+      logProduct("onboarding_submit", { time: values.timeMode, prefilled, locale });
       await initializeChartAfterOnboarding(birthInputId, locale);
       clearEngineCache();
-      await runChartGeneration(locale);
+      // Start the reading, then hand off to Decode right away: its Navagraha loader shows the
+      // real job progress. Never hold the user here for more than a few seconds.
+      await Promise.race([startChartGeneration(locale), new Promise((r) => setTimeout(r, 12_000))]);
       router.replace("/decode");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("onboarding.saveFailed"));
@@ -114,7 +138,7 @@ export function OnboardingScreen() {
   }
 
   if (!localeReady) return <LoadingState message={t("common.loading")} />;
-  if (generating) return <LoadingState message={t("onboarding.generating")} />;
+  if (generating) return <OnboardingGenerating />;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2.5rem,env(safe-area-inset-top))]">
@@ -133,28 +157,32 @@ export function OnboardingScreen() {
         </div>
       </section>
 
-      <form onSubmit={(e) => void onSubmit(e)} className="mt-6 space-y-4" data-testid="onboarding-form">
-        <BirthDetailsFields values={values} onChange={patch} />
+      <div className="mt-3 flex flex-wrap items-center gap-2 px-1 text-xs text-ink-secondary" data-testid="onboarding-language">
+        <span>{fill(t("onboarding.languageNote"), { lang: localeLabel(locale) })}</span>
+        {langOpen ? (
+          APP_LOCALES.filter((c) => c !== locale).map((code) => (
+            <button
+              key={code}
+              type="button"
+              onClick={() => {
+                setLangOpen(false);
+                void setLocale(code as AppLocale);
+              }}
+              className="rounded-full border border-line bg-paper px-2.5 py-1 font-medium text-ink-secondary"
+            >
+              {localeLabel(code)}
+            </button>
+          ))
+        ) : (
+          <button type="button" onClick={() => setLangOpen(true)} className="font-semibold text-gold-text underline underline-offset-2">
+            {t("onboarding.changeLang")}
+          </button>
+        )}
+      </div>
+      {prefilled ? <p className="mt-1 px-1 text-xs text-success-ink">{t("onboarding.prefilled")}</p> : null}
 
-        <div className="space-y-1.5">
-          <span className="text-xs font-medium text-ink-tertiary">{t("settings.languageTitle")}</span>
-          <div className="flex flex-wrap gap-2">
-            {APP_LOCALES.map((code) => (
-              <button
-                key={code}
-                type="button"
-                onClick={() => void setLocale(code as AppLocale)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                  locale === code
-                    ? "bg-gold-wash text-gold-text"
-                    : "border border-line bg-paper text-ink-secondary"
-                }`}
-              >
-                {localeLabel(code)}
-              </button>
-            ))}
-          </div>
-        </div>
+      <form onSubmit={(e) => void onSubmit(e)} className="mt-5 space-y-4" data-testid="onboarding-form">
+        <BirthDetailsFields values={values} onChange={patch} />
 
         {error ? (
           <p className="text-sm text-warning-ink" role="alert">
@@ -170,10 +198,30 @@ export function OnboardingScreen() {
           type="button"
           onClick={() => void signOut()}
           className="w-full py-2 text-center text-sm text-ink-tertiary"
+          data-testid="onboarding-not-you"
         >
-          {t("common.signOut")}
+          {t("onboarding.notYou")}
         </button>
       </form>
+    </div>
+  );
+}
+
+/** Shown for the few seconds between saving birth details and handing off to Decode's loader. */
+export function OnboardingGenerating() {
+  const { t } = useLocale();
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setActive((n) => n + 1), 2400);
+    return () => window.clearInterval(id);
+  }, []);
+  return (
+    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col items-center justify-center bg-canvas px-6 text-center" data-testid="onboarding-generating">
+      <div className="h-64 w-64">
+        <NavagrahaWheel active={active} />
+      </div>
+      <p className="mt-4 font-serif text-2xl text-ink">{t("onboarding.generating")}</p>
+      <p className="mt-2 text-sm text-ink-secondary">{t("onboarding.generatingSub")}</p>
     </div>
   );
 }

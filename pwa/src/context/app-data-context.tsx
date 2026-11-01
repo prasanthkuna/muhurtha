@@ -263,11 +263,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const lastAccessJson = useRef<string>("");
   const recordAccess = useCallback((next: AccessInfo | undefined | null) => {
     if (!next || typeof next !== "object" || next.isPro === undefined) return;
+    // Same entitlement again (every billing_status poll): keep the old object so nothing re-renders.
+    const json = JSON.stringify(next);
+    if (json === lastAccessJson.current) return;
+    lastAccessJson.current = json;
     setAccessState(next);
     writeAccess(userIdRef.current, next);
   }, []);
+
+  /** Stable across renders: consumers (paywall, plan section) may list it in effect deps. */
+  const applyAccess = useCallback((next: AccessInfo) => recordAccess(next), [recordAccess]);
+  const refreshAccess = useCallback(async () => {
+    const status = await fetchBillingStatus();
+    if (status?.access) recordAccess(status.access);
+    return status;
+  }, [recordAccess]);
 
   const reloadChartProfiles = useCallback(async () => {
     try {
@@ -732,12 +745,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       error,
       isPro: (access?.isPro ?? pack?.access?.isPro) === true,
       access,
-      applyAccess: (next: AccessInfo) => recordAccess(next),
-      refreshAccess: async () => {
-        const status = await fetchBillingStatus();
-        if (status?.access) recordAccess(status.access);
-        return status;
-      },
+      applyAccess,
+      refreshAccess,
       preparing,
       retryPreparing: () => {
         setPreparing(null);
@@ -763,7 +772,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [
     pack,
     access,
-    recordAccess,
+    applyAccess,
+    refreshAccess,
     preparing,
     today,
     loading,

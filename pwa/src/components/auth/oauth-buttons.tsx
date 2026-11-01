@@ -29,10 +29,12 @@ export function OAuthButtons({
   onGoogle,
   busy,
   className,
+  label = "Continue with Google",
 }: {
   onGoogle: () => void;
   busy?: boolean;
   className?: string;
+  label?: string;
 }) {
   return (
     <div className={cn("space-y-3", className)}>
@@ -44,7 +46,7 @@ export function OAuthButtons({
         className="flex min-h-12 w-full items-center justify-center gap-3 rounded-full border border-line bg-paper px-5 text-sm font-semibold text-ink shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"
       >
         <GoogleMark className="h-5 w-5 shrink-0" />
-        Continue with Google
+        {label}
       </button>
     </div>
   );

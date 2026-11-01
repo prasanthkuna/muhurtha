@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { AttributionCapture } from "@/components/share/attribution-capture";
 import { PublicShell } from "@/components/bond/public-shell";
 import { ScoreRing } from "@/components/bond/score-ring";
@@ -10,6 +10,8 @@ import { MuhField, MuhInput } from "@/components/ui/form-fields";
 import { useLocale } from "@/context/locale-context";
 import type { Band } from "@/lib/bond";
 import { fill } from "@/lib/messages-bond";
+import { logProduct } from "@/lib/product-events";
+import { readTeaser } from "@/lib/teaser";
 
 type R = { total: number; band: Band; approximate: boolean };
 
@@ -21,6 +23,13 @@ function MatchInner() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [res, setRes] = useState<R | null>(null);
+  // "You" prefilled from the Welcome / shared-link star teaser on this device.
+  useEffect(() => {
+    const tz = readTeaser();
+    if (!tz) return;
+    setA((cur) => (cur.dob || cur.nakshatra ? cur : { ...emptyPerson, mode: "date", dob: tz.dob }));
+    logProduct("match_prefill", { from: "teaser" });
+  }, []);
   const nm = [names[0].trim() || t("match.you"), names[1].trim() || t("match.partner")] as [string, string];
 
   async function run() {
@@ -66,7 +75,7 @@ function MatchInner() {
           <div className="mt-5 rounded-2xl bg-gold-wash/40 px-4 py-4 text-center">
             <p className="font-serif text-lg text-ink">{t("match.full")}</p>
             <p className="mt-1 text-sm text-ink-secondary">{t("match.fullSub")}</p>
-            <Link href="/auth?next=/bond" className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-gold-button text-sm font-semibold text-ink" data-testid="public-full">
+            <Link href="/welcome?next=/bond&src=match" className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-gold-button text-sm font-semibold text-ink" data-testid="public-full">
               {t("match.start")} →
             </Link>
           </div>

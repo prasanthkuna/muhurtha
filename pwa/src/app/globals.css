@@ -34,8 +34,8 @@
   --color-warning-ink: var(--warning-ink);
   --color-warning-wash: var(--warning-wash);
   --color-danger-ink: var(--danger-ink);
-  --font-serif: var(--font-fraunces);
-  --font-sans: var(--font-instrument);
+  --font-serif: var(--font-fraunces), var(--font-telugu);
+  --font-sans: var(--font-instrument), var(--font-telugu);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -60,7 +60,7 @@ html {
 body {
   background: var(--canvas);
   color: var(--ink);
-  font-family: var(--font-instrument), system-ui, sans-serif;
+  font-family: var(--font-instrument), var(--font-telugu), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
   min-height: 100dvh;
@@ -78,7 +78,7 @@ body {
 }
 
 .font-serif {
-  font-family: var(--font-fraunces), Georgia, serif;
+  font-family: var(--font-fraunces), var(--font-telugu), Georgia, serif;
 }
 
 /* Celestial sign medallion — subtle scintillate (respects reduced motion above) */

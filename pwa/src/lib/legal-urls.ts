@@ -12,7 +12,7 @@ export function accountDeletionMailto(phoneHint?: string) {
     "Please delete my Muhūrta account and associated data.",
     "",
     `Phone on account: ${phoneHint ?? "(your number)"}`,
-    `Requested on: ${new Date().toISOString()}`,
+    `Requested on: ${new Date().toISOString().slice(0, 10)}`,
   ].join("\n");
   return `mailto:${LegalUrls.supportEmail}?subject=${encodeURIComponent("Muhūrta account deletion request")}&body=${encodeURIComponent(body)}`;
 }

@@ -184,7 +184,7 @@ export { logCall as logLlmCall };
 
 async function createWithSchema(
   facts: V2Facts,
-  args: { system: string; user: string; scope?: Parameters<typeof buildReadingSchema>[1]["scope"]; background: boolean; metadata?: Record<string, string>; model?: string },
+  args: { system: string; user: string; scope?: Parameters<typeof buildReadingSchema>[1]["scope"]; background: boolean; metadata?: Record<string, string>; model?: string; chainDepth?: number },
 ): Promise<ResponseObject> {
   const attempt = (withLengths: boolean) =>
     createResponse({
@@ -197,6 +197,7 @@ async function createWithSchema(
       reasoningEffort: "low",
       maxOutputTokens: args.scope ? 12000 : 40000,
       metadata: args.metadata,
+      chainDepth: args.chainDepth,
     });
   if (lengthsSupported !== false) {
     try {
@@ -212,6 +213,15 @@ async function createWithSchema(
   return attempt(false);
 }
 
+/**
+ * How far down the Gemini chain a reading attempt may go. The first two attempts stay on the
+ * strong models (primary + next) and requeue with backoff when Google is overloaded; later
+ * attempts may use the whole chain so a reading always lands. Lite models are the last resort.
+ */
+export function readingChainDepth(attempts: number): number | undefined {
+  return attempts < 2 ? 2 : undefined;
+}
+
 /** Submit (or re-submit) the background response for a job. */
 export async function submitJob(admin: SupabaseClient, job: JobRow, reading: ReadingRow): Promise<JobRow> {
   const facts = reading.facts!;
@@ -222,6 +232,7 @@ export async function submitJob(admin: SupabaseClient, job: JobRow, reading: Rea
       system: buildSystemPrompt(facts),
       user: buildUserPrompt(facts),
       background: true,
+      chainDepth: readingChainDepth(job.attempts),
       metadata: { job_id: job.id, reading_id: reading.id, locale: reading.locale },
     });
     return await updateJob(admin, job.id, {
@@ -476,6 +487,9 @@ export async function advanceJob(
         scope,
         background: false,
         metadata: { job_id: job.id, purpose: "repair" },
+        // The repair polishes a full-quality draft: keep it on the strong models (a lite model
+        // timed out on the Telugu repair on 1 Nov). If they're busy, ship unrepaired.
+        chainDepth: 2,
       });
       const cost = await logCall(admin, {
         job_id: job.id, profile_id: job.profile_id, purpose: "repair", model, response_id: r.id,

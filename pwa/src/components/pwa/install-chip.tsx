@@ -15,10 +15,16 @@ export function InstallChip({
   className,
   variant = "chip",
   force = false,
+  titleKey = "install.title",
+  bodyKey = "install.body",
+  onOpen,
 }: {
   className?: string;
   variant?: "chip" | "banner" | "row";
   force?: boolean;
+  titleKey?: string;
+  bodyKey?: string;
+  onOpen?: () => void;
 }) {
   const { t } = useLocale();
   const { ready, standalone, installed, canPrompt } = usePwaInstall();
@@ -35,7 +41,10 @@ export function InstallChip({
     variant === "banner" ? (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          onOpen?.();
+          setOpen(true);
+        }}
         data-testid="install-banner"
         className={cn(
           "flex w-full items-center gap-3 rounded-2xl border border-gold-accent/35 bg-paper px-4 py-3 text-left shadow-sm",
@@ -46,8 +55,8 @@ export function InstallChip({
           <Glyph name="install" size={22} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-ink">{t("install.title")}</span>
-          <span className="block truncate text-xs text-ink-secondary">{t("install.body")}</span>
+          <span className="block text-sm font-semibold text-ink">{t(titleKey)}</span>
+          <span className="block text-xs leading-snug text-ink-secondary">{t(bodyKey)}</span>
         </span>
         <span className="rounded-full bg-gold-button px-3 py-1.5 text-xs font-semibold text-ink">{t("install.chip")}</span>
       </button>

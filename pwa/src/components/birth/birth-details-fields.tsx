@@ -4,6 +4,7 @@ import { LocationPicker } from "@/components/location/location-picker";
 import { MuhField, MuhInput, MuhSegment, MuhSelect } from "@/components/ui/form-fields";
 import { TIME_BUCKETS } from "@/lib/chart-profiles";
 import { NAKSHATRAS } from "@/lib/nakshatras";
+import { nakLabel } from "@/lib/messages-bond";
 import type { ResolvedPlace } from "@/lib/location/resolved-place";
 import { useLocale } from "@/context/locale-context";
 import { useEffect, useState } from "react";
@@ -37,7 +38,7 @@ export function BirthDetailsFields({
   /** Off for partner/friend forms: never auto-detect (or offer) the owner's location. */
   detectBirthPlace?: boolean;
 }) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [birthUnlinked, setBirthUnlinked] = useState(false);
 
   useEffect(() => {
@@ -132,7 +133,7 @@ export function BirthDetailsFields({
           <option value="">{t("onboarding.nakshatraSkip")}</option>
           {NAKSHATRAS.map((n) => (
             <option key={n} value={n}>
-              {n}
+              {locale === "en" ? n : `${nakLabel(n, locale)} (${n})`}
             </option>
           ))}
         </MuhSelect>

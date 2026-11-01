@@ -48,8 +48,16 @@ async function runLlmProbe(admin: SupabaseClient, body: Record<string, unknown>)
 }
 import { dispatchDuePush } from "./push.ts";
 import { invitePreview, quickMatch } from "./bond.ts";
+import { panchangToday, StarInputError, starTeaser } from "./star_public.ts";
 import { ensurePlan, type PlanCode, PRO_PLANS, razorpayConfig } from "./razorpay.ts";
 import type { AppLocale } from "./vedic_labels.ts";
+
+const FUNNEL_EVENTS = new Set([
+  "welcome_view", "welcome_locale", "teaser_submit", "teaser_result", "signin_click", "onboarding_view",
+  "onboarding_submit", "reading_ready", "install_prompt_view", "install_accept", "share_landing_view",
+  "share_cta", "share_whatsapp", "match_prefill", "paywall_view", "paywall_cta", "pro_purchased",
+  "pro_welcome_view", "pro_welcome_cta",
+]);
 
 const cors: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -239,6 +247,57 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
       });
+    }
+
+    if (body.action === "star_quick_public" || body.action === "panchang_today_public") {
+      // Public, zero-LLM birth-star teaser and today's panchang (Welcome + shared-link landing). Nothing stored.
+      try {
+        const out = body.action === "star_quick_public"
+          ? starTeaser(body as Record<string, unknown>)
+          : panchangToday(body as Record<string, unknown>);
+        return new Response(JSON.stringify(out), {
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        const msg = e instanceof StarInputError ? e.message : "Could not read that date";
+        return new Response(JSON.stringify({ error: msg, error_code: "invalid_input" }), {
+          status: 400,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    if (body.action === "funnel_event") {
+      // Public, best-effort product/funnel event (allowlisted names, primitive props only).
+      const name = String(body.name ?? "");
+      if (!FUNNEL_EVENTS.has(name)) {
+        return new Response(JSON.stringify({ ok: false }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
+      }
+      const admin = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+      const props: Record<string, string | number | boolean> = {};
+      const raw = (body.props && typeof body.props === "object") ? body.props as Record<string, unknown> : {};
+      for (const [k, v] of Object.entries(raw).slice(0, 12)) {
+        if (!/^[a-z_]{1,24}$/.test(k)) continue;
+        if (typeof v === "string") props[k] = v.slice(0, 80);
+        else if (typeof v === "number" && Number.isFinite(v)) props[k] = v;
+        else if (typeof v === "boolean") props[k] = v;
+      }
+      const anon = typeof body.anon_id === "string" ? body.anon_id.slice(0, 40) : null;
+      let profileId: string | null = null;
+      const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+      if (bearer && bearer !== (Deno.env.get("SUPABASE_ANON_KEY") ?? "") && bearer.split(".").length === 3) {
+        try {
+          const { data: u } = await admin.auth.getUser(bearer);
+          if (u?.user?.id) {
+            const { data: p } = await admin.from("profiles").select("id").eq("user_id", u.user.id).maybeSingle();
+            profileId = (p as { id?: string } | null)?.id ?? null;
+          }
+        } catch { /* anonymous */ }
+      }
+      await admin.from("app_logs").insert({
+        profile_id: profileId, service: "product", level: "info", message: name, context: { ...props, anon_id: anon, funnel: true },
+      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
     if (body.action === "match_quick_public" || body.action === "invite_preview") {

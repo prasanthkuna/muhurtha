@@ -12,6 +12,7 @@ import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { isChildStage } from "@/lib/life-stage";
 import { ShareCardButton } from "@/components/share/share-button";
+import { AfterReadingInstall } from "@/components/pwa/after-reading-install";
 import { clip, rashiGlyph } from "@/lib/share/builders";
 import { fill, nakLabel } from "@/lib/messages-bond";
 import { calWhyLine } from "@/lib/cal-text";
@@ -21,7 +22,7 @@ const ADULT_ONLY_DOMAINS = new Set(["career", "money", "business", "relationship
 
 export default function DecodePage() {
   const { t, locale } = useLocale();
-  const { views, loading, error, pack, preparing, activeLifeStage, today } = useAppData();
+  const { views, loading, error, pack, preparing, activeLifeStage, today, userId } = useAppData();
 
   if (loading && !pack) return <LoadingState message={t("decode.opening")} />;
   if (preparing && (!views || !pack)) return <ReadingUnavailable title={t("nav.decode")} />;
@@ -107,6 +108,8 @@ export default function DecodePage() {
           </Link>
         ) : null}
       </div>
+
+      <AfterReadingInstall userId={userId} />
 
       <div className="flex justify-end">
         <ShareCardButton

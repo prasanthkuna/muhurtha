@@ -6,8 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { resolveInitialAppPath } from "@/lib/auth/routing";
 import { createClient } from "@/lib/supabase/client";
+import { useLocale } from "@/context/locale-context";
+import { signInWithGoogle as startGoogle } from "@/lib/auth/google";
+import { logProduct } from "@/lib/product-events";
 
+/** Email sign-in (reviewers, testers) and sign-in errors. Everyone else signs in on /welcome. */
 export default function AuthPage() {
+  const { t } = useLocale();
   const router = useRouter();
   const params = useSearchParams();
   const nextPath = params.get("next") || "/decode";
@@ -37,36 +42,25 @@ export default function AuthPage() {
       }
 
       const { data } = await supabase.auth.getSession();
-      if (!data.session) return;
+      if (!data.session) {
+        // One sign-in page: plain /auth visits go to the Welcome screen.
+        if (params.get("method") !== "email" && !urlError && !urlErrorDesc) {
+          router.replace(`/welcome?next=${encodeURIComponent(nextPath)}`);
+        }
+        return;
+      }
       const dest = await resolveInitialAppPath(supabase, nextPath);
       router.replace(dest);
     })();
-  }, [router, nextPath]);
+  }, [router, nextPath, params, urlError, urlErrorDesc]);
 
   async function signInWithGoogle() {
     setBusy(true);
     setError(null);
-    const supabase = createClient();
-    if (!supabase) {
-      setError("Add Supabase keys to .env.local.");
-      setBusy(false);
-      return;
-    }
-
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-      nextPath.startsWith("/") ? nextPath : "/decode",
-    )}`;
-
-    const { error: err } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo,
-        queryParams: { prompt: "select_account" },
-      },
-    });
-
+    logProduct("signin_click", { surface: "auth", from: "google" });
+    const err = await startGoogle(nextPath);
     if (err) {
-      setError(err.message);
+      setError(err);
       setBusy(false);
     }
   }
@@ -95,15 +89,13 @@ export default function AuthPage() {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(3rem,env(safe-area-inset-top))]">
       <Link href="/welcome" className="text-sm text-gold-text">
-        ← Back
+        {t("auth.back")}
       </Link>
-      <h1 className="mt-6 font-serif text-3xl text-ink">Sign in</h1>
-      <p className="mt-2 text-ink-secondary">
-        One tap with Google — we route you to Today or onboarding automatically.
-      </p>
+      <h1 className="mt-6 font-serif text-3xl text-ink">{t("auth.title")}</h1>
+      <p className="mt-2 text-ink-secondary">{t("auth.sub")}</p>
 
       <div className="mt-10">
-        <OAuthButtons onGoogle={() => void signInWithGoogle()} busy={busy} />
+        <OAuthButtons onGoogle={() => void signInWithGoogle()} busy={busy} label={t("welcome.google")} />
       </div>
 
       {showEmail ? (
@@ -146,7 +138,7 @@ export default function AuthPage() {
           onClick={() => setShowEmail(true)}
           className="mt-5 self-center text-sm text-ink-secondary underline underline-offset-4 hover:text-gold-text"
         >
-          Sign in with email
+          {t("auth.email")}
         </button>
       )}
 

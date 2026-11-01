@@ -4,6 +4,8 @@ import { SUPPLEMENT } from "./messages-supplement";
 import { BILLING } from "./messages-billing";
 import { READING } from "./messages-reading";
 import { BOND } from "./messages-bond";
+import { PRO } from "./messages-pro";
+import { WELCOME } from "./messages-welcome";
 
 type MessageTree = { [key: string]: string | MessageTree };
 
@@ -761,12 +763,12 @@ const hi: MessageTree = {
     notSet: "सेट नहीं",
     birthMissing: "जन्म प्रोफ़ाइल नहीं मिली। onboarding पूरा करके refresh करें।",
     cityTitle: "वर्तमान शहर (Timing)",
-    cityHint: "Purpose checks के लिए lat/lng चाहिए।",
+    cityHint: "आपके शहर से आज के समय निकाले जाते हैं।",
     cityPlaceholder: "शहर (optional)",
     detectLocation: "मेरी लोकेशन detect",
-    detecting: "Detecting…",
+    detecting: "लोकेशन ढूँढ रहे हैं…",
     languageTitle: "भाषा",
-    languageHint: "चुनी भाषा में pack फिर लोड होगा।",
+    languageHint: "चुनी भाषा में आपकी reading फिर से खुलेगी।",
     alertsTitle: "सूचनाएँ",
     alertsHint: "सुबह 6:45 बजे आज का मुहूर्त सार, और शुभ समय व राहुकाल से 10 मिनट पहले सूचना। ऐप बंद होने पर भी आती हैं।",
     alertsOn: "सूचनाएँ बंद करें",
@@ -809,7 +811,7 @@ const hi: MessageTree = {
     loading: "Ask…",
     eyebrow: "Ask",
     title: "एक स्पष्ट सवाल",
-    subtitle: "आपके pack पर आधारित जवाब।",
+    subtitle: "आपकी कुंडली पर आधारित जवाब।",
     fromLife: "Life map से",
     askChapter: "Chapter के बारे में पूछें →",
     placeholder: "एक सवाल…",
@@ -833,11 +835,11 @@ const hi: MessageTree = {
     nakshatraSkip: "पता नहीं — छोड़ें",
     submit: "मेरी reading बनाएं",
     saving: "सेव…",
-    generating: "Janma pack तैयार…",
+    generating: "आपकी reading लिख रहे हैं…",
     incomplete: "नाम, तिथि, स्थान, शहर भरें।",
     exactRequired: "समय चुनें या window चुनें।",
     saveFailed: "सेव नहीं हुआ।",
-    configMissing: "App configure नहीं।",
+    configMissing: "App अभी तैयार नहीं है। थोड़ी देर में फिर आएँ।",
     geoUnavailable: "Location उपलब्ध नहीं।",
     geoFailed: "Location detect नहीं हुआ।",
     currentLocation: "वर्तमान location",
@@ -845,12 +847,12 @@ const hi: MessageTree = {
     locationSaved: "Location updated.",
   },
   legal: {
-    disclaimerTitle: "How to read Muhūrta",
-    disclaimerIntro: "Scope of timing, Ask, and Decode.",
-    bodyTiming: "Timing is traditional Panchanga comparison, not an outcome prediction.",
-    bodyAsk: "Ask is not medical, legal, or financial advice.",
-    bodyDecode: "Decode uses your chart pack, not a generic horoscope feed.",
-    bodyGeneral: "Today windows follow Panchanga for your city.",
+    disclaimerTitle: "Muhūrta को कैसे पढ़ें",
+    disclaimerIntro: "Timing, Ask और Decode का दायरा।",
+    bodyTiming: "Timing पारंपरिक पंचांग की तुलना है, नतीजे की भविष्यवाणी नहीं।",
+    bodyAsk: "Ask चिकित्सा, कानूनी या वित्तीय सलाह नहीं है।",
+    bodyDecode: "Decode आपकी अपनी कुंडली से बनता है, सबके लिए एक जैसा राशिफल नहीं।",
+    bodyGeneral: "Today के समय आपके शहर के पंचांग से निकलते हैं।",
   },
   bucket: {
     earlyMorning: "बहुत सुबह",
@@ -926,6 +928,8 @@ function lookup(tree: MessageTree, path: string): string | undefined {
 
 export function t(locale: AppLocale, key: string): string {
   return (
+    PRO[locale]?.[key] ??
+    WELCOME[locale]?.[key] ??
     BOND[locale]?.[key] ??
     READING[locale]?.[key] ??
     BILLING[locale]?.[key] ??
@@ -937,6 +941,8 @@ export function t(locale: AppLocale, key: string): string {
     BILLING.en[key] ??
     READING.en[key] ??
     BOND.en[key] ??
+    PRO.en[key] ??
+    WELCOME.en[key] ??
     key
   );
 }

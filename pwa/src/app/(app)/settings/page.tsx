@@ -34,12 +34,14 @@ import { setServerLanguage } from "@/lib/billing";
 function Section({
   title,
   children,
+  id,
 }: {
   title: string;
   children: ReactNode;
+  id?: string;
 }) {
   return (
-    <section className="space-y-2">
+    <section id={id} className="scroll-mt-20 space-y-2">
       <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">
         {title}
       </h2>
@@ -173,6 +175,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-8 pb-4" data-testid="settings-loaded">
+      <HashScroll ready={birthState !== "loading"} />
       <PageHeader
         eyebrow={t("settings.profileEyebrow")}
         title={t("settings.title")}
@@ -196,7 +199,7 @@ export default function SettingsPage() {
 
       <PlanSection />
 
-      <Section title={t("settings.languageTitle")}>
+      <Section id="language" title={t("settings.languageTitle")}>
         <p className="px-1 text-sm text-ink-secondary">
           {isPro ? t("settings.languageHint") : t("billing.langLocked")}
         </p>
@@ -224,7 +227,9 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      <ChartProfilesSection />
+      <div id="charts" className="scroll-mt-20">
+        <ChartProfilesSection />
+      </div>
 
       <Section title={t("settings.signedIn")}>
         <div className="rounded-xl border border-line bg-paper px-4 py-1">
@@ -256,7 +261,7 @@ export default function SettingsPage() {
         {pending ? (
           <p className="px-1 text-sm text-ink-tertiary" aria-live="polite">{t("ui.loadingBirth")}</p>
         ) : null}
-        {birthState === "ok" ? <BirthEditSection onSaved={() => void loadBirth()} /> : null}
+        {birthState === "ok" ? <div id="birth" className="scroll-mt-20"><BirthEditSection onSaved={() => void loadBirth()} /></div> : null}
         {birthState === "missing" ? (
           <p className="px-1 text-sm text-ink-secondary">{t("settings.birthMissing")}</p>
         ) : null}
@@ -358,4 +363,16 @@ export default function SettingsPage() {
       </button>
     </div>
   );
+}
+
+/** Deep links like /settings#charts (Pro welcome cards) land on the section once it has rendered. */
+function HashScroll({ ready }: { ready: boolean }) {
+  useEffect(() => {
+    if (!ready) return;
+    const id = window.location.hash.slice(1);
+    if (!/^[a-z-]{2,20}$/.test(id)) return;
+    const t = window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    return () => window.clearTimeout(t);
+  }, [ready]);
+  return null;
 }
