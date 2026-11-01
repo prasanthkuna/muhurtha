@@ -32,7 +32,7 @@ type NominatimReverseRow = {
 
 const GEO_TIMEOUT_MS = 4_000;
 const NOMINATIM_HEADERS = {
-  "User-Agent": "MuhurthaApp/1.1 (+https://pwa-lyart-phi.vercel.app; support@muhurta.app)",
+  "User-Agent": "MuhurthaApp/1.1 (+https://muhurtha-app.vercel.app; support@muhurta.app)",
   "Accept-Language": "en",
 };
 

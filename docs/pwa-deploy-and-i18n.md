@@ -4,7 +4,7 @@
 
 | Layer | When | Command |
 |-------|------|---------|
-| **Vercel (PWA)** | Any change under `pwa/` | Push to `main` → auto deploy to https://pwa-lyart-phi.vercel.app |
+| **Vercel (PWA)** | Any change under `pwa/` | Push to `main` → auto deploy to https://muhurtha-app.vercel.app (old pwa-lyart-phi.vercel.app forwards) |
 | **Supabase (BE)** | Changes under `supabase/functions/muhurtha-api/` | `supabase functions deploy muhurtha-api` from repo root |
 
 After shipping, confirm Vercel production **Ready** and edge function version in Supabase dashboard.

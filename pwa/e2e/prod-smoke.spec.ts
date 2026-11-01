@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-const BASE = process.env.MUHURTA_E2E_BASE_URL ?? "https://pwa-lyart-phi.vercel.app";
+const BASE = process.env.MUHURTA_E2E_BASE_URL ?? "https://muhurtha-app.vercel.app";
 const MAGIC = process.env.MUHURTA_E2E_MAGIC_URL;
 const AUTH_FILE = path.join(__dirname, ".auth", "prod-user.json");
 

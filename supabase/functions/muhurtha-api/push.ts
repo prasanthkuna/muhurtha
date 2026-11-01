@@ -185,7 +185,7 @@ function appServer(): Promise<webpush.ApplicationServer> {
     if (!keys) throw new Error("VAPID keys are not configured");
     appServerPromise = (async () =>
       await webpush.ApplicationServer.new({
-        contactInformation: Deno.env.get("VAPID_SUBJECT") ?? "https://pwa-lyart-phi.vercel.app",
+        contactInformation: Deno.env.get("VAPID_SUBJECT") ?? "https://muhurtha-app.vercel.app",
         vapidKeys: await webpush.importVapidKeys(keys, { extractable: false }),
       }))();
     appServerPromise.catch(() => {

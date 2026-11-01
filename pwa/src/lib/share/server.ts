@@ -1,7 +1,7 @@
 import { createClient as createAnonClient } from "@supabase/supabase-js";
 import { sanitizeCardPayload, type CardPayload } from "@/lib/share/card-types";
 
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://pwa-lyart-phi.vercel.app").replace(/\/$/, "");
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://muhurtha-app.vercel.app").replace(/\/$/, "");
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

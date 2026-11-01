@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Instrument_Sans, Noto_Sans_Symbols_2, Noto_Sans_Telugu } from "next/font/google";
 import { SwRegister } from "@/components/pwa/sw-register";
+import { MovedSheet } from "@/components/pwa/moved-sheet";
+import { CANONICAL_ORIGIN } from "@/lib/site";
 import { INSTALL_CAPTURE_SCRIPT } from "@/lib/install-capture";
 import "./globals.css";
 
@@ -34,7 +36,7 @@ const symbols = Noto_Sans_Symbols_2({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://pwa-lyart-phi.vercel.app"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || CANONICAL_ORIGIN),
   title: "Muhūrta — your birth star, decoded",
   description: "Your birth star decoded: who you are, your life in chapters, today's good hours for your city and a 36-guna match. English, తెలుగు, हिन्दी. Free.",
   openGraph: {
@@ -77,6 +79,7 @@ export default function RootLayout({
       <body className={`${fraunces.variable} ${instrument.variable} ${symbols.variable} ${telugu.variable} antialiased`}>
         {children}
         <SwRegister />
+        <MovedSheet />
       </body>
     </html>
   );

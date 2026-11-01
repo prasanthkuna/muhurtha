@@ -21,8 +21,9 @@ port = 54323
 
 [auth]
 enabled = true
-site_url = "https://pwa-lyart-phi.vercel.app"
+site_url = "https://muhurtha-app.vercel.app"
 additional_redirect_urls = [
+  "https://muhurtha-app.vercel.app/**",
   "https://pwa-lyart-phi.vercel.app/**",
   "http://localhost:3000/**",
   "http://127.0.0.1:3000/**",

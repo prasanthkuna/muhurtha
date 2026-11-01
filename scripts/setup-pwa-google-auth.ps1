@@ -30,7 +30,7 @@ $env:GOOGLE_OAUTH_CLIENT_SECRET = $GoogleClientSecret
 Push-Location $root
 try {
   supabase config push --project-ref $ProjectRef --yes
-  Write-Host "Auth config pushed. Test: https://pwa-lyart-phi.vercel.app/welcome"
+  Write-Host "Auth config pushed. Test: https://muhurtha-app.vercel.app/welcome"
 } finally {
   Pop-Location
   Remove-Item Env:GOOGLE_OAUTH_CLIENT_ID -ErrorAction SilentlyContinue

@@ -324,7 +324,7 @@ function renderPortrait(ctx: Ctx, p: CardPayload, w: number, h: number) {
   fy += 44;
   ctx.fillStyle = C.ink3;
   ctx.font = `24px ${SANS}`;
-  ctx.fillText("pwa-lyart-phi.vercel.app", pad, fy);
+  ctx.fillText("muhurtha-app.vercel.app", pad, fy);
 
   // Measure the main stack, shrinking until it fits, then centre it between brand row and footer.
   const top = inset + 110;

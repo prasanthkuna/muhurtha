@@ -50,7 +50,7 @@ export function InstallSheet({ open, onClose }: { open: boolean; onClose: () => 
             <h2 id="install-title" className="font-serif text-xl font-semibold text-ink">
               {t("install.title")}
             </h2>
-            <p className="text-xs text-ink-tertiary">pwa-lyart-phi.vercel.app</p>
+            <p className="text-xs text-ink-tertiary">muhurtha-app.vercel.app</p>
           </div>
         </div>
         <p className="mt-4 text-sm leading-relaxed text-ink-secondary">{t("install.body")}</p>

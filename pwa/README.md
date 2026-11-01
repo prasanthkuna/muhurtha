@@ -14,7 +14,7 @@ Next.js App Router PWA — **live Supabase auth + `muhurtha-api` only** (no demo
 
 ## Production (Vercel)
 
-**Live:** [https://pwa-lyart-phi.vercel.app](https://pwa-lyart-phi.vercel.app)
+**Live:** [https://muhurtha-app.vercel.app](https://muhurtha-app.vercel.app) (old address pwa-lyart-phi.vercel.app forwards here; see src/lib/site.ts)
 
 ```powershell
 cd pwa
@@ -22,7 +22,7 @@ vercel env pull   # after linking
 vercel deploy --prod
 ```
 
-Set **Supabase → Authentication → URL configuration**: add `https://pwa-lyart-phi.vercel.app/**` to redirect URLs and optionally set Site URL to the same origin. Secret **`WEBOTP_HOSTS`** on the Supabase project should include `pwa-lyart-phi.vercel.app` for SMS WebOTP autofill.
+Set **Supabase → Authentication → URL configuration**: set Site URL to `https://muhurtha-app.vercel.app` and keep both `https://muhurtha-app.vercel.app/**` and `https://pwa-lyart-phi.vercel.app/**` in redirect URLs (the old installed app still signs in there). Secret **`WEBOTP_HOSTS`** on the Supabase project should include `muhurtha-app.vercel.app` (and the old host) for SMS WebOTP autofill.
 
 ## Bun (local)
 

@@ -123,7 +123,13 @@ export function WelcomeScreen({ panchang }: { panchang: PublicPanchang | null })
     // First visit: pick the language from the phone and save it before sign-in.
     const saved = localStorage.getItem(LOCALE_STORAGE_KEY);
     let how = "saved";
-    if (!saved) {
+    const fromLink = new URLSearchParams(window.location.search).get("lang");
+    if (!saved && (fromLink === "en" || fromLink === "te" || fromLink === "hi")) {
+      // Arriving from the old address's "new home" sheet: keep the language they used there.
+      localStorage.setItem(LOCALE_STORAGE_KEY, fromLink);
+      previewLocale(fromLink);
+      how = "link";
+    } else if (!saved) {
       const g = guessLocale();
       localStorage.setItem(LOCALE_STORAGE_KEY, g);
       previewLocale(g);
@@ -160,7 +166,7 @@ export function WelcomeScreen({ panchang }: { panchang: PublicPanchang | null })
     }
   }
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://pwa-lyart-phi.vercel.app";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://muhurtha-app.vercel.app";
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))]">

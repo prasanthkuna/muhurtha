@@ -6,7 +6,8 @@
 2. **OAuth consent screen** — configure (Testing + add `prasanthkuna@gmail.com` as test user until published).
 3. **Credentials → Create OAuth client ID → Web application**
    - **Authorized JavaScript origins**
-     - `https://pwa-lyart-phi.vercel.app`
+     - `https://muhurtha-app.vercel.app`
+     - `https://pwa-lyart-phi.vercel.app` (old address)
      - `http://localhost:3000`
    - **Authorized redirect URIs** (Supabase — not Vercel):
      - `https://kdngizqrybkrckvphyin.supabase.co/auth/v1/callback`
@@ -21,8 +22,8 @@
 
 ## 3. Supabase → Authentication → URL configuration
 
-- **Site URL:** `https://pwa-lyart-phi.vercel.app`
-- **Redirect URLs:** `https://pwa-lyart-phi.vercel.app/**`, `http://localhost:3000/**`
+- **Site URL:** `https://muhurtha-app.vercel.app`
+- **Redirect URLs:** `https://muhurtha-app.vercel.app/**`, `https://pwa-lyart-phi.vercel.app/**` (old installed app), `http://localhost:3000/**`
 
 ## 4. Map Gmail to existing phone user (+919008393030 / kuna)
 
@@ -51,7 +52,7 @@ This runs `supabase config push` with `GOOGLE_OAUTH_*` env vars (see `supabase/c
 
 ## 6. Verify (Chrome DevTools)
 
-1. Open https://pwa-lyart-phi.vercel.app/welcome
+1. Open https://muhurtha-app.vercel.app/welcome
 2. **Continue with Google** → Google account picker → allow.
 3. Land on **Today** (existing birth input) with display name **kuna**.
 4. **Decode** — no duplicate identity paragraph; **Your natal luck** strip visible.

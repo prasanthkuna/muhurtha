@@ -56,7 +56,7 @@ const FUNNEL_EVENTS = new Set([
   "welcome_view", "welcome_locale", "teaser_submit", "teaser_result", "signin_click", "onboarding_view",
   "onboarding_submit", "reading_ready", "install_prompt_view", "install_accept", "share_landing_view",
   "share_cta", "share_whatsapp", "match_prefill", "paywall_view", "paywall_cta", "pro_purchased",
-  "pro_welcome_view", "pro_welcome_cta",
+  "pro_welcome_view", "pro_welcome_cta", "moved_sheet_view", "moved_sheet_action",
 ]);
 
 const cors: Record<string, string> = {

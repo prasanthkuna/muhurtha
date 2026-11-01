@@ -11,7 +11,7 @@ export default function TermsPage() {
   return (
     <PolicyPage
       title="Terms of Service"
-      intro="By using Muhūrta on the web (pwa-lyart-phi.vercel.app) or in the Android app, you agree to these Terms. If you do not agree, please do not use the service."
+      intro="By using Muhūrta on the web (muhurtha-app.vercel.app) or in the Android app, you agree to these Terms. If you do not agree, please do not use the service."
     >
       <section>
         <h2>The service</h2>
