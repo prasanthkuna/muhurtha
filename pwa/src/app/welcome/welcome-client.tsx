@@ -104,19 +104,18 @@ function SampleCard({ p }: { p: PublicPanchang | null }) {
   );
 }
 
-type Tier = "free" | "pro" | "freePro";
-const FEATURES: { key: string; glyph: GlyphName; tier: Tier }[] = [
-  { key: "decode", glyph: "decode", tier: "free" },
-  { key: "life", glyph: "chapter", tier: "freePro" },
-  { key: "today", glyph: "sunrise", tier: "free" },
-  { key: "calendar", glyph: "findDate", tier: "freePro" },
-  { key: "bond", glyph: "bond", tier: "freePro" },
-  { key: "ask", glyph: "ask", tier: "freePro" },
-  { key: "family", glyph: "friend", tier: "pro" },
-  { key: "lang", glyph: "lotus", tier: "free" },
+const FEATURES: { key: string; glyph: GlyphName }[] = [
+  { key: "decode", glyph: "decode" },
+  { key: "life", glyph: "chapter" },
+  { key: "today", glyph: "sunrise" },
+  { key: "calendar", glyph: "findDate" },
+  { key: "bond", glyph: "bond" },
+  { key: "ask", glyph: "ask" },
+  { key: "family", glyph: "friend" },
+  { key: "lang", glyph: "lotus" },
 ];
 
-/** What you get inside: honest Free / Pro marks, compact rows that fit a 360px screen. */
+/** What you get inside: compact rows that fit a 360px screen. */
 function InsideApp() {
   const { t } = useLocale();
   return (
@@ -132,23 +131,12 @@ function InsideApp() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[15px] font-semibold text-ink">{t(`welcome.f.${f.key}`)}</p>
-                <span
-                  className={cn(
-                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                    f.tier === "free" && "bg-success-ink/10 text-success-ink",
-                    f.tier === "pro" && "bg-gold-text/10 text-gold-text",
-                    f.tier === "freePro" && "border border-line text-ink-secondary",
-                  )}
-                >
-                  {t(`welcome.${f.tier}`)}
-                </span>
               </div>
               <p className="mt-0.5 text-[13px] leading-snug text-ink-secondary">{t(`welcome.fs.${f.key}`)}</p>
             </div>
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-center text-xs font-semibold text-ink">{t("welcome.priceLine")}</p>
     </section>
   );
 }
