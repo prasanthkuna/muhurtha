@@ -6,10 +6,10 @@ import { AttributionCapture } from "@/components/share/attribution-capture";
 export const metadata: Metadata = {
   title: "Muhūrta — your birth star, decoded",
   description:
-    "Find your birth star in 10 seconds. Your life in chapters, today's good hours for your city, and a 36-guna match. In English, తెలుగు and हिन्दी. Free.",
+    "Your birth star decoded, your life in chapters from birth to 80, today's good hours for your city, and a 36-guna match. In English, తెలుగు and हिन्दी. Free.",
   openGraph: {
     title: "Muhūrta — your birth star, decoded",
-    description: "Find your birth star in 10 seconds. English, తెలుగు, हिन्दी. Free.",
+    description: "Decode, Life, Today, Bond and Ask. In English, తెలుగు, हिन्दी. Free.",
     images: [{ url: "/icons/icon-512.png", width: 512, height: 512 }],
   },
 };

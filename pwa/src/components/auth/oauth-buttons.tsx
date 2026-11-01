@@ -30,17 +30,19 @@ export function OAuthButtons({
   busy,
   className,
   label = "Continue with Google",
+  testId = "auth-google",
 }: {
   onGoogle: () => void;
   busy?: boolean;
   className?: string;
   label?: string;
+  testId?: string;
 }) {
   return (
     <div className={cn("space-y-3", className)}>
       <button
         type="button"
-        data-testid="auth-google"
+        data-testid={testId}
         disabled={busy}
         onClick={onGoogle}
         className="flex min-h-12 w-full items-center justify-center gap-3 rounded-full border border-line bg-paper px-5 text-sm font-semibold text-ink shadow-sm transition-transform active:scale-[0.98] disabled:opacity-50"

@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { cn } from "@/components/ui/cn";
-import { StarTeaser } from "@/components/welcome/star-teaser";
+import { Glyph } from "@/components/ui/glyph";
 import { useLocale } from "@/context/locale-context";
 import { signInWithGoogle } from "@/lib/auth/google";
 import { resolveInitialAppPath } from "@/lib/auth/routing";
@@ -13,6 +12,7 @@ import { clock } from "@/lib/bond";
 import { tithiLabel } from "@/lib/cal-text";
 import { APP_LOCALES, LOCALE_STORAGE_KEY, localeLabel, type AppLocale } from "@/lib/locale";
 import { fill, nakLabel } from "@/lib/messages-bond";
+import type { GlyphName } from "@/lib/glyphs";
 import type { PublicPanchang } from "@/lib/panchang-public";
 import { logProduct } from "@/lib/product-events";
 import { createClient } from "@/lib/supabase/client";
@@ -104,7 +104,56 @@ function SampleCard({ p }: { p: PublicPanchang | null }) {
   );
 }
 
-/** Welcome = the one sign-in page: language toggle, Google above the fold, star teaser, today's real panchang. */
+type Tier = "free" | "pro" | "freePro";
+const FEATURES: { key: string; glyph: GlyphName; tier: Tier }[] = [
+  { key: "decode", glyph: "decode", tier: "free" },
+  { key: "life", glyph: "chapter", tier: "freePro" },
+  { key: "today", glyph: "sunrise", tier: "free" },
+  { key: "calendar", glyph: "findDate", tier: "freePro" },
+  { key: "bond", glyph: "bond", tier: "freePro" },
+  { key: "ask", glyph: "ask", tier: "freePro" },
+  { key: "family", glyph: "friend", tier: "pro" },
+  { key: "lang", glyph: "lotus", tier: "free" },
+];
+
+/** What you get inside: honest Free / Pro marks, compact rows that fit a 360px screen. */
+function InsideApp() {
+  const { t } = useLocale();
+  return (
+    <section aria-labelledby="welcome-inside" data-testid="welcome-features">
+      <h2 id="welcome-inside" className="font-serif text-[1.35rem] leading-tight text-ink">{t("welcome.inside")}</h2>
+      <p className="mt-1 text-[13px] text-ink-secondary">{t("welcome.insideSub")}</p>
+      <ul className="mt-3 divide-y divide-line/70 overflow-hidden rounded-2xl border border-line bg-paper">
+        {FEATURES.map((f) => (
+          <li key={f.key} className="flex gap-3 px-3.5 py-3" data-testid={`welcome-feature-${f.key}`}>
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gold-wash/60 text-gold-text">
+              <Glyph name={f.glyph} size={19} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[15px] font-semibold text-ink">{t(`welcome.f.${f.key}`)}</p>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                    f.tier === "free" && "bg-success-ink/10 text-success-ink",
+                    f.tier === "pro" && "bg-gold-text/10 text-gold-text",
+                    f.tier === "freePro" && "border border-line text-ink-secondary",
+                  )}
+                >
+                  {t(`welcome.${f.tier}`)}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[13px] leading-snug text-ink-secondary">{t(`welcome.fs.${f.key}`)}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-center text-xs font-semibold text-ink">{t("welcome.priceLine")}</p>
+    </section>
+  );
+}
+
+/** Welcome = the one sign-in page: language toggle, Google above the fold, what you get inside, today's real panchang. */
 export function WelcomeScreen({ panchang }: { panchang: PublicPanchang | null }) {
   const { t, locale, previewLocale } = useLocale();
   const router = useRouter();
@@ -166,8 +215,6 @@ export function WelcomeScreen({ panchang }: { panchang: PublicPanchang | null })
     }
   }
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://muhurtha-app.vercel.app";
-
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col overflow-x-clip bg-canvas px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))]">
       <header className="flex items-center justify-between">
@@ -184,13 +231,9 @@ export function WelcomeScreen({ panchang }: { panchang: PublicPanchang | null })
         {error ? <p className="mt-2 text-center text-xs text-warning-ink" role="alert">{error}</p> : null}
       </div>
 
-      <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-[0.14em] text-ink-tertiary">
-        <span className="h-px flex-1 bg-line" />
-        {t("welcome.or")}
-        <span className="h-px flex-1 bg-line" />
+      <div className="mt-7">
+        <InsideApp />
       </div>
-
-      <StarTeaser surface="welcome" onSave={() => void google("teaser")} shareUrl={`${origin}/welcome?src=teaser_share`} />
 
       <div className="mt-6">
         <SampleCard p={panchang} />
@@ -208,13 +251,12 @@ export function WelcomeScreen({ panchang }: { panchang: PublicPanchang | null })
         </ol>
       </section>
 
-      <Link href="/match?src=welcome" className="mt-5 block rounded-2xl border border-line bg-paper px-4 py-3 text-sm font-semibold text-gold-text">
-        {t("welcome.matchTile")}
-      </Link>
-
       <div className="mt-6 space-y-1 text-center text-xs text-ink-secondary">
         <p>{t("welcome.trust")}</p>
-        <p className="font-semibold text-ink">{t("welcome.price")}</p>
+      </div>
+
+      <div className="mt-5">
+        <OAuthButtons onGoogle={() => void google("features_end")} busy={busy} label={t("welcome.ctaEnd")} testId="auth-google-end" />
       </div>
 
       <div className="mt-auto pt-8">
