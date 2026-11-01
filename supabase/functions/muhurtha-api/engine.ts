@@ -66,6 +66,7 @@ import {
   vimshottariLordsAt,
   vimshottariMahadashas,
 } from "./vimshottari.ts";
+import { ageAt, lifeTimelineRows } from "./timeline_window.ts";
 import {
   moonSiderealLongitudeDeg,
   nakshatraPadaFromSiderealLon,
@@ -168,7 +169,7 @@ const PACK_ADVANCE_MAX_PHASES = 1;
 /** Exclusive lock while one edge worker runs a phase LLM call. */
 const PACK_PHASE_LOCK_MS = 150_000;
 
-type BioRow = {
+export type BioRow = {
   id: string;
   profile_id: string;
   date_of_birth: string;
@@ -183,7 +184,7 @@ type BioRow = {
   birth_lng: number | null;
 };
 
-type ProfRow = {
+export type ProfRow = {
   id: string;
   current_city: string | null;
   current_timezone: string | null;
@@ -827,6 +828,83 @@ function buildPackPhasePlans(
     });
     return Object.assign(plan, { startIso: seg.start.toISOString(), endIso: seg.end.toISOString() });
   });
+}
+
+type TimelinePlan = PhasePlan & {
+  startIso?: string;
+  endIso?: string;
+  kind: "detail" | "summary";
+  mdLords?: string[];
+  early?: boolean;
+  ageFrom?: number;
+  ageTo?: number;
+};
+
+/**
+ * v2 Life timeline: the dasha window from timeline_window.ts (previous + current + next
+ * mahadasha as full antardasha chapters from age 12, one "early years" row before that,
+ * one summary row per later mahadasha to age 80). Ids are 0..n-1 in date order.
+ */
+function buildLifeTimelinePlans(
+  bi: BioRow,
+  profile: ProfRow,
+  locale: AppLocale,
+  refInstant: Date,
+  kernel: PersonalizationKernel | undefined,
+): TimelinePlan[] {
+  const { segments, nk } = computeTimeline(bi, profile.current_timezone ?? "Asia/Kolkata");
+  if (nk === null || !segments.length) return [];
+  const birth = segments[0].start;
+  const rows = lifeTimelineRows(segments, refInstant);
+  const confidence = resolveEngineMode(bi) === "full_chart" ? "high" : "medium";
+  let prevSeg: AdSegment | null = null;
+  return rows.map((row, idx) => {
+    const seg: AdSegment = row.kind === "detail"
+      ? row.seg
+      : { mdLord: row.mdLord, adLord: row.mdLord, start: row.start, end: row.end };
+    const fallback = antardashaFallbackCopy(seg.mdLord, seg.adLord, seg.start, seg.end, idx, locale);
+    const plan = buildPhasePlan(seg, idx, locale, {
+      now: refInstant,
+      previous: prevSeg,
+      confidenceLabel: confidence,
+      periodLabel: plainPeriodLabel(seg.start, seg.end),
+      fallbackTitle: fallback.title,
+      fallbackSentences: fallback.sentences,
+      kernel,
+    });
+    prevSeg = seg;
+    const extra = {
+      startIso: seg.start.toISOString(),
+      endIso: seg.end.toISOString(),
+      ageFrom: Math.max(0, Math.floor(ageAt(birth, seg.start))),
+      ageTo: Math.round(ageAt(birth, seg.end)),
+    };
+    if (row.kind === "detail") return Object.assign(plan, extra, { kind: "detail" as const });
+    return Object.assign(plan, extra, {
+      kind: "summary" as const,
+      antardashaLord: "",
+      mdLords: row.mdLords,
+      early: row.early,
+      phasePulse: row.early
+        ? (locale === "te" ? "చిన్నప్పటి రోజులు" : locale === "hi" ? "शुरुआती साल" : "Early years")
+        : (locale === "te" ? "పెద్ద దశ" : locale === "hi" ? "बड़ा दौर" : "Long period"),
+    });
+  });
+}
+
+/** Rows of the Life timeline for scripts/tests (lord, period, ages, kind). */
+export function lifeTimelineForBirth(bi: BioRow, tz: string, at: Date) {
+  const { segments } = computeTimeline(bi, tz);
+  if (!segments.length) return [];
+  const birth = segments[0].start;
+  return lifeTimelineRows(segments, at).map((r) => ({
+    kind: r.kind,
+    lords: r.kind === "detail" ? `${r.mdLord}-${r.adLord}` : r.mdLords.join("+") + (r.early ? " (early)" : ""),
+    period: plainPeriodLabel(r.start, r.end),
+    ages: `${ageAt(birth, r.start).toFixed(1)}-${ageAt(birth, r.end).toFixed(1)}`,
+    start: r.start.toISOString(),
+    end: r.end.toISOString(),
+  }));
 }
 
 function fallbackTodayCard(
@@ -2966,7 +3044,7 @@ function partOfDay(hhmm: string): string {
   return "evening";
 }
 
-function buildReadingFacts(
+export function buildReadingFacts(
   profile: ProfRow,
   bi: BioRow,
   locale: AppLocale,
@@ -2978,7 +3056,7 @@ function buildReadingFacts(
   const { segments } = computeTimeline(bi, tz);
   const lords = segments.length ? vimshottariLordsAt(segments, refInstant) : null;
   const kernel = buildKernelForBirthInput(bi, profile, locale, refInstant, lords?.mdLord, lords?.adLord);
-  const plans = buildPackPhasePlans(bi, profile, locale, refInstant, kernel);
+  const plans = buildLifeTimelinePlans(bi, profile, locale, refInstant, kernel);
   const natal = birthMoonDetails(bi, tz, locale);
   const age = calculateAge(bi.date_of_birth);
   const isChild = Number.isFinite(age) && age < 13;
@@ -3054,6 +3132,10 @@ function buildReadingFacts(
     end_iso: p.endIso ?? null,
     md: p.mahadashaLord,
     ad: p.antardashaLord,
+    kind: p.kind,
+    ...(p.kind === "summary" ? { md_lords: p.mdLords ?? [p.mahadashaLord], early: Boolean(p.early) } : {}),
+    age_from: p.ageFrom ?? null,
+    age_to: p.ageTo ?? null,
     tense: p.tense,
     domains: p.activeDomains.slice(0, 4),
     support: p.supportThemes.slice(0, 3),

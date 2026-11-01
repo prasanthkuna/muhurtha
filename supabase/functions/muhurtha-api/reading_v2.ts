@@ -11,7 +11,7 @@ import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 
 export const READING_SCHEMA_VERSION = 2;
-export const READING_PROMPT_VERSION = "reading-v2.8";
+export const READING_PROMPT_VERSION = "reading-v2.9";
 
 export type ReadingLocale = "en" | "te" | "hi";
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
@@ -52,7 +52,16 @@ export type V2ChapterFact = {
   start_iso: string | null;
   end_iso: string | null;
   md: string;
+  /** Antardasha lord; "" on summary rows. */
   ad: string;
+  /** "detail" = one antardasha chapter (full text); "summary" = a whole mahadasha (or the early years) in one line. Missing on readings before v2.9 = detail. */
+  kind?: "detail" | "summary";
+  /** Summary rows: every mahadasha lord inside the span (early years can hold several). */
+  md_lords?: string[];
+  /** Summary row that covers childhood up to where full chapters begin. */
+  early?: boolean;
+  age_from?: number | null;
+  age_to?: number | null;
   tense: "past" | "current" | "future";
   domains: string[];
   support: string[];
@@ -237,7 +246,7 @@ export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean;
       chapter_id: { type: "integer", enum: chIds },
       title: str(LIMITS.chapterTitle, wl, "chapter title, 2-4 words, no planet names"),
       highlight: str(LIMITS.chapterHighlight, wl, "one sentence"),
-      body: str(LIMITS.chapterBody, wl, "past: 1-2 sentences; current/future: 3-4 sentences"),
+      body: str(LIMITS.chapterBody, wl, "kind=detail: past 1-2 sentences, current/future 3-4 sentences; kind=summary: empty string \"\""),
       share_line: str(LIMITS.share, wl),
     }), chIds.length);
   }
@@ -330,6 +339,7 @@ export function buildSystemPrompt(facts: V2Facts): string {
     "3. window_notes: write one note for every window id listed for that day/weekday (and no others). Good windows (g*) say what to use them for; c1 is the traditional caution window: say what to keep routine. Never write times; the app shows them.",
     "4. weekdays are evergreen cards used after the dated days run out: write for that weekday in general, no tithi/nakshatra references.",
     "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique and short: 2-4 words and at most 28 characters (Telugu: 2-3 words), concrete rather than generic (not 'New Beginnings', 'Growth Phase', 'A Time of Change'), never the same word twice in one title (no 'New Horizon Horizon'), and no two chapters may start with the same word or share their main noun (avoid 'Quiet Mental Rest' vs 'Quiet Leadership', 'Refining Details' vs 'Refined Work'). Name what is specific to that chapter's lords and domains.",
+    "5b. Chapters with kind=\"summary\" are long overview rows (a whole mahadasha, or with early=true the childhood years up to age_from of the first detailed chapter): write ONLY title (2-3 words), highlight (one sentence giving that whole stretch's theme; for early=true, the childhood/teen years in a warm, general way: no events, no fear) and share_line; body MUST be an empty string. Summary titles follow the same uniqueness rules. Chapters with kind=\"detail\" get the full text as in rule 5.",
     "6. weeks/months: use the counts and notable days given; each period must differ. A week or month card must not restate the current chapter's theme or the day cards' tasks: talk about the stretch itself (which days to use, which to keep light).",
     child
       ? "7. This is a child's chart: speak to the parent about the child. Areas are child areas. No career, money, romance or marriage. No fear, no medical claims; never suggest delaying care."
@@ -437,6 +447,7 @@ export function sanitizeContent(c: V2Content, facts: V2Facts): V2Content {
 }
 
 function sanitizeRaw(c: V2Content, facts: V2Facts): V2Content {
+  const summaryIds = new Set(facts.chapters.filter((f) => f.kind === "summary").map((f) => f.chapter_id));
   const dayWin = new Map(facts.days.map((d) => [d.date, new Set(d.windows.map((w) => w.id))]));
   const wdWin = new Map(facts.weekdays.map((d) => [d.weekday, new Set(d.windows.map((w) => w.id))]));
   const period = (p: V2Content["weeks"][number]) => ({
@@ -464,7 +475,8 @@ function sanitizeRaw(c: V2Content, facts: V2Facts): V2Content {
       chapter_id: Number(ch.chapter_id),
       title: clip(ch.title, LIMITS.chapterTitle),
       highlight: clip(ch.highlight, LIMITS.chapterHighlight),
-      body: clip(ch.body, LIMITS.chapterBody),
+      // Summary rows are one-liners by design: drop any body the model wrote anyway.
+      body: summaryIds.has(Number(ch.chapter_id)) ? "" : clip(ch.body, LIMITS.chapterBody),
       share_line: clip(ch.share_line, LIMITS.share),
     })),
     days: (c.days ?? []).map((d) => cleanDayCopy(d, dayWin.get(d.date) ?? null)),
@@ -975,6 +987,10 @@ export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptio
       periodEnd: f.end_iso,
       mahadashaLord: f.md,
       antardashaLord: f.ad,
+      kind: f.kind ?? "detail",
+      ...(f.kind === "summary" ? { mdLords: f.md_lords ?? [f.md], early: Boolean(f.early) } : {}),
+      ageFrom: f.age_from ?? null,
+      ageTo: f.age_to ?? null,
       title: ch.title,
       highlight: ch.highlight,
       sentences,
@@ -995,6 +1011,9 @@ export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptio
     periodEnd: p.periodEnd,
     mahadashaLord: p.mahadashaLord,
     antardashaLord: p.antardashaLord,
+    kind: p.kind,
+    ageFrom: p.ageFrom,
+    ageTo: p.ageTo,
     tense: p.tense,
     activeDomains: p.focusAreas,
     pressureThemes: p.pressureThemes,
