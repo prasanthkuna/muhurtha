@@ -876,7 +876,7 @@ function buildLifeTimelinePlans(
     const extra = {
       startIso: seg.start.toISOString(),
       endIso: seg.end.toISOString(),
-      ageFrom: Math.max(0, Math.floor(ageAt(birth, seg.start))),
+      ageFrom: Math.max(0, Math.round(ageAt(birth, seg.start))),
       ageTo: Math.round(ageAt(birth, seg.end)),
     };
     if (row.kind === "detail") return Object.assign(plan, extra, { kind: "detail" as const });

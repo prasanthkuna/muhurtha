@@ -6,6 +6,11 @@ import type {
   PackMeta,
 } from "./types";
 
+function numOrUndef(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function tenseBySort(
   facts: Record<string, unknown>[],
   sortOrder: number,
@@ -143,6 +148,11 @@ export class BirthPackViews {
           periodStart:
             p.periodStart?.toString() ?? fact?.periodStart?.toString() ?? fact?.start?.toString(),
           periodEnd: p.periodEnd?.toString() ?? fact?.periodEnd?.toString() ?? fact?.end?.toString(),
+          kind: (p.kind ?? fact?.kind) === "summary" ? "summary" : "detail",
+          mdLords: strList(p.mdLords).length ? strList(p.mdLords) : [p.mahadashaLord?.toString() ?? ""].filter(Boolean),
+          early: p.early === true,
+          ageFrom: numOrUndef(p.ageFrom ?? fact?.ageFrom),
+          ageTo: numOrUndef(p.ageTo ?? fact?.ageTo),
         } satisfies ChapterView;
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);

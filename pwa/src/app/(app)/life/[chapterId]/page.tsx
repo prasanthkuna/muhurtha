@@ -121,7 +121,7 @@ export default function LifeChapterPage() {
           <p className="mt-2 text-ink-secondary">{chapter.evidenceLine}</p>
           <div className="mt-2 flex items-center gap-2">
             <p className="text-xs text-ink-tertiary">
-              {grahaName(chapter.mahadashaLord, locale)} · {grahaName(chapter.antardashaLord, locale)}
+              {[chapter.mahadashaLord, chapter.antardashaLord].filter(Boolean).map((l) => grahaName(l, locale)).join(" · ")}
             </p>
             {lordExplainer ? <WhyLink onClick={() => setWhyOpen(true)} /> : null}
           </div>
