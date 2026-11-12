@@ -1,15 +1,5 @@
 import { openAiAllowed } from "./llm_policy.ts";
-import {
-  DEFAULT_BIRTH_PACK_MAX_OUTPUT_TOKENS,
-  DEFAULT_GEMINI_MODEL,
-  geminiGenerateJsonEnvelope,
-} from "./gemini_json.ts";
-import { openAiGenerateJsonEnvelope } from "./openai_json.ts";
-import {
-  DEFAULT_BIRTH_PACK_OPENROUTER_MODEL,
-  resolveBirthPackMaxTokens,
-  resolveBirthPackSectionMaxTokens,
-} from "./openrouter_json.ts";
+import { lunaProbe, readingModel } from "./openai_responses.ts";
 
 /** Touch heavy modules so the first user request is not a cold start. */
 async function touchModuleGraph(): Promise<void> {
@@ -27,100 +17,29 @@ function envCheck(name: string): boolean {
 }
 
 export type WarmupOptions = {
-  /** Probe primary LLM with a tiny JSON hello. Default true on deploy. */
+  /** Probe Luna with a tiny streamed hello. Default true on deploy. */
   probeLlm?: boolean;
 };
 
 export async function runWarmup(opts?: WarmupOptions): Promise<Record<string, unknown>> {
   const started = Date.now();
   const probeLlm = opts?.probeLlm ?? true;
-
   await touchModuleGraph();
-
   const secrets = {
-    OPENROUTER_API_KEY: envCheck("OPENROUTER_API_KEY"),
-    GEMINI_API_KEY: envCheck("GEMINI_API_KEY"),
     OPENAI_API_KEY: envCheck("OPENAI_API_KEY"),
     SUPABASE_URL: envCheck("SUPABASE_URL"),
     SUPABASE_SERVICE_ROLE_KEY: envCheck("SUPABASE_SERVICE_ROLE_KEY"),
   };
-  const secretsOk = secrets.GEMINI_API_KEY || secrets.OPENAI_API_KEY ||
-    secrets.OPENROUTER_API_KEY;
-
-  const config = {
-    birthPackPrimary: Deno.env.get("BIRTH_PACK_PRIMARY")?.trim() || "openai",
-    birthPackOpenAiModel: Deno.env.get("BIRTH_PACK_MODEL")?.trim() ||
-      Deno.env.get("OPENAI_MODEL")?.trim() || "gpt-5.4-mini",
-    birthPackOpenRouterModel: Deno.env.get("BIRTH_PACK_OPENROUTER_MODEL")?.trim() ||
-      DEFAULT_BIRTH_PACK_OPENROUTER_MODEL,
-    birthPackMaxCompletionTokens: resolveBirthPackMaxTokens(),
-    birthPackSectionMaxTokens: resolveBirthPackSectionMaxTokens("core_identity"),
-    birthPackMode: "openai-mini-3phase",
-    geminiModel: Deno.env.get("GEMINI_MODEL")?.trim() || DEFAULT_GEMINI_MODEL,
-    birthPackGeminiModel: Deno.env.get("BIRTH_PACK_GEMINI_MODEL")?.trim() ||
-      Deno.env.get("GEMINI_MODEL")?.trim() ||
-      DEFAULT_GEMINI_MODEL,
-    birthPackGeminiMaxOutput: DEFAULT_BIRTH_PACK_MAX_OUTPUT_TOKENS,
-    geminiFallback: secrets.GEMINI_API_KEY,
-    openAiFallback: openAiAllowed(),
-  };
-
-  const birthPackPrimary = config.birthPackPrimary.toLowerCase();
-  let llm: Record<string, unknown> | null = null;
-  if (probeLlm && (secrets.GEMINI_API_KEY || secrets.OPENAI_API_KEY)) {
-    const llmStarted = Date.now();
-    const probeSystem =
-      'Return valid JSON only: {"greeting":string,"model_check":string}. Write one short Sakha hello.';
-    const probeUser = JSON.stringify({ task: "warmup_probe", phase: "core_identity" });
-
-    const probeOpenAi = () =>
-      secrets.OPENAI_API_KEY && openAiAllowed()
-        ? openAiGenerateJsonEnvelope(probeSystem, probeUser, {
-          modelEnvName: "BIRTH_PACK_MODEL",
-          birthPackPhase: "core_identity",
-        })
-        : Promise.resolve(null);
-    const probeGemini = () =>
-      secrets.GEMINI_API_KEY
-        ? geminiGenerateJsonEnvelope(probeSystem, probeUser, {
-          modelEnvName: "BIRTH_PACK_GEMINI_MODEL",
-          birthPackPhase: "core_identity",
-        })
-        : Promise.resolve(null);
-
-    let envelope = birthPackPrimary === "openai"
-      ? await probeOpenAi()
-      : await probeGemini();
-    if (!envelope) {
-      envelope = birthPackPrimary === "openai"
-        ? await probeGemini()
-        : await probeOpenAi();
-    }
-
-    llm = {
-      ok: Boolean(envelope),
-      elapsedMs: Date.now() - llmStarted,
-      provider: envelope?.provider ?? null,
-      model: envelope?.model ?? null,
-      sample: envelope?.text?.slice(0, 180) ?? null,
-    };
-  }
-
-  const llmOk = !probeLlm || (llm != null && (llm as { ok?: boolean }).ok === true);
-  const ok = secretsOk && llmOk;
-
+  const llm = probeLlm && openAiAllowed() ? await lunaProbe("none") : null;
+  const ok = secrets.OPENAI_API_KEY && (!probeLlm || (llm as { ok?: boolean } | null)?.ok === true);
   return {
     ok,
     service: "muhurtha-api",
     warmedAt: new Date().toISOString(),
     elapsedMs: Date.now() - started,
     secrets,
-    config,
+    config: { model: readingModel(), only_model: true },
     llm,
-    recommendation: ok
-      ? "Deploy warm-up passed. OpenAI primary for birth pack (gpt-5.4-mini); Gemini/OpenRouter fallback."
-      : !secretsOk
-      ? "Missing OPENROUTER_API_KEY on the project."
-      : "Module graph loaded but LLM probe failed. Check app_logs and Gemini model availability.",
+    recommendation: ok ? "Warm-up passed on gpt-6-luna." : !secrets.OPENAI_API_KEY ? "OPENAI_API_KEY is missing on the project." : "Luna probe failed; check app_logs.",
   };
 }

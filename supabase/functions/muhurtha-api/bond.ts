@@ -312,7 +312,7 @@ async function submitPair(admin: SupabaseClient, row: PairRow): Promise<PairRow>
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).slice(0, 400);
     await logCall(admin, { profile_id: row.requested_by, purpose: row.kind, model, locale: row.locale, status: "create_failed", error: msg });
-    // A Gemini free-tier cap parks the job (no attempt burned) instead of failing it.
+    // A provider quota cap parks the job (no attempt burned) instead of failing it.
     const cap = isQuotaCap(msg);
     const attempts = cap ? Math.max(0, row.attempts) : row.attempts + 1;
     if (attempts >= maxAttempts() && !cap) return await updatePair(admin, row.id, { status: "failed", attempts, error: msg });

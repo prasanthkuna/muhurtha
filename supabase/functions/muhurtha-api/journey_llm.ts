@@ -2,7 +2,7 @@
  * Batched LLM Journey and Quick Proof cards. Grounded in planner facts.
  */
 import { openAiAllowed } from "./llm_policy.ts";
-import { generateJsonWithFallbackEnvelope } from "./gemini_json.ts";
+import { lunaJsonEnvelope } from "./luna_json.ts";
 import type { AppLocale } from "./vedic_labels.ts";
 import type { PhasePlan } from "./planner.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -124,12 +124,10 @@ async function journeyBatch(
   age?: number,
   opts?: { supabase?: SupabaseClient; profileId?: string },
 ) {
-  const raw = await generateJsonWithFallbackEnvelope(
+  const raw = await lunaJsonEnvelope(
     journeySystem(loc, mode, age),
     JSON.stringify(bodyObj),
     {
-      geminiModelEnvName: "JOURNEY_GEMINI_MODEL",
-      openAiModelEnvName: "JOURNEY_LLM_MODEL",
       supabase: opts?.supabase,
       profileId: opts?.profileId,
     },
@@ -154,9 +152,7 @@ async function generatePhaseCards(
   age?: number,
   opts?: { supabase?: SupabaseClient; profileId?: string },
 ): Promise<JourneyLlmEnvelope | null> {
-  const hasGemini = Boolean(Deno.env.get("GEMINI_API_KEY") ?? "");
-  const hasOpenAi = openAiAllowed();
-  if (!hasGemini && !hasOpenAi) {
+  if (!openAiAllowed()) {
     console.warn(`${mode} LLM unavailable: no provider key configured`);
     return null;
   }

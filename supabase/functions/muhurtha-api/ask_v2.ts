@@ -5,7 +5,7 @@
  */
 import { DATE_RULE, polishDeep, VOICE_BLOCK } from "./voice.ts";
 import { isQuotaCap, isTransientLlmError } from "./llm_policy.ts";
-import { createResponse, primaryProvider, readingModel, type ResponseObject } from "./openai_responses.ts";
+import { createResponse, readingModel, type ResponseObject } from "./openai_responses.ts";
 
 export const ASK_V2_PROMPT_VERSION = "ask-v2.2";
 
@@ -70,8 +70,7 @@ export async function askWithLlm(
   ctx: AskContext,
   history: { role: string; content: string }[],
 ): Promise<{ answer: AskLlmAnswer; resp: ResponseObject; latencyMs: number; model: string }> {
-  const envModel = Deno.env.get(primaryProvider() === "gemini" ? "GEMINI_ASK_MODEL" : "ASK_MODEL")?.trim();
-  const model = envModel || readingModel();
+  const model = readingModel();
   const t0 = Date.now();
   const user = [
     "CONTEXT:",
@@ -80,11 +79,11 @@ export async function askWithLlm(
     "QUESTION:",
     question.slice(0, 900),
   ].filter(Boolean).join("\n");
-  // Same wait-and-retry idea as readings, sized for a live request: short overloads get up to
-  // two quick retries inside a ~40s budget; a free-tier daily cap fails fast (caller shows "busy").
+  // Luna only: the first try plus one bounded retry on a short overload; a quota cap fails fast
+  // (the caller then serves the reading's deterministic answer).
   let resp: ResponseObject | null = null;
   let lastErr = "";
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     const left = 42_000 - (Date.now() - t0);
     if (left < 8_000) break;
     try {
@@ -95,8 +94,8 @@ export async function askWithLlm(
         schemaName: "muhurta_ask",
         schema: schema(),
         background: false,
-        reasoningEffort: "low",
-        maxOutputTokens: 1800,
+        reasoningEffort: "none",
+        maxOutputTokens: 1200,
         timeoutMs: Math.min(30_000, left),
       });
       if (resp.status === "completed" && resp.output_text) break;
@@ -106,7 +105,7 @@ export async function askWithLlm(
       lastErr = e instanceof Error ? e.message : String(e);
     }
     if (isQuotaCap(lastErr) || !isTransientLlmError(lastErr)) break;
-    await new Promise((r) => setTimeout(r, attempt === 0 ? 2_000 : 5_000));
+    await new Promise((r) => setTimeout(r, 1_500));
   }
   if (!resp) throw new Error(lastErr || "ask_failed");
   const parsed = JSON.parse(resp.output_text ?? "{}") as AskLlmAnswer;

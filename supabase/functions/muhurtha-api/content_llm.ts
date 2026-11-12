@@ -1,4 +1,4 @@
-import { generateJsonWithFallbackEnvelope } from "./gemini_json.ts";
+import { lunaJsonEnvelope } from "./luna_json.ts";
 import type { AppLocale } from "./vedic_labels.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -53,12 +53,10 @@ async function generateCopy(
   facts: Record<string, unknown>,
   opts?: { supabase?: SupabaseClient; profileId?: string },
 ): Promise<ProviderEnvelope<TodayLlmCopy> | null> {
-  const raw = await generateJsonWithFallbackEnvelope(
+  const raw = await lunaJsonEnvelope(
     system,
     JSON.stringify({ facts }),
     {
-      geminiModelEnvName: "GEMINI_MODEL",
-      openAiModelEnvName: "CONTENT_LLM_MODEL",
       supabase: opts?.supabase,
       profileId: opts?.profileId,
     },

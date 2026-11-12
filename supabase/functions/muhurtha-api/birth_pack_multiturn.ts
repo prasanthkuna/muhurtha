@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { generateJsonWithFallbackEnvelope } from "./gemini_json.ts";
+import { lunaJsonEnvelope } from "./luna_json.ts";
 import { tryParseRepairedJson } from "./json_repair.ts";
 import { mergePackSections } from "./birth_pack_merge.ts";
 import type { AppLocale } from "./vedic_labels.ts";
@@ -274,12 +274,10 @@ Phase: ${phase}
 Output JSON shape:
 ${schemaHint}`;
 
-  const raw = await generateJsonWithFallbackEnvelope(
+  const raw = await lunaJsonEnvelope(
     system,
     JSON.stringify({ facts }),
     {
-      geminiModelEnvName: "BIRTH_PACK_GEMINI_MODEL",
-      openAiModelEnvName: "BIRTH_PACK_MODEL",
       supabase: opts?.supabase,
       profileId: opts?.profileId,
       largePayload: true,
