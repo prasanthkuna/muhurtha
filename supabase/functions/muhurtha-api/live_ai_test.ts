@@ -80,3 +80,12 @@ Deno.test("guard: a half-shown sentence is closed, not glued to the withheld lin
   assertEquals(final.includes("…"), true);
   assertEquals(final.includes("2031"), false);
 });
+
+Deno.test("guard: verb look-alikes of months and negated advice are not flagged", () => {
+  const allowed = { dayMonths: new Set<string>(), months: new Set([11]), years: new Set([2026]) };
+  assertEquals(sentenceProblem("వీలైతే మీటింగ్‌ను ఆదివారానికి మార్చి, ముందుగా రాసుకోండి.", allowed, false), null);
+  assertEquals(sentenceProblem("You may feel lighter; march on with the plan.", allowed, false), null);
+  assertEquals(sentenceProblem("Try 12 మార్చి instead.", allowed, false), "date");
+  assertEquals(sentenceProblem("I can't decide whether you should quit, but Monday looks calmer.", allowed, true), null);
+  assertEquals(sentenceProblem("You should quit tomorrow.", allowed, true), "safety");
+});

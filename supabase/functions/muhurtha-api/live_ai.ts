@@ -316,6 +316,7 @@ const MONTHS_ALL: Record<string, number> = {
   "జనవరి": 1, "ఫిబ్రవరి": 2, "మార్చి": 3, "ఏప్రిల్": 4, "మే": 5, "జూన్": 6, "జూలై": 7, "ఆగస్టు": 8, "సెప్టెంబర్": 9, "అక్టోబర్": 10, "నవంబర్": 11, "డిసెంబర్": 12,
   "जनवरी": 1, "फ़रवरी": 2, "फरवरी": 2, "मार्च": 3, "अप्रैल": 4, "मई": 5, "जून": 6, "जुलाई": 7, "अगस्त": 8, "सितंबर": 9, "अक्टूबर": 10, "नवंबर": 11, "दिसंबर": 12,
 };
+const AMBIGUOUS_MONTHS = new Set(["may", "mar", "march", "మార్చి", "మే"]);
 const MONTH_ALT = Object.keys(MONTHS_ALL).sort((a, b) => b.length - a.length).join("|");
 const DAY_MONTH_RE = new RegExp(`(?<!\\d)(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:of\\s+)?(${MONTH_ALT})(?![\\p{L}])`, "giu");
 const MONTH_DAY_RE = new RegExp(`(?<![\\p{L}])(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?!\\d)`, "giu");
@@ -325,7 +326,7 @@ const CLOCK_RE = /\b\d{1,2}[:.]\d{2}\s*(?:am|pm)?\b|\b\d{1,2}\s*(?:am|pm)\b|\d{1
 const ISO_RE = /\b\d{4}-\d{2}(-\d{2})?\b/;
 
 const DIRECTIVE_RE: RegExp[] = [
-  /\b(you should|you must|go ahead and|definitely|just)\s+(quit|resign|stop (taking )?(your )?(medicine|medication|treatment|tablets)|invest|bet|gamble|buy (the )?(shares|stock|crypto|property|house)|sell|file (the )?(case|divorce)|get divorced)\b/i,
+  /(?<!\b(?:whether|if)\s)\b(you should|you must|go ahead and|definitely|just)\s+(quit|resign|stop (taking )?(your )?(medicine|medication|treatment|tablets)|invest|bet|gamble|buy (the )?(shares|stock|crypto|property|house)|sell|file (the )?(case|divorce)|get divorced)\b/i,
   /\byou will (get pregnant|conceive|win|recover|be cured|lose the case|win the case|get rich|definitely get)\b/i,
   /(జాబ్|ఉద్యోగం)\s*(మానేయండి|వదిలేయండి)|మందులు\s*(ఆపేయండి|మానేయండి)|ఇన్వెస్ట్ చేసేయండి|బెట్ కట్టండి/,
   /(नौकरी|जॉब)\s*छोड़ (दीजिए|दो|दें)|दवा(ई)?\s*बंद (कर दीजिए|करें|कर दो)|निवेश कर (दीजिए|दें)|सट्टा लगा(इए|ओ)/,
@@ -386,7 +387,8 @@ export function sentenceProblem(s: string, allowed: GuardAllowed, sensitive: boo
   }
   for (const m of s.matchAll(MONTH_ONLY_RE)) {
     const key = m[1].toLowerCase();
-    if (key === "may" && /\bmay\b/.test(m[1]) && !/\d/.test(s)) continue; // English modal verb
+    // Words that are also verbs ("may", "march", Telugu మార్చి = "changed", మే): a month only next to a number.
+    if (AMBIGUOUS_MONTHS.has(key) && !new RegExp(`\\d\\s*${m[1]}|${m[1]}\\s*\\d`, "iu").test(s)) continue;
     const mo = MONTHS_ALL[key];
     if (mo && !allowed.months.has(mo)) return "date";
   }
