@@ -26,7 +26,7 @@ export function normalizeScreen(s: unknown): Screen {
 // ---------------------------------------------------------------- intent and safety
 
 const SENSITIVE: [SensitiveCat, RegExp][] = [
-  ["pregnancy", /pregnan|conceiv|\bivf\b|miscarriage|fertility|have a baby|ప్రెగ్నెన్సీ|గర్భ|పిల్లలు పుడ|ఐవీఎఫ్|गर्भ|प्रेग्नेंसी|बच्चा होगा|आईवीएफ/i],
+  ["pregnancy", /pregnan|conceiv|\bivf\b|miscarriage|fertility|(have|having|try(ing)? for|plan(ning)?( for)?|start(ing)?) (a )?(baby|child|family)\b|baby plan|బేబీ ప్లాన్|పిల్లల(ని|ను)? (ప్లాన్|కనాల)|ప్రెగ్నెన్సీ|గర్భ|పిల్లలు పుడ|ఐవీఎఫ్|गर्भ|प्रेग्नेंसी|बच्चा होगा|बच्चे की (प्लानिंग|कोशिश)|बेबी प्लान|आईवीएफ/i],
   ["medical", /\b(medicine|medication|tablets?|surgery|operation|treatment|doctor|disease|cancer|bp|blood pressure|sugar|diabetes|therapy|depress\w*|hospital|chemo|illness|sick)\b|మందు|ఆపరేషన్|సర్జరీ|ట్రీట్‌మెంట్|డాక్టర్|హాస్పిటల్|జబ్బు|రోగం|షుగర్|బీపీ|दवा|दवाई|ऑपरेशन|सर्जरी|इलाज|डॉक्टर|अस्पताल|बीमारी|शुगर|बीपी/i],
   ["gambling", /\b(bet|betting|gambl\w*|lottery|casino|satta|rummy|dream11|teen patti|jackpot)\b|బెట్టింగ్|లాటరీ|జూదం|రమ్మీ|सट्टा|जुआ|लॉटरी|बेटिंग/i],
   ["legal", /\b(court|lawsuit|lawyer|legal|police|divorce|bail|fir|case hearing|litigation)\b|కోర్టు|కేసు|లాయర్|విడాకులు|పోలీస్|कोर्ट|वकील|तलाक|पुलिस|मुकदमा/i],

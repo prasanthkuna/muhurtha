@@ -98,7 +98,8 @@ export function evalCases(profiles = 30, perProfile = 5): EvalCase[] {
   for (let i = 0; i < profiles; i++) {
     const l = (["en", "te", "hi"] as const)[i % 3];
     for (let j = 0; j < perProfile; j++) {
-      const qi = (i * 2 + j * 3) % QUESTIONS[l].length;
+      // Each language gets profiles l, l+3, …; spread their 5 questions so all 15 are covered (3–4 times each).
+      const qi = (Math.floor(i / 3) * perProfile + j) % QUESTIONS[l].length;
       out.push({ case_id: `p${i}-q${qi}`, locale: l, profile: i, question: QUESTIONS[l][qi] });
     }
   }

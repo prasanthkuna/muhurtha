@@ -7,6 +7,8 @@ Deno.test("classify: sensitive topics win, then intent", () => {
     ["నేను జాబ్ మానేయాలా?", "sensitive", "job_quit"],
     ["क्या मुझे दवा बंद करनी चाहिए?", "sensitive", "medical"],
     ["Will I get pregnant this year?", "sensitive", "pregnancy"],
+    ["Is this a good month to try for a baby?", "sensitive", "pregnancy"],
+    ["When should we start a family?", "sensitive", "pregnancy"],
     ["lucky number for lottery", "sensitive", "gambling"],
     ["Should I buy this flat?", "sensitive", "finance"],
     ["What is Rahu Kalam?", "concept", null],
