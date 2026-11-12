@@ -26,6 +26,7 @@ import { saveProfileCurrentPlace } from "@/lib/onboarding/save-onboarding";
 import { loadBirthProfileResult, type BirthProfileSummary } from "@/lib/profile-bundle";
 import { createClient } from "@/lib/supabase/client";
 import { PushSection } from "@/components/settings/push-section";
+import { MemorySection } from "@/components/settings/memory-section";
 import { PlanSection } from "@/components/settings/plan-section";
 import { BirthEditSection } from "@/components/settings/birth-edit-section";
 import { usePaywall } from "@/context/paywall-context";
@@ -300,6 +301,8 @@ export default function SettingsPage() {
       <Section title={t("settings.alertsTitle")}>
         <PushSection />
       </Section>
+
+      <MemorySection />
 
       <Section title={t("settings.moreTitle")}>
         <SettingsRow

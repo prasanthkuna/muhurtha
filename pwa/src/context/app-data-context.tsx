@@ -48,6 +48,14 @@ export type PackPreparing = {
   stage?: string;
   slow?: boolean;
   failed?: boolean;
+  /** Sharded reading: Decode preview (profile, current chapter, today) once part A is written. */
+  preview?: ReadingPreview | null;
+};
+
+export type ReadingPreview = {
+  profile: { title: string; summary: string; strengths: string[] } | null;
+  chapter: { title: string; highlight: string; body: string; period: string } | null;
+  today: { date: string; title: string; line: string } | null;
 };
 
 type AccessInfo = Partial<AccessDetails>;
@@ -318,6 +326,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const stage = typeof p.stage === "string" ? p.stage : undefined;
         const failed = p.state === "failed";
         const slow = p.slow === true;
+        const preview = p.preview && typeof p.preview === "object" ? (p.preview as ReadingPreview) : null;
         setPreparing((prev) => {
           const progressed = !prev || done !== prev.done || stage !== prev.stage;
           const startedAt = prev && !progressed ? prev.startedAt : Date.now();
@@ -330,6 +339,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             stage,
             slow,
             failed,
+            preview: preview ?? prev?.preview ?? null,
           };
         });
       };

@@ -28,6 +28,8 @@ export type PushPrefs = {
   friends: boolean;
   weekly: boolean;
   bond: boolean;
+  /** Day-before reminder for saved plans. */
+  events: boolean;
 };
 export const DEFAULT_PREFS: PushPrefs = {
   daily: true,
@@ -38,6 +40,7 @@ export const DEFAULT_PREFS: PushPrefs = {
   friends: false,
   weekly: false,
   bond: true,
+  events: true,
 };
 
 const SYNC_KEY = "muh_push_sync_v1";

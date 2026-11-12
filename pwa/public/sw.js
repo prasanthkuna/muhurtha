@@ -7,7 +7,7 @@
  * - Web Push: shows the server's notification (icon, monochrome badge, image, actions)
  *   and deep-links taps into the right screen, reusing an open app window.
  */
-const VERSION = "v4";
+const VERSION = "v5";
 const SHELL_CACHE = `muh-shell-${VERSION}`;
 const PAGE_CACHE = `muh-pages-${VERSION}`;
 const ASSET_CACHE = `muh-assets-${VERSION}`;
@@ -153,6 +153,8 @@ self.addEventListener("push", (event) => {
     data: {
       url,
       kind: data.kind || "",
+      nid: typeof data.nid === "string" ? data.nid : "",
+      sid: typeof data.sid === "string" ? data.sid : "",
       actions: Object.fromEntries(actions.map((a) => [a.action, sameOriginPath(a.url)])),
     },
     actions: actions.map((a) => ({ action: a.action, title: a.title })),
@@ -165,8 +167,18 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const d = event.notification.data || {};
   const target = (event.action && d.actions && d.actions[event.action]) || d.url || "/today";
+  // Click / action tracking (best effort; no personal data, just which alert was tapped).
+  const track = d.nid && d.sid
+    ? fetch("/api/public/push-click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sid: d.sid, nid: d.nid, action: event.action || "open" }),
+      keepalive: true,
+    }).catch(() => {})
+    : Promise.resolve();
   event.waitUntil(
     (async () => {
+      await Promise.race([track, new Promise((r) => setTimeout(r, 1500))]);
       const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const client of all) {
         if (new URL(client.url).origin !== self.location.origin) continue;

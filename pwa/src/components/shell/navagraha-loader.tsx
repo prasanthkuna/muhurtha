@@ -258,6 +258,37 @@ export function NavagrahaLoader({ preparing, name }: { preparing: PackPreparing;
         ) : null}
       </div>
 
+      {!failed && preparing.preview && (preparing.preview.profile || preparing.preview.chapter) ? (
+        <article
+          className="mt-8 w-full max-w-sm rounded-2xl border border-gold-accent/30 bg-gold-wash/40 px-5 py-4 text-left"
+          data-testid="loader-preview"
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-text">{t("live.previewTitle")}</p>
+          {preparing.preview.profile ? (
+            <>
+              <h2 className="mt-2 font-serif text-lg leading-snug text-ink">{preparing.preview.profile.title}</h2>
+              <p className="mt-1 text-sm leading-relaxed text-ink-secondary">{preparing.preview.profile.summary}</p>
+            </>
+          ) : null}
+          {preparing.preview.chapter ? (
+            <div className="mt-3 border-t border-line/60 pt-3">
+              <p className="text-xs font-semibold text-gold-text">
+                {preparing.preview.chapter.title}
+                {preparing.preview.chapter.period ? ` · ${preparing.preview.chapter.period}` : ""}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-ink-secondary">{preparing.preview.chapter.highlight}</p>
+            </div>
+          ) : null}
+          {preparing.preview.today ? (
+            <p className="mt-3 text-sm text-ink">
+              <span className="font-semibold">{preparing.preview.today.title}</span>
+              {preparing.preview.today.line ? ` — ${preparing.preview.today.line}` : ""}
+            </p>
+          ) : null}
+          <p className="mt-3 text-xs text-ink-tertiary">{t("live.previewNote")}</p>
+        </article>
+      ) : null}
+
       {!failed ? (
         <figure className="mt-8 w-full max-w-sm rounded-2xl border border-line bg-paper px-5 py-4 text-left shadow-[0_8px_24px_rgba(36,32,25,0.05)]">
           <figcaption className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-text">
