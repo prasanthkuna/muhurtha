@@ -1,5 +1,7 @@
 /**
- * Reading v2 job runner: background LLM response (Gemini primary, OpenAI fallback) -> validate -> (one targeted repair) -> ready.
+ * Reading v2 job runner on gpt-6-luna: sharded background responses (Decode + current chapter
+ * first, the rest in parallel) -> merge -> validate -> (one targeted repair) -> ready.
+ * Legacy single-response jobs still finish on the old path.
  * Completion is detected by whichever comes first: a client status poll, the pg_cron sweep,
  * or the OpenAI webhook (when configured). All paths call advanceJob(), which is idempotent.
  */
@@ -29,8 +31,9 @@ import {
   retrieveResponse,
   type ResponseObject,
 } from "./openai_responses.ts";
+import { mergeShards, planShards, previewFrom, readingEffort, type ReadingPreview, type ShardKey, shardCall } from "./reading_shards.ts";
 
-/** Attempts when OpenAI can take over; Gemini-only uses maxAttempts() from llm_policy.ts. */
+/** Job attempts come from maxAttempts() in llm_policy.ts (Luna: first try + one retry). */
 export { isQuotaCap } from "./llm_policy.ts";
 const QUOTA_PARK_MS = quotaParkMs();
 
@@ -86,7 +89,25 @@ export type JobRow = {
   claimed_until: string | null;
   created_at: string;
   updated_at: string;
+  shards?: ShardState | null;
+  first_insight_ms?: number | null;
 };
+
+export type ShardEntry = {
+  status: "queued" | "running" | "done";
+  rid: string | null;
+  tries: number;
+  submitted_at?: string;
+  ms?: number;
+  error?: string;
+  content?: Record<string, unknown>;
+};
+export type ShardState = { v: 1; parts: Partial<Record<ShardKey, ShardEntry>> };
+
+/** Sharded initial readings are on unless READING_SHARDS=off (instant rollback switch). */
+export function shardedEnabled(): boolean {
+  return (Deno.env.get("READING_SHARDS") ?? "").trim().toLowerCase() !== "off";
+}
 
 export type ReadyHook = (admin: SupabaseClient, reading: ReadingRow, job: JobRow) => Promise<void>;
 
@@ -147,7 +168,7 @@ async function logCall(
   row: {
     job_id: string | null;
     profile_id: string | null;
-    purpose: "reading" | "repair" | "ask";
+    purpose: "reading" | "repair" | "ask" | "reading_shard" | "explain" | "daily_context" | "push_brief" | "eval";
     model: string;
     response_id?: string | null;
     locale?: string | null;
@@ -194,7 +215,7 @@ async function createWithSchema(
       schemaName: args.scope ? "muhurta_reading_repair" : "muhurta_reading",
       schema: buildReadingSchema(facts, { withLengths, scope: args.scope }),
       background: args.background,
-      reasoningEffort: "low",
+      reasoningEffort: readingEffort(),
       maxOutputTokens: args.scope ? 12000 : 40000,
       metadata: args.metadata,
       chainDepth: args.chainDepth,
@@ -214,9 +235,7 @@ async function createWithSchema(
 }
 
 /**
- * How far down the Gemini chain a reading attempt may go. The first two attempts stay on the
- * strong models (primary + next) and requeue with backoff when Google is overloaded; later
- * attempts may use the whole chain so a reading always lands. Lite models are the last resort.
+ * Legacy knob (ignored by the Luna client): kept so older call sites type-check.
  */
 export function readingChainDepth(attempts: number): number | undefined {
   return attempts < 2 ? 2 : undefined;
@@ -338,7 +357,9 @@ export async function startReading(
     notify: args.notify !== false,
   }).select("*").single();
   if (jobErr) throw jobErr;
-  const job = await submitJob(admin, jobRow as JobRow, reading);
+  const job = shardedEnabled()
+    ? await submitShards(admin, jobRow as JobRow, reading)
+    : await submitJob(admin, jobRow as JobRow, reading);
   return { reading, job, created: true };
 }
 
@@ -382,10 +403,14 @@ export async function advanceJob(
   if (reading.status === "superseded") {
     return await updateJob(admin, job.id, { status: "cancelled", stage: "superseded", finished_at: new Date().toISOString() });
   }
+  // Sharded jobs (and legacy jobs that are waiting for a resubmit) take the sharded path.
+  if (job.shards || (job.status === "queued" && shardedEnabled())) {
+    return await advanceSharded(admin, job, reading, opts);
+  }
 
   if (job.status === "queued") {
     if (job.attempts >= maxAttempts()) return await failJob(admin, job, reading, job.error ?? "max_attempts");
-    // Back off between retries (Gemini sheds load in bursts); the 20s sweep picks the job up again.
+    // Back off between retries; the 20s sweep picks the job up again.
     const lastTouch = Date.parse(job.last_polled_at ?? job.created_at);
     if (job.attempts > 0 && now - lastTouch < retryBackoffMs(job.attempts)) return job;
     return await submitJob(admin, job, reading);
@@ -452,8 +477,8 @@ export async function advanceJob(
   };
 
   const facts = reading.facts!;
-  let content = resp.status === "completed" ? parseContent(resp.output_text) : null;
-  let validation: Validation | null = content ? validateContent(sanitizeContent(content, facts), facts) : null;
+  const content = resp.status === "completed" ? parseContent(resp.output_text) : null;
+  const validation: Validation | null = content ? validateContent(sanitizeContent(content, facts), facts) : null;
   if (!content || !validation || !validation.ok) {
     const why = !content
       ? `no_content:${resp.status}:${resp.error ?? resp.incomplete_reason ?? ""}`
@@ -473,7 +498,26 @@ export async function advanceJob(
     return queued; // resubmitted by the sweep after retryBackoffMs()
   }
 
-  content = sanitizeContent(content, facts);
+  return await polishAndSave(admin, job, reading, sanitizeContent(content, facts), validation, totals, model, opts);
+}
+
+type Totals = { input_tokens: number; cached_tokens: number; output_tokens: number; reasoning_tokens: number; cost_usd: number };
+
+/** Shared tail: one targeted repair (if flagged), save ready, supersede older, notify. */
+async function polishAndSave(
+  admin: SupabaseClient,
+  jobIn: JobRow,
+  reading: ReadingRow,
+  contentIn: V2Content,
+  validationIn: Validation,
+  totals: Totals,
+  model: string,
+  opts: { onReady?: ReadyHook },
+): Promise<JobRow> {
+  let job = jobIn;
+  let content = contentIn;
+  let validation = validationIn;
+  const facts = reading.facts!;
   let repairs = job.repairs;
   const scope = repairScope(validation);
   if (scope && repairs < 1) {
@@ -561,9 +605,14 @@ export type JobProgress = {
   slow: boolean;
   job_id: string | null;
   reading_id: string;
+  /** Sharded jobs: parts done / total and the Decode preview from part A. */
+  shards?: { done: number; total: number };
+  preview?: ReadingPreview | null;
+  first_insight_ms?: number | null;
 };
 
 export function expectedMs(locale: string): number {
+  if (shardedEnabled()) return locale === "en" ? 40_000 : 55_000;
   return locale === "en" ? 75_000 : 105_000;
 }
 
@@ -578,9 +627,12 @@ export function jobProgress(reading: ReadingRow, job: JobRow | null): JobProgres
   const stage = failed ? "failed" : job?.stage ?? "queued";
   let pct = 4;
   if (stage === "writing" || stage === "retrying") pct = Math.min(88, 6 + 82 * (1 - Math.exp(-elapsed / (expected * 0.55))));
+  const sp = shardProgress(reading, job);
+  if (sp && (stage === "writing" || stage === "retrying")) pct = Math.max(pct, Math.min(88, 8 + Math.round((80 * sp.done) / sp.total)));
   if (stage === "checking") pct = 92;
   if (stage === "polishing") pct = 95;
   return {
+    ...(sp ? { shards: { done: sp.done, total: sp.total }, preview: sp.preview, first_insight_ms: sp.first_insight_ms } : {}),
     state: failed ? "failed" : stage === "queued" ? "queued" : "generating",
     stage,
     pct: Math.round(pct),
@@ -621,4 +673,204 @@ export async function sweepReadingJobs(
     }
   }
   return { considered: rows.length, results };
+}
+
+// ---------------------------------------------------------------- sharded generation
+
+const SHARD_TRIES = 2;
+const SHARD_TIMEOUT_MS = 6 * 60_000;
+const SHARD_CLAIM_MS = 40_000;
+
+/** Submit every shard that is not done yet (in parallel). Done shards are kept: resumable. */
+export async function submitShards(admin: SupabaseClient, job: JobRow, reading: ReadingRow): Promise<JobRow> {
+  const facts = reading.facts!;
+  const plans = planShards(facts);
+  const prev = job.shards?.parts ?? {};
+  const parts: ShardState["parts"] = {};
+  const pending = plans.filter((p) => prev[p.key]?.status !== "done");
+  for (const p of plans) if (prev[p.key]?.status === "done") parts[p.key] = prev[p.key];
+  const results = await Promise.allSettled(pending.map((p) =>
+    shardCall(facts, p, {
+      background: true,
+      metadata: { job_id: job.id, reading_id: reading.id, locale: reading.locale, shard: p.key },
+      cacheKey: `rd:${reading.id}`,
+    })
+  ));
+  let firstErr = "";
+  pending.forEach((p, i) => {
+    const r = results[i];
+    const tries = (prev[p.key]?.status === "done" ? 0 : prev[p.key]?.tries ?? 0) + 1;
+    if (r.status === "fulfilled") {
+      parts[p.key] = { status: "running", rid: r.value.id, tries, submitted_at: new Date().toISOString() };
+    } else {
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      firstErr ||= msg;
+      parts[p.key] = { status: "queued", rid: null, tries, error: msg.slice(0, 200) };
+    }
+  });
+  if (firstErr) {
+    await logCall(admin, {
+      job_id: job.id, profile_id: job.profile_id, purpose: "reading_shard", model: readingModel(), locale: reading.locale,
+      status: "create_failed", error: firstErr.slice(0, 500),
+    });
+  }
+  const anyRunning = Object.values(parts).some((x) => x?.status === "running");
+  const dayCap = firstErr ? isQuotaCap(firstErr) : false;
+  return await updateJob(admin, job.id, {
+    status: anyRunning ? "running" : "queued",
+    stage: anyRunning ? "writing" : "retrying",
+    model: readingModel(),
+    shards: { v: 1, parts },
+    openai_response_id: parts.A?.status === "running" ? parts.A.rid : job.openai_response_id,
+    attempts: Math.max(job.attempts, 1),
+    started_at: job.started_at ?? new Date().toISOString(),
+    error: firstErr ? firstErr.slice(0, 500) : null,
+    claimed_until: null,
+    last_polled_at: new Date(Date.now() + (dayCap ? QUOTA_PARK_MS : 0)).toISOString(),
+  });
+}
+
+async function advanceSharded(
+  admin: SupabaseClient,
+  jobIn: JobRow,
+  reading: ReadingRow,
+  opts: { force?: boolean; onReady?: ReadyHook },
+): Promise<JobRow> {
+  let job = jobIn;
+  const now = Date.now();
+  const last = job.last_polled_at ? Date.parse(job.last_polled_at) : 0;
+  if (!opts.force && now - last < POLL_DEBOUNCE_MS) return job;
+  // One worker at a time per job (client polls + 20s sweep + webhook relay).
+  const { data: claimedRows } = await admin.from("generation_jobs").update({
+    claimed_until: new Date(now + SHARD_CLAIM_MS).toISOString(),
+    last_polled_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", job.id).in("status", ["queued", "running", "processing"])
+    .or(`claimed_until.is.null,claimed_until.lt.${new Date(now).toISOString()}`).select("*");
+  const claimed = (claimedRows ?? [])[0] as JobRow | undefined;
+  if (!claimed) return job;
+  job = claimed;
+  const facts = reading.facts!;
+  const plans = planShards(facts);
+  const parts: ShardState["parts"] = { ...(job.shards?.parts ?? {}) };
+
+  if (job.status === "queued") {
+    if (!job.shards && job.attempts >= maxAttempts()) return await failJob(admin, job, reading, job.error ?? "max_attempts");
+    if (job.attempts > 0 && job.shards && now - last < retryBackoffMs(job.attempts)) {
+      return await updateJob(admin, job.id, { claimed_until: null, last_polled_at: job.last_polled_at });
+    }
+    return await submitShards(admin, job, reading);
+  }
+
+  const totals: Totals = {
+    input_tokens: job.input_tokens, cached_tokens: job.cached_tokens, output_tokens: job.output_tokens,
+    reasoning_tokens: job.reasoning_tokens, cost_usd: Number(job.cost_usd ?? 0),
+  };
+  let firstInsight = job.first_insight_ms ?? null;
+  let exhausted = "";
+  const running = plans.filter((p) => parts[p.key]?.status === "running" && parts[p.key]?.rid);
+  const fetched = await Promise.allSettled(running.map((p) => retrieveResponse(parts[p.key]!.rid!)));
+  const retry: typeof plans = [];
+  for (let i = 0; i < running.length; i++) {
+    const p = running[i];
+    const e = parts[p.key]!;
+    const r = fetched[i];
+    if (r.status === "rejected") continue; // transient retrieve error: try next poll
+    const resp = r.value;
+    const sub = e.submitted_at ? Date.parse(e.submitted_at) : Date.parse(job.started_at ?? job.created_at);
+    if (resp.status === "queued" || resp.status === "in_progress") {
+      if (now - sub > SHARD_TIMEOUT_MS) {
+        e.error = "timeout";
+        retry.push(p);
+      }
+      continue;
+    }
+    const cost = await logCall(admin, {
+      job_id: job.id, profile_id: job.profile_id, purpose: "reading_shard", model: resp.model ?? readingModel(), response_id: resp.id,
+      locale: reading.locale, status: resp.status, usage: resp.usage, latency_ms: now - sub,
+      error: resp.error ?? resp.incomplete_reason, meta: { shard: p.key, effort: readingEffort(), tries: e.tries },
+    });
+    totals.input_tokens += resp.usage?.input_tokens ?? 0;
+    totals.cached_tokens += resp.usage?.cached_tokens ?? 0;
+    totals.output_tokens += resp.usage?.output_tokens ?? 0;
+    totals.reasoning_tokens += resp.usage?.reasoning_tokens ?? 0;
+    totals.cost_usd += cost;
+    const content = resp.status === "completed" ? parseContent(resp.output_text) : null;
+    if (content) {
+      parts[p.key] = { ...e, status: "done", ms: now - sub, content: content as unknown as Record<string, unknown>, error: undefined };
+      if (p.key === "A" && firstInsight == null) firstInsight = now - Date.parse(job.created_at);
+    } else {
+      e.error = `no_content:${resp.status}:${resp.error ?? resp.incomplete_reason ?? ""}`.slice(0, 200);
+      retry.push(p);
+    }
+  }
+  for (const p of plans) {
+    const e = parts[p.key];
+    if (!e) parts[p.key] = { status: "queued", rid: null, tries: 0 };
+    else if (e.status === "queued" && !retry.includes(p)) retry.push(p);
+  }
+  // One bounded retry per shard; then the job parks (done shards kept) or fails.
+  const again = retry.filter((p) => (parts[p.key]?.tries ?? 0) < SHARD_TRIES);
+  const out = retry.filter((p) => (parts[p.key]?.tries ?? 0) >= SHARD_TRIES);
+  if (again.length) {
+    const res = await Promise.allSettled(again.map((p) =>
+      shardCall(facts, p, { background: true, metadata: { job_id: job.id, reading_id: reading.id, shard: p.key }, cacheKey: `rd:${reading.id}` })
+    ));
+    again.forEach((p, i) => {
+      const r = res[i];
+      const prev = parts[p.key]!;
+      parts[p.key] = r.status === "fulfilled"
+        ? { status: "running", rid: r.value.id, tries: prev.tries + 1, submitted_at: new Date().toISOString() }
+        : { status: "queued", rid: null, tries: prev.tries + 1, error: String(r.reason instanceof Error ? r.reason.message : r.reason).slice(0, 200) };
+    });
+  }
+  if (out.length) exhausted = out.map((p) => `${p.key}:${parts[p.key]?.error ?? "failed"}`).join("; ");
+
+  const allDone = plans.every((p) => parts[p.key]?.status === "done");
+  if (allDone) {
+    const merged = mergeShards(plans.map((p) => parts[p.key]!.content as Partial<V2Content>));
+    const content = sanitizeContent(merged, facts);
+    const validation = validateContent(content, facts);
+    job = await updateJob(admin, job.id, {
+      ...totals, status: "processing", stage: "checking", shards: { v: 1, parts }, first_insight_ms: firstInsight,
+      claimed_until: new Date(Date.now() + CLAIM_MS).toISOString(),
+    });
+    if (!validation.ok) {
+      if (job.attempts >= maxAttempts()) return await failJob(admin, job, reading, `invalid:${validation.fatal.join(";")}`);
+      return await updateJob(admin, job.id, {
+        status: "queued", stage: "retrying", attempts: job.attempts + 1, error: `invalid:${validation.fatal.join(";")}`.slice(0, 500),
+        validation: validation as never, shards: { v: 1, parts: {} }, claimed_until: null, last_polled_at: new Date().toISOString(),
+      });
+    }
+    return await polishAndSave(admin, job, reading, content, validation, totals, readingModel(), opts);
+  }
+  if (exhausted) {
+    const dayCap = isQuotaCap(exhausted);
+    if (job.attempts >= maxAttempts() && !dayCap) {
+      await updateJob(admin, job.id, { ...totals, shards: { v: 1, parts }, first_insight_ms: firstInsight });
+      return await failJob(admin, job, reading, exhausted);
+    }
+    for (const p of out) parts[p.key] = { status: "queued", rid: null, tries: 0, error: parts[p.key]?.error };
+    const stillRunning = plans.some((p) => parts[p.key]?.status === "running");
+    return await updateJob(admin, job.id, {
+      ...totals, shards: { v: 1, parts }, first_insight_ms: firstInsight, error: exhausted.slice(0, 500),
+      attempts: dayCap ? job.attempts : job.attempts + 1,
+      ...(stillRunning ? {} : { status: "queued", stage: "retrying" }),
+      claimed_until: null, last_polled_at: new Date(Date.now() + (dayCap ? QUOTA_PARK_MS : 0)).toISOString(),
+    });
+  }
+  return await updateJob(admin, job.id, {
+    ...totals, status: "running", stage: "writing", shards: { v: 1, parts }, first_insight_ms: firstInsight,
+    claimed_until: null, last_polled_at: new Date().toISOString(),
+  });
+}
+
+/** Shard progress + the Decode preview (profile, current chapter, today) once part A is in. */
+export function shardProgress(reading: ReadingRow, job: JobRow | null): { done: number; total: number; preview: ReadingPreview | null; first_insight_ms: number | null } | null {
+  if (!job?.shards || !reading.facts) return null;
+  const plans = planShards(reading.facts);
+  const parts = job.shards.parts ?? {};
+  const done = plans.filter((p) => parts[p.key]?.status === "done").length;
+  const a = parts.A?.status === "done" ? parts.A.content as Partial<V2Content> : null;
+  return { done, total: plans.length, preview: a ? previewFrom(reading.facts, a) : null, first_insight_ms: job.first_insight_ms ?? null };
 }

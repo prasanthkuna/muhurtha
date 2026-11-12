@@ -210,6 +210,9 @@ export type SchemaScope = {
   weeks?: string[];
   months?: string[];
   areas?: string[];
+  /** Sharded generation: include the profile block / ask_starters + remedies + push. */
+  profile?: boolean;
+  extras?: boolean;
 };
 
 /** Full reading schema, or a repair schema restricted to `scope` ids. */
@@ -223,7 +226,7 @@ export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean;
   const moIds = scope ? scope.months ?? [] : facts.months.map((m) => m.period_key);
   const arIds = scope ? scope.areas ?? [] : facts.area_ids;
   const props: Record<string, Json> = {};
-  if (!scope) {
+  if (!scope || scope.profile) {
     props.profile = obj({
       title: str(LIMITS.title, wl, "who this person is, as a short title"),
       summary: str(LIMITS.profileSummary, wl, "3-4 sentences, specific to the natal facts"),
@@ -258,7 +261,7 @@ export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean;
   }
   if (wkIds.length) props.weeks = arr(periodSchema(wkIds, wl), wkIds.length);
   if (moIds.length) props.months = arr(periodSchema(moIds, wl), moIds.length);
-  if (!scope) {
+  if (!scope || scope.extras) {
     props.ask_starters = arr(obj({
       topic: { type: "string", enum: [...ASK_TOPICS] },
       question: str(LIMITS.question, wl, "a personal first-person question tied to this person's current chapter or a trait from FACTS, in plain words: no planet, dasha or period names, no generic 'how do I balance work and life'"),
@@ -850,7 +853,7 @@ export function repairScope(v: Validation): SchemaScope | null {
     else if (f.section === "months") (scope.months ??= []).push(String(f.id));
     else if (f.section === "areas") (scope.areas ??= []).push(String(f.id));
   }
-  const n = Object.values(scope).reduce((s, a) => s + (a?.length ?? 0), 0);
+  const n = Object.values(scope).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
   return n ? scope : null;
 }
 
