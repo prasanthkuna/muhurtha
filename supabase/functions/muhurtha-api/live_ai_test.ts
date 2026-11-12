@@ -1,4 +1,5 @@
-import { allowedDates, classifyQuestion, followupChips, guardText, JsonFieldStream, StreamGuard } from "./live_ai.ts";
+import { assertEquals } from "jsr:@std/assert@1";
+import { allowedDates, classifyQuestion, followupChips, guardText, JsonFieldStream, sentenceProblem, StreamGuard } from "./live_ai.ts";
 
 Deno.test("classify: sensitive topics win, then intent", () => {
   const cases: [string, string, string | null][] = [
@@ -57,4 +58,23 @@ Deno.test("chips come from intent + screen (no model call)", () => {
   if (c.length !== 3 || !c.find((x) => x.kind === "save_event")) throw new Error(JSON.stringify(c));
   const d = followupChips("concept", "decode", "en");
   if (!d.find((x) => /strength/.test(x.label))) throw new Error(JSON.stringify(d));
+});
+
+Deno.test("guard: a year before a month is not read as a day (2028 ఆగస్టు)", () => {
+  const allowed = { dayMonths: new Set<string>(), months: new Set([8]), years: new Set([2028]) };
+  assertEquals(sentenceProblem("ఇది 2028 ఆగస్టు వరకు ఉంటుంది.", allowed, false), null);
+  assertEquals(sentenceProblem("It runs until 2028 August.", allowed, false), null);
+  assertEquals(sentenceProblem("Try 28 August.", allowed, false), "date");
+});
+
+Deno.test("guard: a half-shown sentence is closed, not glued to the withheld line", () => {
+  const allowed = { dayMonths: new Set<string>(), months: new Set<number>(), years: new Set<number>() };
+  let shown = "";
+  const g = new StreamGuard("en", allowed, false, (t) => (shown += t));
+  for (const piece of ["This big chapter of yours ", "keeps going until ", "2031 March. Then ease up."]) g.push(piece);
+  const final = g.end();
+  assertEquals(final, shown.trim());
+  assertEquals(/until\s+Check/.test(final), false);
+  assertEquals(final.includes("…"), true);
+  assertEquals(final.includes("2031"), false);
 });

@@ -22,7 +22,8 @@ export function readingEffort(): ReasoningEffort {
   const v = (Deno.env.get("READING_EFFORT") ?? "").trim();
   return v === "low" || v === "none" ? v : READING_EFFORT_DEFAULT;
 }
-export const READING_EFFORT_DEFAULT: ReasoningEffort = "low";
+// Eval rd-1112a (3 profiles × en/te/hi): both pass; "none" had fewer validator flags (58 vs 81) at similar speed.
+export const READING_EFFORT_DEFAULT: ReasoningEffort = "none";
 
 export function planShards(f: V2Facts): ShardPlan[] {
   const cur = f.current_chapter_id;

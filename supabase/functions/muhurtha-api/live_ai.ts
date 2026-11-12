@@ -317,7 +317,7 @@ const MONTHS_ALL: Record<string, number> = {
   "जनवरी": 1, "फ़रवरी": 2, "फरवरी": 2, "मार्च": 3, "अप्रैल": 4, "मई": 5, "जून": 6, "जुलाई": 7, "अगस्त": 8, "सितंबर": 9, "अक्टूबर": 10, "नवंबर": 11, "दिसंबर": 12,
 };
 const MONTH_ALT = Object.keys(MONTHS_ALL).sort((a, b) => b.length - a.length).join("|");
-const DAY_MONTH_RE = new RegExp(`(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:of\\s+)?(${MONTH_ALT})(?![\\p{L}])`, "giu");
+const DAY_MONTH_RE = new RegExp(`(?<!\\d)(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:of\\s+)?(${MONTH_ALT})(?![\\p{L}])`, "giu");
 const MONTH_DAY_RE = new RegExp(`(?<![\\p{L}])(${MONTH_ALT})\\.?\\s+(\\d{1,2})(?!\\d)`, "giu");
 const MONTH_ONLY_RE = new RegExp(`(?<![\\p{L}])(${MONTH_ALT})(?![\\p{L}])`, "giu");
 const YEAR_RE = /\b(19|20)\d{2}\b/g;
@@ -332,9 +332,9 @@ const DIRECTIVE_RE: RegExp[] = [
 ];
 
 const WITHHELD: Record<LiveLocale, { time: string; date: string; safety: string }> = {
-  en: { time: "The exact times are in the card below.", date: "I've put the best date in the card below.", safety: "That decision is yours to make with real-world advice; tradition only offers a timing view." },
-  te: { time: "ఖచ్చితమైన టైమ్స్ కింద కార్డ్‌లో ఉన్నాయి.", date: "బెస్ట్ డేట్ కింద కార్డ్‌లో పెట్టాను.", safety: "ఆ నిర్ణయం మీదే, నిపుణుల సలహాతో తీసుకోండి. సంప్రదాయం కేవలం టైమింగ్ వైపు నుంచి చూపిస్తుంది." },
-  hi: { time: "सही समय नीचे कार्ड में है।", date: "सबसे अच्छी तारीख नीचे कार्ड में रखी है।", safety: "यह फ़ैसला आपका है, सही सलाह लेकर कीजिए; परंपरा सिर्फ़ समय के हिसाब से एक नज़रिया देती है।" },
+  en: { time: "The exact times are in the card below.", date: "Check the exact dates in the app's cards.", safety: "That decision is yours to make with real-world advice; tradition only offers a timing view." },
+  te: { time: "ఖచ్చితమైన టైమ్స్ కింద కార్డ్‌లో ఉన్నాయి.", date: "ఖచ్చితమైన తేదీలు యాప్‌లోని కార్డ్‌లలో చూడండి.", safety: "ఆ నిర్ణయం మీదే, నిపుణుల సలహాతో తీసుకోండి. సంప్రదాయం కేవలం టైమింగ్ వైపు నుంచి చూపిస్తుంది." },
+  hi: { time: "सही समय नीचे कार्ड में है।", date: "सही तारीखें ऐप के कार्ड में देखिए।", safety: "यह फ़ैसला आपका है, सही सलाह लेकर कीजिए; परंपरा सिर्फ़ समय के हिसाब से एक नज़रिया देती है।" },
 };
 
 export type GuardAllowed = { dayMonths: Set<string>; months: Set<number>; years: Set<number> };
@@ -359,6 +359,14 @@ export function allowedDates(facts: V2Facts | null, date: string, upcoming: stri
   for (const ch of idx >= 0 && facts ? facts.chapters.slice(Math.max(0, idx - 1), idx + 3) : []) {
     add(ch.start_iso, false);
     add(ch.end_iso, false);
+  }
+  // The whole current mahadasha (first and last chapter under the same lord) is engine-owned too.
+  if (cur && facts) {
+    const same = facts.chapters.filter((x) => x.md === cur.md || (x.md_lords ?? []).includes(cur.md));
+    if (same.length) {
+      add(same[0].start_iso, false);
+      add(same[same.length - 1].end_iso, false);
+    }
   }
   return { dayMonths, months, years };
 }
@@ -398,6 +406,8 @@ export function sentenceProblem(s: string, allowed: GuardAllowed, sensitive: boo
 export class StreamGuard {
   private buf = "";
   private shown = "";
+  /** Part of the current sentence already shown by an early flush. */
+  private headShown = false;
   hits: GuardHit[] = [];
   private replaced = new Set<string>();
   constructor(
@@ -416,15 +426,22 @@ export class StreamGuard {
     this.emit(polished);
   }
   private sentence(s: string) {
+    const head = this.headShown;
+    this.headShown = false;
     const p = sentenceProblem(s, this.allowed, this.sensitive);
     if (!p) return this.out(s);
     this.hits.push({ kind: p, text: s.slice(0, 200) });
     const w = WITHHELD[this.locale] ?? WITHHELD.en;
     const line = p === "safety" ? w.safety : p === "time" ? w.time : w.date;
-    if (this.replaced.has(line)) return;
+    const tail = /\s$/.test(s) ? " " : "";
+    if (this.replaced.has(line)) {
+      // Close a half-shown sentence instead of leaving it hanging.
+      if (head) this.out("…" + tail);
+      return;
+    }
     this.replaced.add(line);
-    const lead = /^\s/.test(s) ? " " : "";
-    this.out(lead + line + (/\s$/.test(s) ? " " : ""));
+    const lead = head ? "… " : /^\s/.test(s) ? " " : "";
+    this.out(lead + line + tail);
   }
   push(delta: string) {
     this.buf += delta;
@@ -446,6 +463,7 @@ export class StreamGuard {
       if (sp > 0) {
         this.out(this.buf.slice(0, sp + 1));
         this.buf = this.buf.slice(sp + 1);
+        this.headShown = true;
       }
     }
   }

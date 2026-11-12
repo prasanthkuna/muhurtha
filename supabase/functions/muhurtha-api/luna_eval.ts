@@ -86,7 +86,7 @@ const QUESTIONS: Record<L, string[]> = {
 const SCRIPT: Record<L, RegExp> = { en: /[A-Za-z]/g, te: /[\u0C00-\u0C7F]/g, hi: /[\u0900-\u097F]/g };
 
 export function scriptShare(text: string, l: L): number {
-  const letters = (text.match(/\p{L}/gu) ?? []).length;
+  const letters = (text.match(/[\p{L}\p{M}]/gu) ?? []).length;
   if (!letters) return 0;
   return (text.match(SCRIPT[l]) ?? []).length / letters;
 }
