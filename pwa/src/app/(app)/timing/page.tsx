@@ -1,5 +1,6 @@
 "use client";
 
+import { ExplainRow } from "@/components/explainer/explain-sheet";
 import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -165,6 +166,7 @@ function TimingInner() {
   return (
     <div className="space-y-6" data-testid="timing-loaded">
       <PageHeader eyebrow={t("timing.eyebrow")} title={t("timing.title")} subtitle={t("timing.subtitle")} />
+      <ExplainRow screen="timing" className="" terms={[{ term: "good_slot" }, { term: "rahu_kalam" }, { term: "yamagandam" }, { term: "gulika" }]} />
 
       <div className="flex gap-2 rounded-full border border-line bg-paper p-1">
         <button

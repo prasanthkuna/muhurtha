@@ -1,5 +1,7 @@
 "use client";
 
+import { ExplainRow } from "@/components/explainer/explain-sheet";
+import { DailySummaryStrip } from "@/components/live/daily-summary-strip";
 import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { ChevronRight } from "@/components/celestial/muh-icon";
@@ -87,6 +89,18 @@ export default function DecodePage() {
             <HeroChips birthStar={birthStar} moonSign={null} t={t} />
           </>
         )}
+
+        <DailySummaryStrip className="rounded-2xl border border-gold-accent/30 bg-gold-wash/40 px-4 py-3" />
+        <ExplainRow
+          screen="decode"
+          className=""
+          terms={[
+            { term: "nakshatra", value: typeof birthStar === "string" ? birthStar : undefined },
+            { term: "moon_sign" },
+            { term: "mahadasha" },
+            { term: "life_chapter" },
+          ]}
+        />
 
         {today && !isChildStage(activeLifeStage) ? (
           <Link

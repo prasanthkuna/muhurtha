@@ -1,5 +1,6 @@
 "use client";
 
+import { ExplainRow } from "@/components/explainer/explain-sheet";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/editorial/page-header";
@@ -327,6 +328,7 @@ export default function BondPage() {
   return (
     <div className="mx-auto max-w-lg">
       <PageHeader eyebrow={t("bond.eyebrow")} title={t("bond.title")} subtitle={t("bond.subtitle")} className="mb-6" />
+      <ExplainRow screen="bond" terms={[{ term: "koota" }, { term: "gana" }, { term: "nadi" }, { term: "bhakoot" }, { term: "graha_maitri" }]} />
       <Suspense fallback={<BondSkeleton />}>
         <BondInner />
       </Suspense>
