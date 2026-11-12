@@ -2,8 +2,11 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   bondMonthPrepare,
+  askStreamResponse,
   handleRequest,
   pushBondMoments,
+  pushBriefLine,
+  pushSavedEvents,
   migrateLegacyPacks,
   pushChartMoments,
   startGoldenReading,
@@ -11,42 +14,23 @@ import {
   sweepStalledBirthPacks,
   warmBirthPack,
 } from "./engine.ts";
-import { smokeTestOpenRouterModels } from "./openrouter_model_smoke.ts";
-import { smokeTestLowCostModels } from "./low_cost_model_smoke.ts";
 import { runWarmup } from "./warmup.ts";
-import { geminiConfigured, geminiModel, geminiProbe, primaryProvider, readingModel } from "./openai_responses.ts";
+import { lunaProbe, primaryProvider, readingModel } from "./openai_responses.ts";
 import { maxAttempts, openAiAllowed } from "./llm_policy.ts";
-import { buildReadingSchema, buildSystemPrompt, buildUserPrompt, type V2Facts } from "./reading_v2.ts";
+import { readingEffort } from "./reading_shards.ts";
+import { runLunaEval } from "./luna_eval.ts";
 
-/** Internal: which LLM is primary and whether Gemini accepts the reading schema (no secrets out). */
-async function runLlmProbe(admin: SupabaseClient, body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = { primary: primaryProvider(), reading_model: readingModel(), gemini_configured: geminiConfigured(), openai_allowed: openAiAllowed(), max_attempts: maxAttempts() };
-  if (!geminiConfigured()) return out;
-  const model = String(body.model ?? geminiModel());
-  if (!body.skip_tiny) out.tiny = await geminiProbe(model, {
-    system: "Return JSON.", user: "Say hi.", schemaName: "t",
-    schema: { type: "object", properties: { hi: { type: "string" } }, required: ["hi"], additionalProperties: false },
-    reasoningEffort: "low", maxOutputTokens: 200,
-  }, { noHop: true });
-  if (body.list_models) out.models = await geminiProbe(model, { system: "", user: "", schemaName: "__models", schema: {} }, {});
-  const readingId = String(body.reading_id ?? "");
-  if (!readingId) return out;
-  const { data } = await admin.from("readings").select("facts").eq("id", readingId).maybeSingle();
-  const facts = (data as { facts: V2Facts } | null)?.facts;
-  if (!facts) return { ...out, reading: "facts_missing" };
-  const input = { system: buildSystemPrompt(facts), user: buildUserPrompt(facts), schemaName: "r", schema: buildReadingSchema(facts, { withLengths: false }), reasoningEffort: (String(body.effort ?? "low") as "low" | "medium"), maxOutputTokens: 40000 };
-  const variants = (body.variants as string[] | undefined) ?? ["base", "noItems", "noDescriptions", "schemaInPrompt"];
-  for (const v of variants) {
-    out[v] = await geminiProbe(model, input, {
-      noItems: v === "noItems" || v === "noItemsNoDesc", noDescriptions: v === "noDescriptions" || v === "noItemsNoDesc",
-      schemaInPrompt: v === "schemaInPrompt", noThinking: v === "noThinking",
-      keepItems: v === "base", timeoutMs: Number(body.timeout_ms ?? 135_000),
-      noHop: true, returnText: Boolean(body.return_text),
-    });
-  }
+/** Internal: Luna key + latency probe (no secrets out; booleans and timings only). */
+async function runLlmProbe(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {
+    primary: primaryProvider(), reading_model: readingModel(), openai_allowed: openAiAllowed(), max_attempts: maxAttempts(),
+    reading_effort: readingEffort(),
+  };
+  out.none = await lunaProbe("none");
+  if (body.low !== false) out.low = await lunaProbe("low");
   return out;
 }
-import { dispatchDuePush } from "./push.ts";
+import { dispatchDuePush, recordPushClick } from "./push.ts";
 import { invitePreview, quickMatch } from "./bond.ts";
 import { panchangToday, StarInputError, starTeaser } from "./star_public.ts";
 import { ensurePlan, type PlanCode, PRO_PLANS, razorpayConfig } from "./razorpay.ts";
@@ -163,41 +147,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (body.action === "smoke_test_low_cost_models") {
-      if (!isServiceRoleRequest(req, serviceKey)) {
-        return new Response(JSON.stringify({ error: "forbidden" }), {
-          status: 403,
-          headers: { ...cors, "Content-Type": "application/json" },
-        });
-      }
-      const result = await smokeTestLowCostModels();
-      return new Response(JSON.stringify(result), {
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
-    }
-
-    if (body.action === "smoke_test_openrouter_models") {
-      if (!isServiceRoleRequest(req, serviceKey)) {
-        return new Response(JSON.stringify({ error: "forbidden" }), {
-          status: 403,
-          headers: { ...cors, "Content-Type": "application/json" },
-        });
-      }
-      const result = await smokeTestOpenRouterModels(
-        undefined,
-        null,
-        {
-          birthPackProbe: body.birth_pack_probe === true,
-          models: Array.isArray(body.models)
-            ? body.models.filter((m): m is string => typeof m === "string")
-            : undefined,
-        },
-      );
-      return new Response(JSON.stringify(result), {
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
-    }
-
     if (body.action === "pack_sweep") {
       // pg_cron safety net: finish birth packs whose client stopped polling mid-generation.
       const cronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
@@ -218,7 +167,7 @@ Deno.serve(async (req) => {
 
     if (
       body.action === "reading_sweep" || body.action === "reading_golden" ||
-      body.action === "reading_migrate_legacy" || body.action === "llm_probe"
+      body.action === "reading_migrate_legacy" || body.action === "llm_probe" || body.action === "luna_eval"
     ) {
       // Internal reading v2 entry points: pg_cron sweep, OpenAI webhook relay, golden tests
       // and the zero-LLM legacy migration. Shared cron secret or the service role only.
@@ -232,9 +181,20 @@ Deno.serve(async (req) => {
       }
       const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
       if (body.action === "llm_probe") {
-        const probe = await runLlmProbe(adminSupabase, body);
+        const probe = await runLlmProbe(body);
         console.log("[llm_probe]", JSON.stringify(probe).slice(0, 3000));
         return new Response(JSON.stringify(probe), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
+      if (body.action === "luna_eval") {
+        // Synthetic profiles only; runs in the background and writes llm_evals.
+        const task = runLunaEval(adminSupabase, body)
+          .then((r) => console.log("[luna_eval]", JSON.stringify(r)))
+          .catch((e) => console.warn("[luna_eval] failed", e instanceof Error ? e.message : e));
+        // deno-lint-ignore no-explicit-any
+        const rt = (globalThis as any).EdgeRuntime;
+        if (rt?.waitUntil) rt.waitUntil(task);
+        else await task;
+        return new Response(JSON.stringify({ started: true, run_id: body.run_id ?? null }), { headers: { ...cors, "Content-Type": "application/json" } });
       }
       const result = body.action === "reading_sweep"
         ? await sweepReadings(adminSupabase, body)
@@ -265,6 +225,13 @@ Deno.serve(async (req) => {
           headers: { ...cors, "Content-Type": "application/json" },
         });
       }
+    }
+
+    if (body.action === "notification_click") {
+      // Public, best effort: the service worker reports a notification tap (no personal data).
+      const admin = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+      const ok = await recordPushClick(admin, String(body.sid ?? ""), String(body.nid ?? ""), String(body.click_action ?? "open"));
+      return new Response(JSON.stringify({ ok }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
     if (body.action === "funnel_event") {
@@ -364,7 +331,10 @@ Deno.serve(async (req) => {
         });
       }
       const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
-      const result = await dispatchDuePush(adminSupabase, Date.now(), pushChartMoments, pushBondMoments);
+      const result = await dispatchDuePush(adminSupabase, Date.now(), pushChartMoments, pushBondMoments, {
+        briefLine: pushBriefLine,
+        savedEvents: pushSavedEvents,
+      });
       if (result.considered > 0 || result.suppressed > 0) console.log("[push_dispatch]", JSON.stringify(result));
       return new Response(JSON.stringify(result), {
         headers: { ...cors, "Content-Type": "application/json" },
@@ -386,6 +356,10 @@ Deno.serve(async (req) => {
           headers: { ...cors, "Content-Type": "application/json" },
         },
       );
+    }
+    if (body.action === "ask_stream") {
+      // Server-sent events: meta -> delta* -> done (or error).
+      return await askStreamResponse(supabase, user, body, loggingSupabase, cors);
     }
     const result = await handleRequest(supabase, user, body, loggingSupabase);
     return new Response(JSON.stringify(result), {

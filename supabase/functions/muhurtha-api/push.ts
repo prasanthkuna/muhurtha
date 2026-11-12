@@ -22,7 +22,8 @@ export type PushKind =
   | "weekly_outlook"
   | "reading_ready"
   | "bond_month_ready"
-  | "bond_heads_up";
+  | "bond_heads_up"
+  | "saved_event";
 export type PushPrefs = {
   daily: boolean;
   good: boolean;
@@ -33,6 +34,8 @@ export type PushPrefs = {
   weekly: boolean;
   /** Bond: monthly couple guide + day-before heads-up for key couple days */
   bond: boolean;
+  /** Day-before reminder for events the user saved ("Remind me"). */
+  events: boolean;
 };
 
 export const DEFAULT_PUSH_PREFS: PushPrefs = {
@@ -44,7 +47,26 @@ export const DEFAULT_PUSH_PREFS: PushPrefs = {
   friends: false,
   weekly: false,
   bond: true,
+  events: true,
 };
+
+/** AI line for the morning brief (daily context summary; engine.ts injects it). Times stay engine-owned. */
+export type BriefLineFn = (
+  admin: SupabaseClient,
+  profileId: string,
+  locale: PushLocale,
+  dateStr: string,
+) => Promise<{ title?: string; line: string } | null>;
+
+/** Events the user saved for `dateStr` (tomorrow), for the 19:00 day-before reminder. */
+export type SavedEventsFn = (
+  admin: SupabaseClient,
+  profileId: string,
+  dateStr: string,
+) => Promise<{ id: string; title: string; event_date: string; window_start: string | null; window_end: string | null }[]>;
+
+const EVENT_LOCAL = "19:00";
+const BRIEF_AI_TIMEOUT_MS = 8_000;
 
 /** Chart-specific moments come from engine.ts (injected by index.ts to avoid an import cycle). */
 export type ChartMomentsFn = (
@@ -94,6 +116,7 @@ const KIND_PRIORITY: Record<PushKind, number> = {
   reading_ready: 0,
   bond_month_ready: 0,
   bond_heads_up: 3,
+  saved_event: 2,
 };
 const DAILY_BRIEF_LOCAL = "06:45";
 const LEAD_MINUTES = 10;
@@ -127,6 +150,9 @@ export type NotificationPayload = {
   timestamp: number;
   actions: { action: string; title: string; url: string }[];
   kind: PushKind;
+  /** Click tracking: notification key + subscription id (the SW reports taps). */
+  nid?: string;
+  sid?: string;
 };
 
 export type SendResult = {
@@ -451,6 +477,7 @@ export function normalizePrefs(raw: unknown): PushPrefs {
     friends: flag("friends"),
     weekly: flag("weekly"),
     bond: flag("bond"),
+    events: flag("events"),
   };
 }
 
@@ -660,11 +687,37 @@ export async function sendOneOffToProfile(
 }
 
 /** Cron entry point: send every alert that became due since the last run, once. */
+const EVENT_COPY: Record<PushLocale, { title: (t: string) => string; body: (when: string) => string }> = {
+  en: {
+    title: (t) => `Tomorrow: ${t}`.slice(0, 60),
+    body: (w) => w ? `Your saved good time is ${w}. Get things ready tonight.` : "You saved this for tomorrow. Get things ready tonight.",
+  },
+  te: {
+    title: (t) => `రేపు: ${t}`.slice(0, 60),
+    body: (w) => w ? `మీరు సేవ్ చేసిన మంచి టైమ్ ${w}. ఈ రాత్రే రెడీ చేసుకోండి.` : "రేపటి కోసం మీరు దీన్ని సేవ్ చేశారు. ఈ రాత్రే రెడీ చేసుకోండి.",
+  },
+  hi: {
+    title: (t) => `कल: ${t}`.slice(0, 60),
+    body: (w) => w ? `आपका सेव किया अच्छा समय ${w} है। आज रात ही तैयारी कर लीजिए।` : "आपने इसे कल के लिए सेव किया है। आज रात ही तैयारी कर लीजिए।",
+  },
+};
+
+/** SW reports a tap on a notification (or one of its actions). Best effort, first tap wins. */
+export async function recordPushClick(admin: SupabaseClient, sid: string, nid: string, action: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(sid) || !nid || nid.length > 160) return false;
+  const { data, error } = await admin.from("push_deliveries")
+    .update({ clicked_at: new Date().toISOString(), click_action: (action || "open").slice(0, 40) })
+    .eq("subscription_id", sid).eq("notification_key", nid).is("clicked_at", null).select("id");
+  if (error) return false;
+  return (data ?? []).length > 0;
+}
+
 export async function dispatchDuePush(
   admin: SupabaseClient,
   nowMs = Date.now(),
   chartMoments?: ChartMomentsFn,
   bondMoments?: BondMomentsFn,
+  extras: { briefLine?: BriefLineFn; savedEvents?: SavedEventsFn } = {},
 ) {
   const { data, error } = await admin
     .from("push_subscriptions")
@@ -700,6 +753,48 @@ export async function dispatchDuePush(
     // The brief already lists the first good window; don't repeat it within 45 min.
     if (brief) {
       due = due.filter((e) => !(e.payload.kind === "good_window" && e.at - brief.at < BRIEF_OVERLAP_MS));
+    }
+
+    // Morning brief: one short AI line from the daily context summary, generated on time
+    // (not Batch); the engine's times stay in the body. Template copy if it is slow or down.
+    const dueBrief = due.find((e) => e.payload.kind === "daily_brief");
+    if (dueBrief && extras.briefLine) {
+      const ai = await Promise.race([
+        extras.briefLine(admin, sub.profile_id, l, dateStr).catch(() => null),
+        new Promise<null>((r) => setTimeout(() => r(null), BRIEF_AI_TIMEOUT_MS)),
+      ]);
+      if (ai?.line) {
+        dueBrief.payload = {
+          ...dueBrief.payload,
+          title: (ai.title || dueBrief.payload.title).slice(0, 60),
+          body: `${ai.line.slice(0, 140)}\n${dueBrief.payload.body}`,
+        };
+      }
+    }
+
+    const eventAt = DateTime.fromISO(`${dateStr}T${EVENT_LOCAL}`, { zone: tz }).toMillis();
+    if (extras.savedEvents && prefs.events && isDue(eventAt)) {
+      const tomorrow = DateTime.fromISO(dateStr, { zone: tz }).plus({ days: 1 }).toISODate()!;
+      const evs = await extras.savedEvents(admin, sub.profile_id, tomorrow).catch(() => []);
+      for (const ev of evs.slice(0, 2)) {
+        const c = COPY[l];
+        const when = ev.window_start && ev.window_end ? fmtRange(ev.window_start, ev.window_end) : "";
+        due.push({
+          key: `event:${ev.id}:${ev.event_date}`,
+          at: eventAt,
+          urgency: "normal",
+          ttl: 3 * 60 * 60,
+          payload: {
+            ...basePayload("saved_event", l, `muh-event-${ev.id}`),
+            renotify: false,
+            title: EVENT_COPY[l].title(ev.title),
+            body: EVENT_COPY[l].body(when),
+            image: "/notifications/good.png",
+            url: `/calendar?date=${ev.event_date}&src=push_event`,
+            actions: [{ action: "open", title: c.openTiming, url: `/calendar?date=${ev.event_date}&src=push_event` }],
+          },
+        });
+      }
     }
 
     if (prefs.weekly) {
@@ -804,7 +899,7 @@ export async function dispatchDuePush(
         continue;
       }
       considered++;
-      const r = await sendToSubscription(sub, ev.payload, {
+      const r = await sendToSubscription(sub, { ...ev.payload, nid: ev.key, sid: sub.id }, {
         ttl: ev.ttl,
         urgency: ev.urgency,
         topic: ev.payload.kind,
