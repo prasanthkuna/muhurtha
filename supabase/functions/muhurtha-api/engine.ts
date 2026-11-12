@@ -46,7 +46,12 @@ import {
   type ReadingRow,
   type ReadyHook,
 } from "./reading_jobs.ts";
-import { llmConfigured, providerOf, readingModel } from "./openai_responses.ts";
+import { createResponse, llmConfigured, providerOf, readingModel, streamResponse, type ResponseObject } from "./openai_responses.ts";
+import {
+  allowedDates, chartCard, classifyQuestion, followupChips, guardText, JsonFieldStream, LIVE_PROMPT_VERSION, liveAskSchema,
+  liveSystem, liveUserMessage, normalizeScreen, StreamGuard, type GuardHit, type LiveContextInput, type LiveWindow,
+} from "./live_ai.ts";
+import { BOND_TERMS, glossEntry } from "./glossary.ts";
 import { isQuotaCap, isTransientLlmError } from "./llm_policy.ts";
 import { ASK_V2_PROMPT_VERSION, askWithLlm, normalizeQuestion, type AskContext, type AskLlmAnswer } from "./ask_v2.ts";
 import { sendReadingReadyToProfile } from "./push.ts";
@@ -4290,6 +4295,148 @@ function errorMessage(error: unknown): string {
   }
 }
 
+type AskPrep = Awaited<ReturnType<typeof prepareAsk>>;
+
+/** Shared first half of an Ask turn (quota, chat session, live windows, reading, history, user message). */
+async function prepareAsk(
+  supabase: SupabaseClient,
+  adminSupabase: SupabaseClient,
+  profile: ProfRow,
+  body: Record<string, unknown>,
+) {
+  const locale = requestLocale(body, profile);
+  const question = String(body.question ?? "").trim();
+  if (question.length < 3) {
+    throw new ActionError("missing_question", "question required", 400);
+  }
+  if (question.length > 900) {
+    throw new ActionError("question_too_long", "question is too long", 400);
+  }
+
+  const tz = profile.current_timezone ?? "Asia/Kolkata";
+  const targetDate = todayInTimezone(tz);
+  const access = await getSubscriptionAccess(supabase, profile.id);
+  const askQuotaResult = await consumeQuota(adminSupabase, profile.id, "ask", access.isPro);
+  if (!askQuotaResult.allowed) {
+    throw access.isPro
+      ? new ActionError(
+        "ask_fair_use_reached",
+        "You've asked 30 questions today. Pro Ask resets at midnight IST.",
+        429,
+      )
+      : new ActionError(
+        "free_ask_limit_reached",
+        "Free includes 3 Ask questions a day. Pro gives you up to 30.",
+        429,
+      );
+  }
+  const askQuota = {
+    planCode: access.isPro ? "pro" : "free",
+    remaining: askQuotaResult.remaining,
+    key: askQuotaResult.key,
+  };
+
+  // Active chart (friend chart or own) decides both the reading and where the chat is stored.
+  const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
+  const bi = await ensureBirthPlacePrecision(supabase, rawBi);
+  const scope = await resolveChatScope(supabase, profile.id, body);
+  if (scope.isFriend && bi) scope.birthInputId = bi.id;
+
+  const requestedSessionId = body.session_id == null ? "" : String(body.session_id);
+  let sessionId = requestedSessionId;
+  if (sessionId) {
+    let { data: session, error: sessionError } = await supabase
+      .from("chat_sessions")
+      .select("id, birth_input_id")
+      .eq("id", sessionId)
+      .eq("profile_id", profile.id)
+      .maybeSingle();
+    if (isMissingChatScopeColumn(sessionError)) {
+      ({ data: session, error: sessionError } = await supabase
+        .from("chat_sessions")
+        .select("id")
+        .eq("id", sessionId)
+        .eq("profile_id", profile.id)
+        .maybeSingle() as unknown as { data: typeof session; error: typeof sessionError });
+    }
+    if (sessionError) throw sessionError;
+    if (!session) {
+      throw new ActionError("chat_session_not_found", "Chat session not found", 404);
+    }
+    // A chat started on another chart never continues here: start a fresh one instead.
+    if (!chatSessionInScope((session as { birth_input_id?: string | null }).birth_input_id, scope)) {
+      sessionId = "";
+    }
+  }
+  if (!sessionId) {
+    const insertRow = {
+      profile_id: profile.id,
+      title: question.slice(0, 80),
+      language_code: locale,
+    };
+    let { data: session, error: sessionError } = await supabase
+      .from("chat_sessions")
+      .insert({ ...insertRow, birth_input_id: scope.birthInputId })
+      .select("id")
+      .single();
+    if (isMissingChatScopeColumn(sessionError)) {
+      ({ data: session, error: sessionError } = await supabase
+        .from("chat_sessions")
+        .insert(insertRow)
+        .select("id")
+        .single());
+    }
+    if (sessionError) throw sessionError;
+    sessionId = session!.id as string;
+  }
+
+  const day = zonedNoonJsDate(targetDate, tz);
+  const lat = profile.current_lat != null ? Number(profile.current_lat) : DEFAULT_LAT;
+  const lng = profile.current_lng != null ? Number(profile.current_lng) : DEFAULT_LNG;
+  const sun = sunriseSunset(day, lat, lng);
+  const slices = divideDaylight(sun, jsWeekday(targetDate, tz));
+  const { good, caution } = goodAndCautionWindows(slices, tz);
+  const goodWindows = good.slice(0, 2).map((w) => ({
+    start: w.start,
+    end: w.end,
+    label: locale === "en" ? "Good time" : fallbackPackStrings(locale).goodCategory,
+  }));
+  const cautionWindows = caution.slice(0, 2).map((w) => ({
+    start: w.start,
+    end: w.end,
+    label: locale === "en" ? w.label : CAUTION_WINDOW_LABEL[locale][w.label] ?? w.label,
+  }));
+
+  let currentLord = "";
+  let currentSubLord = "";
+  if (bi) {
+    const { segments, nk } = computeTimeline(bi, profile.current_timezone ?? "Asia/Kolkata");
+    if (nk != null && segments.length) {
+      const current = vimshottariLordsAt(segments, new Date());
+      currentLord = current?.mdLord ?? "";
+      currentSubLord = current?.adLord ?? "";
+    }
+  }
+  const pack = await loadBirthPack(adminSupabase, profile, bi, locale, targetDate);
+  // Last 3 turns of this chat (read before the new question is stored).
+  const history = askLlmEnabled() && requestedSessionId && sessionId === requestedSessionId
+    ? await recentChatHistory(supabase, sessionId, profile.id)
+    : [];
+
+  const { error: userMessageError } = await supabase.from("chat_messages").insert({
+    session_id: sessionId,
+    profile_id: profile.id,
+    role: "user",
+    content: question,
+    payload: { locale },
+  });
+  if (userMessageError) throw userMessageError;
+  return {
+    locale, question, tz, targetDate, access, askQuotaResult, askQuota, bi, scope, sessionId, requestedSessionId,
+    good, caution, goodWindows, cautionWindows, currentLord, currentSubLord, pack, history,
+  };
+}
+
 export async function handleRequest(
   supabase: SupabaseClient,
   user: User,
@@ -4373,6 +4520,10 @@ async function _handleInternal(
   if (BOND_ACTIONS.has(action)) {
     const profile = requireProfile(prof, action);
     return await handleBondAction(action, body, profile.id, adminSupabase, bondDeps(adminSupabase));
+  }
+
+  if (LIVE_ACTIONS.has(action)) {
+    return await handleLiveAction(action, supabase, adminSupabase, requireProfile(prof, action), body);
   }
 
   if (action === "birth_place_search") {
@@ -5744,133 +5895,10 @@ async function _handleInternal(
   }
 
   if (action === "ask") {
-    const locale = requestLocale(body, profile);
-    const question = String(body.question ?? "").trim();
-    if (question.length < 3) {
-      throw new ActionError("missing_question", "question required", 400);
-    }
-    if (question.length > 900) {
-      throw new ActionError("question_too_long", "question is too long", 400);
-    }
-
-    const tz = profile.current_timezone ?? "Asia/Kolkata";
-    const targetDate = todayInTimezone(tz);
-    const access = await getSubscriptionAccess(supabase, profile.id);
-    const askQuotaResult = await consumeQuota(adminSupabase, profile.id, "ask", access.isPro);
-    if (!askQuotaResult.allowed) {
-      throw access.isPro
-        ? new ActionError(
-          "ask_fair_use_reached",
-          "You've asked 30 questions today. Pro Ask resets at midnight IST.",
-          429,
-        )
-        : new ActionError(
-          "free_ask_limit_reached",
-          "Free includes 3 Ask questions a day. Pro gives you up to 30.",
-          429,
-        );
-    }
-    const askQuota = {
-      planCode: access.isPro ? "pro" : "free",
-      remaining: askQuotaResult.remaining,
-      key: askQuotaResult.key,
-    };
-
-    // Active chart (friend chart or own) decides both the reading and where the chat is stored.
-    const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
-    const bi = await ensureBirthPlacePrecision(supabase, rawBi);
-    const scope = await resolveChatScope(supabase, profile.id, body);
-    if (scope.isFriend && bi) scope.birthInputId = bi.id;
-
-    const requestedSessionId = body.session_id == null ? "" : String(body.session_id);
-    let sessionId = requestedSessionId;
-    if (sessionId) {
-      let { data: session, error: sessionError } = await supabase
-        .from("chat_sessions")
-        .select("id, birth_input_id")
-        .eq("id", sessionId)
-        .eq("profile_id", profile.id)
-        .maybeSingle();
-      if (isMissingChatScopeColumn(sessionError)) {
-        ({ data: session, error: sessionError } = await supabase
-          .from("chat_sessions")
-          .select("id")
-          .eq("id", sessionId)
-          .eq("profile_id", profile.id)
-          .maybeSingle() as unknown as { data: typeof session; error: typeof sessionError });
-      }
-      if (sessionError) throw sessionError;
-      if (!session) {
-        throw new ActionError("chat_session_not_found", "Chat session not found", 404);
-      }
-      // A chat started on another chart never continues here: start a fresh one instead.
-      if (!chatSessionInScope((session as { birth_input_id?: string | null }).birth_input_id, scope)) {
-        sessionId = "";
-      }
-    }
-    if (!sessionId) {
-      const insertRow = {
-        profile_id: profile.id,
-        title: question.slice(0, 80),
-        language_code: locale,
-      };
-      let { data: session, error: sessionError } = await supabase
-        .from("chat_sessions")
-        .insert({ ...insertRow, birth_input_id: scope.birthInputId })
-        .select("id")
-        .single();
-      if (isMissingChatScopeColumn(sessionError)) {
-        ({ data: session, error: sessionError } = await supabase
-          .from("chat_sessions")
-          .insert(insertRow)
-          .select("id")
-          .single());
-      }
-      if (sessionError) throw sessionError;
-      sessionId = session!.id as string;
-    }
-
-    const day = zonedNoonJsDate(targetDate, tz);
-    const lat = profile.current_lat != null ? Number(profile.current_lat) : DEFAULT_LAT;
-    const lng = profile.current_lng != null ? Number(profile.current_lng) : DEFAULT_LNG;
-    const sun = sunriseSunset(day, lat, lng);
-    const slices = divideDaylight(sun, jsWeekday(targetDate, tz));
-    const { good, caution } = goodAndCautionWindows(slices, tz);
-    const goodWindows = good.slice(0, 2).map((w) => ({
-      start: w.start,
-      end: w.end,
-      label: locale === "en" ? "Good time" : fallbackPackStrings(locale).goodCategory,
-    }));
-    const cautionWindows = caution.slice(0, 2).map((w) => ({
-      start: w.start,
-      end: w.end,
-      label: locale === "en" ? w.label : CAUTION_WINDOW_LABEL[locale][w.label] ?? w.label,
-    }));
-
-    let currentLord = "";
-    let currentSubLord = "";
-    if (bi) {
-      const { segments, nk } = computeTimeline(bi, profile.current_timezone ?? "Asia/Kolkata");
-      if (nk != null && segments.length) {
-        const current = vimshottariLordsAt(segments, new Date());
-        currentLord = current?.mdLord ?? "";
-        currentSubLord = current?.adLord ?? "";
-      }
-    }
-    const pack = await loadBirthPack(adminSupabase, profile, bi, locale, targetDate);
-    // Last 3 turns of this chat (read before the new question is stored).
-    const history = askLlmEnabled() && requestedSessionId && sessionId === requestedSessionId
-      ? await recentChatHistory(supabase, sessionId, profile.id)
-      : [];
-
-    const { error: userMessageError } = await supabase.from("chat_messages").insert({
-      session_id: sessionId,
-      profile_id: profile.id,
-      role: "user",
-      content: question,
-      payload: { locale },
-    });
-    if (userMessageError) throw userMessageError;
+    const {
+      locale, question, targetDate, access, askQuotaResult, askQuota, bi, scope, sessionId,
+      good, caution, goodWindows, cautionWindows, currentLord, currentSubLord, pack, history,
+    } = await prepareAsk(supabase, adminSupabase, profile, body);
 
     let copy = resolveAskFromPack(
       pack?.content,
@@ -6936,4 +6964,595 @@ export async function pushChartMoments(
     }
   }
   return out;
+}
+
+// =================================================================== Live AI (gpt-6-luna)
+// Streaming Ask, explain-on-every-screen, the daily context summary, consent-based memory and
+// server-side saved events. Engine owns every date/time/dasha; Luna writes the words.
+
+const liveFactsCache = new Map<string, { at: number; facts: V2Facts }>();
+
+/** Engine facts for live calls (pure, ~20 ms warm); cached per isolate for 6 h. */
+export function liveFacts(profile: ProfRow, bi: BioRow | null, locale: AppLocale, date: string, subject: string | null): V2Facts | null {
+  if (!bi) return null;
+  const key = [bi.id, bi.date_of_birth, bi.exact_birth_time, bi.time_bucket, bi.birth_lat, bi.birth_lng, locale, date, profile.current_timezone, subject ?? ""].join("|");
+  const hit = liveFactsCache.get(key);
+  if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.facts;
+  try {
+    const facts = buildReadingFacts(profile, bi, locale, date, subject);
+    if (liveFactsCache.size > 300) liveFactsCache.clear();
+    liveFactsCache.set(key, { at: Date.now(), facts });
+    return facts;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function liveReadingCopy(pack: BirthPackRow | null, date: string): LiveContextInput["reading"] {
+  if (!pack?.content) return null;
+  const c = pack.content as Record<string, unknown>;
+  const me = (c.me_profile ?? {}) as Record<string, unknown>;
+  const phases = asArray<Record<string, unknown>>(c.journey_phases);
+  const pf = asArray<Record<string, unknown>>(c.journey_phase_facts);
+  const cur = phases.find((p) =>
+    safeString(p.tense) === "current" ||
+    safeString(pf.find((f) => Number(f.sortOrder) === Number(p.sortOrder))?.tense) === "current"
+  );
+  const card = asArray<Record<string, unknown>>(c.today_cards).find((x) => safeString(x.key) === date);
+  return {
+    profileTitle: safeString(me.title), profileSummary: safeString(me.summary).slice(0, 400),
+    strengths: asArray<string>(me.strengths).slice(0, 3), watchouts: asArray<string>(me.watchouts).slice(0, 3),
+    chapterTitle: cur ? safeString(cur.title) : undefined, chapterHighlight: cur ? safeString(cur.highlight) : undefined,
+    todayTitle: card ? safeString(card.title) : undefined, todayLine: card ? safeString(card.one_line) : undefined,
+  };
+}
+
+function liveWindowsFrom(
+  good: { start: string; end: string; label: string }[],
+  caution: { start: string; end: string; label: string }[],
+): LiveWindow[] {
+  return [
+    ...good.slice(0, 2).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, start: w.start, end: w.end })),
+    ...caution.slice(0, 1).map((w) => ({ id: "c1", kind: "caution" as const, start: w.start, end: w.end, label: w.label })),
+  ];
+}
+
+async function memoryFacts(admin: SupabaseClient, profileId: string): Promise<string[]> {
+  const { data, error } = await admin.from("user_memory").select("fact").eq("profile_id", profileId)
+    .order("created_at", { ascending: false }).limit(8);
+  if (error) return [];
+  return ((data ?? []) as { fact: string }[]).map((r) => r.fact);
+}
+
+function upcomingFrom(facts: V2Facts | null, date: string, n = 10): string[] {
+  return (facts?.days ?? []).map((d) => d.date).filter((d) => d > date).slice(0, n);
+}
+
+function nowIstLabel(tz: string): string {
+  return DateTime.now().setZone(tz).toFormat("ccc d LLL yyyy, HH:mm");
+}
+
+export function todayWindows(profile: ProfRow, date: string) {
+  const tz = profile.current_timezone ?? "Asia/Kolkata";
+  const lat = profile.current_lat != null ? Number(profile.current_lat) : DEFAULT_LAT;
+  const lng = profile.current_lng != null ? Number(profile.current_lng) : DEFAULT_LNG;
+  const sun = sunriseSunset(zonedNoonJsDate(date, tz), lat, lng);
+  return goodAndCautionWindows(divideDaylight(sun, jsWeekday(date, tz)), tz);
+}
+
+// ---------------------------------------------------------------- daily context summary
+
+export type DailySummary = { headline: string; line: string; focus: string; go_slow: string; why_today: string };
+
+function dailyFallback(pack: BirthPackRow | null, facts: V2Facts | null, date: string, locale: AppLocale): DailySummary {
+  const c = (pack?.content ?? {}) as Record<string, unknown>;
+  const card = asArray<Record<string, unknown>>(c.today_cards).find((x) => safeString(x.key) === date);
+  const d = facts?.days.find((x) => x.date === date);
+  const T = {
+    en: { h: "Today at a glance", f: "Use the good time for the one thing that matters most.", g: "Keep big starts out of the caution time.", w: "Moon in" },
+    te: { h: "ఈరోజు ఒక్క చూపులో", f: "ముఖ్యమైన ఒక్క పనిని మంచి టైమ్‌లో చేయండి.", g: "పెద్ద మొదలుపెట్టడాలు జాగ్రత్త టైమ్‌లో వద్దు.", w: "చంద్రుడు" },
+    hi: { h: "आज एक नज़र में", f: "सबसे ज़रूरी काम अच्छे समय में कीजिए।", g: "बड़ी शुरुआत सावधानी वाले समय में मत कीजिए।", w: "चंद्रमा" },
+  }[locale] ?? { h: "Today at a glance", f: "", g: "", w: "" };
+  return {
+    headline: safeString(card?.title) || T.h,
+    line: safeString(card?.one_line) || "",
+    focus: safeString(asArray<string>(card?.better_for)[0]) || T.f,
+    go_slow: safeString(asArray<string>(card?.be_careful)[0]) || T.g,
+    why_today: d ? `${d.tithi} · ${d.nakshatra} · Tara ${d.tara}` : "",
+  };
+}
+
+const DAILY_SCHEMA = {
+  type: "object",
+  properties: {
+    headline: { type: "string", description: "max 60 characters, the day's theme" },
+    line: { type: "string", description: "one sentence, max 160 characters" },
+    focus: { type: "string", description: "what to lean into today, max 90 characters" },
+    go_slow: { type: "string", description: "what to keep light today, max 90 characters" },
+    why_today: { type: "string", description: "the traditional reason in plain words (tithi / nakshatra / tara / chapter), max 200 characters" },
+  },
+  required: ["headline", "line", "focus", "go_slow", "why_today"],
+  additionalProperties: false,
+};
+
+/**
+ * One short daily summary per profile + chart + language + date + goals, reused by Today,
+ * Decode, Calendar, Life, Ask and the morning brief. `generate:false` only reads.
+ */
+export async function getDailyContext(
+  admin: SupabaseClient,
+  profile: ProfRow,
+  bi: BioRow | null,
+  locale: AppLocale,
+  date: string,
+  opts: { generate: boolean; pack?: BirthPackRow | null; subject?: string | null; timeoutMs?: number },
+): Promise<{ summary: DailySummary; source: string } | null> {
+  if (!bi) return null;
+  const subject = opts.subject ?? null;
+  const memory = subject ? [] : await memoryFacts(admin, profile.id);
+  const chartHash = (await birthHashFor(bi, subject)).slice(0, 24);
+  const goalsHash = memory.length ? (await sha256Hex(memory.join("|"))).slice(0, 16) : "";
+  const { data: row } = await admin.from("daily_context").select("summary, source")
+    .eq("profile_id", profile.id).eq("birth_input_id", bi.id).eq("locale", locale).eq("for_date", date)
+    .eq("chart_hash", chartHash).eq("goals_hash", goalsHash).maybeSingle();
+  if (row) return row as { summary: DailySummary; source: string };
+  if (!opts.generate) return null;
+  const pack = opts.pack !== undefined ? opts.pack : await loadBirthPack(admin, profile, bi, locale, date);
+  const facts = liveFacts(profile, bi, locale, date, subject);
+  const fallback = dailyFallback(pack, facts, date, locale);
+  if (!llmConfigured()) return { summary: fallback, source: "deterministic" };
+  const { good, caution } = todayWindows(profile, date);
+  const ctx: LiveContextInput = {
+    locale, facts, reading: liveReadingCopy(pack, date),
+    subject: { name: subject ?? profile.display_name ?? null, isOwner: !subject, isChild: calculateAge(bi.date_of_birth) < 13 },
+    date, nowIst: nowIstLabel(profile.current_timezone ?? "Asia/Kolkata"), windows: liveWindowsFrom(good, caution),
+    screen: "today", memory, history: [], upcomingDates: upcomingFrom(facts, date),
+  };
+  const t0 = Date.now();
+  try {
+    const r = await createResponse({
+      system: liveSystem(locale, [
+        "TASK: write today's short context summary for this person (shown on every screen and in the morning notification).",
+        "Ground it in today's day row in the CHART CARD and the current chapter. No clock times, no dates. Keep each field short.",
+      ]),
+      prefix: chartCard(ctx),
+      user: liveUserMessage(ctx, "Summarise today for me.", { intent: "other", sensitive: null }),
+      schemaName: "daily_context", schema: DAILY_SCHEMA, reasoningEffort: "none", maxOutputTokens: 500,
+      timeoutMs: opts.timeoutMs ?? 15_000, promptCacheKey: `dc:${bi.id}:${date}`,
+    });
+    const parsed = JSON.parse(r.output_text ?? "{}") as Partial<DailySummary>;
+    const allowed = allowedDates(facts, date, ctx.upcomingDates);
+    const out = { ...fallback };
+    let hits = 0;
+    for (const k of Object.keys(fallback) as (keyof DailySummary)[]) {
+      const g = guardText(safeString(parsed[k]).slice(0, 220), locale, allowed);
+      if (g.hits.length || !g.text) hits += g.hits.length;
+      else out[k] = g.text;
+    }
+    await logLlmCall(admin, {
+      job_id: null, profile_id: profile.id, purpose: "daily_context", model: r.model ?? readingModel(), response_id: r.id, locale,
+      status: "completed", usage: r.usage, latency_ms: Date.now() - t0, meta: { guard_hits: hits },
+    }).catch(() => 0);
+    await admin.from("daily_context").upsert({
+      profile_id: profile.id, birth_input_id: bi.id, locale, for_date: date, chart_hash: chartHash, goals_hash: goalsHash,
+      summary: out, source: "llm", model: r.model ?? readingModel(),
+    }, { onConflict: "profile_id,birth_input_id,locale,for_date,chart_hash,goals_hash", ignoreDuplicates: true });
+    return { summary: out, source: "llm" };
+  } catch (e) {
+    await logLlmCall(admin, {
+      job_id: null, profile_id: profile.id, purpose: "daily_context", model: readingModel(), locale,
+      status: "error", error: errorMessage(e).slice(0, 300), latency_ms: Date.now() - t0,
+    }).catch(() => 0);
+    return { summary: fallback, source: "deterministic" };
+  }
+}
+
+// ---------------------------------------------------------------- explain (three layers)
+
+const EXPLAIN_SCHEMA = {
+  type: "object",
+  properties: {
+    simple: { type: "string", description: "what it means for this person, 1-2 short sentences" },
+    practical: { type: "string", description: "what to do with it today, 1-2 short sentences" },
+  },
+  required: ["simple", "practical"],
+  additionalProperties: false,
+};
+
+async function explainTerm(admin: SupabaseClient, supabase: SupabaseClient, profile: ProfRow, body: Record<string, unknown>) {
+  const locale = requestLocale(body, profile);
+  const term = String(body.term ?? "");
+  const base = glossEntry(term, locale);
+  if (!base) throw new ActionError("unknown_term", "Unknown term", 400);
+  const screen = normalizeScreen(body.screen);
+  const value = safeString(body.value).slice(0, 80);
+  const out = { term, screen, title: base.title, simple: base.simple, traditional: base.traditional, practical: base.practical, source: "glossary" };
+  if (!askLlmEnabled()) return out;
+  const tz = profile.current_timezone ?? "Asia/Kolkata";
+  const date = todayInTimezone(tz);
+  const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
+  const bi = rawBi ? await ensureBirthPlacePrecision(supabase, rawBi) : null;
+  const key = "explain:" + (await sha256Hex([term, screen, value, bi?.id ?? "none", locale, date, LIVE_PROMPT_VERSION].join("|")));
+  const { data: hit } = await admin.from("ai_cache").select("value").eq("key", key).maybeSingle();
+  if (hit) return { ...out, ...(hit as { value: Record<string, string> }).value, source: "llm_cached" };
+  const scope = await resolveChatScope(supabase, profile.id, body);
+  const subject = scope.isFriend && bi ? await chartSubjectName(admin, profile, bi) : null;
+  const facts = liveFacts(profile, bi, locale, date, subject);
+  const { good, caution } = todayWindows(profile, date);
+  const ctx: LiveContextInput = {
+    locale, facts, reading: null,
+    subject: { name: subject ?? profile.display_name ?? null, isOwner: !subject, isChild: bi ? calculateAge(bi.date_of_birth) < 13 : false },
+    date, nowIst: nowIstLabel(tz), windows: liveWindowsFrom(good, caution), screen, memory: [], history: [], upcomingDates: upcomingFrom(facts, date),
+  };
+  const bond = BOND_TERMS.has(term as never);
+  const t0 = Date.now();
+  try {
+    const r = await createResponse({
+      system: liveSystem(locale, [
+        `TASK: explain "${base.title}" to this person on the ${screen} screen. Keep the traditional term; explain it plainly.`,
+        `GLOSSARY ENTRY (truth, do not contradict): simple=${base.simple} | traditional=${base.traditional} | practical=${base.practical}`,
+        bond
+          ? "This is a compatibility (koota) factor: explain what it looks at and how to use it in a calm conversation. Never predict whether a relationship will succeed or fail; no verdicts, no 'good match'/'bad match'."
+          : "Tie 'simple' to the value shown on screen and today's row in the CHART CARD when relevant; 'practical' is one small, real-world step.",
+      ]),
+      prefix: chartCard(ctx),
+      user: JSON.stringify({ term: base.title, value_on_screen: value || null, today: date }),
+      schemaName: "explain", schema: EXPLAIN_SCHEMA, reasoningEffort: "none", maxOutputTokens: 400, timeoutMs: 12_000,
+      promptCacheKey: `ex:${bi?.id ?? profile.id}:${date}`,
+    });
+    const p = JSON.parse(r.output_text ?? "{}") as { simple?: string; practical?: string };
+    const allowed = allowedDates(facts, date, ctx.upcomingDates);
+    const s = guardText(safeString(p.simple).slice(0, 400), locale, allowed);
+    const pr = guardText(safeString(p.practical).slice(0, 400), locale, allowed);
+    const value2 = {
+      simple: s.hits.length || !s.text ? base.simple : s.text,
+      practical: pr.hits.length || !pr.text ? base.practical : pr.text,
+    };
+    await logLlmCall(admin, {
+      job_id: null, profile_id: profile.id, purpose: "explain", model: r.model ?? readingModel(), response_id: r.id, locale,
+      status: "completed", usage: r.usage, latency_ms: Date.now() - t0, meta: { term, screen },
+    }).catch(() => 0);
+    await admin.from("ai_cache").upsert({ key, value: value2 }, { onConflict: "key" });
+    return { ...out, ...value2, source: "llm" };
+  } catch (e) {
+    await logLlmCall(admin, {
+      job_id: null, profile_id: profile.id, purpose: "explain", model: readingModel(), locale,
+      status: "error", error: errorMessage(e).slice(0, 300),
+    }).catch(() => 0);
+    return out;
+  }
+}
+
+// ---------------------------------------------------------------- memory + saved events
+
+async function liveCrudAction(action: string, admin: SupabaseClient, profile: ProfRow, body: Record<string, unknown>): Promise<unknown> {
+  if (action === "memory_list") {
+    const { data, error } = await admin.from("user_memory").select("id, fact, source, created_at")
+      .eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(50);
+    if (error) throw error;
+    return { items: data ?? [] };
+  }
+  if (action === "memory_save") {
+    const fact = safeString(body.fact).replace(/\s+/g, " ").trim().slice(0, 200);
+    if (fact.length < 2) throw new ActionError("invalid_fact", "Write a short fact to remember", 400);
+    const { count } = await admin.from("user_memory").select("id", { count: "exact", head: true }).eq("profile_id", profile.id);
+    if ((count ?? 0) >= 50) throw new ActionError("memory_full", "You can keep up to 50 remembered facts", 400);
+    const { data: dup } = await admin.from("user_memory").select("id").eq("profile_id", profile.id).eq("fact", fact).maybeSingle();
+    if (dup) return { item: dup, duplicate: true };
+    const source = body.source === "settings" ? "settings" : "ask";
+    const { data, error } = await admin.from("user_memory").insert({ profile_id: profile.id, fact, source }).select("id, fact, source, created_at").single();
+    if (error) throw error;
+    return { item: data };
+  }
+  if (action === "memory_delete") {
+    const id = String(body.id ?? "");
+    const { error } = await admin.from("user_memory").delete().eq("id", id).eq("profile_id", profile.id);
+    if (error) throw error;
+    return { ok: true };
+  }
+  if (action === "saved_event_list") {
+    const from = DateTime.now().setZone("Asia/Kolkata").minus({ days: 1 }).toISODate()!;
+    const { data, error } = await admin.from("saved_events").select("id, title, event_date, purpose, window_start, window_end, client_id, remind, created_at")
+      .eq("profile_id", profile.id).gte("event_date", from).order("event_date").limit(100);
+    if (error) throw error;
+    return { items: data ?? [] };
+  }
+  if (action === "saved_event_save") {
+    const title = safeString(body.title).trim().slice(0, 120);
+    const eventDate = String(body.event_date ?? "");
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || !DateTime.fromISO(eventDate).isValid) {
+      throw new ActionError("invalid_event", "A title and a valid date are needed", 400);
+    }
+    const t = (v: unknown) => /^\d{1,2}:\d{2}$/.test(String(v ?? "")) ? String(v) : null;
+    const row = {
+      profile_id: profile.id, title, event_date: eventDate,
+      purpose: safeString(body.purpose).slice(0, 40) || null,
+      window_start: t(body.window_start), window_end: t(body.window_end),
+      client_id: safeString(body.client_id).slice(0, 64) || crypto.randomUUID(),
+      remind: body.remind !== false,
+    };
+    const { data, error } = await admin.from("saved_events").upsert(row, { onConflict: "profile_id,client_id" })
+      .select("id, title, event_date, purpose, window_start, window_end, client_id, remind").single();
+    if (error) throw error;
+    return { item: data };
+  }
+  if (action === "saved_event_delete") {
+    let q = admin.from("saved_events").delete().eq("profile_id", profile.id);
+    if (body.id) q = q.eq("id", String(body.id));
+    else if (body.client_id) q = q.eq("client_id", String(body.client_id));
+    else throw new ActionError("missing_id", "id or client_id required", 400);
+    const { error } = await q;
+    if (error) throw error;
+    return { ok: true };
+  }
+  throw new ActionError("unknown_action", "Unknown action", 400);
+}
+
+export const LIVE_ACTIONS = new Set([
+  "explain_get", "daily_context_get", "memory_list", "memory_save", "memory_delete",
+  "saved_event_list", "saved_event_save", "saved_event_delete",
+]);
+
+async function handleLiveAction(action: string, supabase: SupabaseClient, admin: SupabaseClient, profile: ProfRow, body: Record<string, unknown>) {
+  if (action === "explain_get") return await explainTerm(admin, supabase, profile, body);
+  if (action === "daily_context_get") {
+    const locale = requestLocale(body, profile);
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
+    const date = todayInTimezone(tz);
+    const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
+    const bi = rawBi ? await ensureBirthPlacePrecision(supabase, rawBi) : null;
+    const scope = await resolveChatScope(supabase, profile.id, body);
+    const subject = scope.isFriend && bi ? await chartSubjectName(admin, profile, bi) : null;
+    const r = await getDailyContext(admin, profile, bi, locale, date, { generate: true, subject });
+    const { good, caution } = todayWindows(profile, date);
+    return {
+      date, locale, source: r?.source ?? "none", summary: r?.summary ?? null,
+      windows: { good: good.slice(0, 2), caution: caution.slice(0, 1) },
+    };
+  }
+  return await liveCrudAction(action, admin, profile, body);
+}
+
+// ---------------------------------------------------------------- streaming Ask (SSE)
+
+function sseHeaders(cors: Record<string, string>): Record<string, string> {
+  return { ...cors, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" };
+}
+
+const ASK_STREAM_NOTE: Record<AppLocale, string> = {
+  en: "Traditional timing is one view; check the practical side too.",
+  te: "సంప్రదాయ టైమింగ్ ఒక దృష్టి మాత్రమే; ప్రాక్టికల్ విషయాలు కూడా చూసుకోండి.",
+  hi: "पारंपरिक समय एक नज़रिया है; व्यावहारिक बातें भी ज़रूर देखिए।",
+};
+
+/**
+ * Streamed Ask. Events: `meta` (session + live windows), `delta` (guarded text to append),
+ * `done` (the saved card, chips, remember candidates, timings), `error`. The saved answer is
+ * exactly the text the user saw.
+ */
+export async function askStreamResponse(
+  supabase: SupabaseClient,
+  user: User,
+  body: Record<string, unknown>,
+  admin: SupabaseClient,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const t0 = Date.now();
+  const profile = requireProfile(await getProfileForUser(supabase, user), "ask_stream");
+  if (typeof body.locale === "string" && body.locale) {
+    const asked = normalizeLocale(body.locale);
+    const saved = normalizeLocale(String(profile.language_code ?? "en"));
+    if (asked !== saved) {
+      const acc = await getSubscriptionAccess(supabase, profile.id);
+      if (!acc.isPro) body.locale = saved;
+    }
+  }
+  const p = await prepareAsk(supabase, admin, profile, body);
+  const { locale, question, targetDate, access, askQuotaResult, askQuota, bi, scope, sessionId, good, caution, goodWindows, cautionWindows, currentLord, currentSubLord, pack, history } = p;
+  const screen = normalizeScreen(body.screen);
+  const cls = classifyQuestion(question);
+  const tz = profile.current_timezone ?? "Asia/Kolkata";
+  const subject = scope.isFriend && bi ? await chartSubjectName(admin, profile, bi) : null;
+  const enc = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false;
+      const send = (event: string, data: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          closed = true;
+        }
+      };
+      send("meta", { sessionId, intent: cls.intent, screen, locale, goodWindows, cautionWindows, prepMs: Date.now() - t0 });
+      let shown = "";
+      let firstShownMs: number | null = null;
+      const emit = (t: string) => {
+        if (!t) return;
+        if (firstShownMs == null) firstShownMs = Date.now() - t0;
+        shown += t;
+        send("delta", { t });
+      };
+      const template = resolveAskFromPack(pack?.content, question, locale, goodWindows, cautionWindows);
+      let copy: AskAnswerCopy = template;
+      let llm: Record<string, unknown> | null = null;
+      let busy = false;
+      let partial = false;
+      let remember: string[] = [];
+      let suggestedDate: string | null = null;
+      let guardHits: GuardHit[] = [];
+      let cacheKey: string | null = null;
+      const facts = liveFacts(profile, bi, locale, targetDate, subject);
+      try {
+        if (askLlmEnabled()) {
+          cacheKey = await sha256Hex([bi?.id ?? "none", locale, targetDate, normalizeQuestion(question)].join("|"));
+          const cached = await findCachedAsk(admin, profile.id, cacheKey);
+          if (cached) {
+            emit(cached.answer.direct_answer);
+            copy = cached.answer;
+            llm = { ...cached.meta, cached: true };
+            suggestedDate = (cached.meta.suggested_date as string | null) ?? null;
+            await releaseQuota(admin, profile.id, "ask", askQuotaResult.key);
+          } else {
+            const windows = liveWindowsFrom(good, caution);
+            const upcoming = upcomingFrom(facts, targetDate);
+            const [daily, memory] = await Promise.all([
+              getDailyContext(admin, profile, bi, locale, targetDate, { generate: false, pack, subject }).catch(() => null),
+              scope.isFriend ? Promise.resolve([] as string[]) : memoryFacts(admin, profile.id),
+            ]);
+            const ctx: LiveContextInput = {
+              locale, facts, reading: liveReadingCopy(pack, targetDate),
+              subject: { name: subject ?? profile.display_name ?? null, isOwner: !subject, isChild: bi ? calculateAge(bi.date_of_birth) < 13 : false },
+              date: targetDate, nowIst: nowIstLabel(tz), windows, screen,
+              dailySummary: daily ? { headline: daily.summary.headline, line: daily.summary.line } : null,
+              memory, history, upcomingDates: upcoming,
+            };
+            const allowed = allowedDates(facts, targetDate, upcoming);
+            let resp: ResponseObject | null = null;
+            let lastErr: unknown = null;
+            let modelFirstMs: number | null = null;
+            let guard: StreamGuard | null = null;
+            for (let attempt = 0; attempt < 2 && !resp; attempt++) {
+              guard = new StreamGuard(locale, allowed, Boolean(cls.sensitive), emit);
+              const g = guard;
+              const fs = new JsonFieldStream("answer", (t) => g.push(t));
+              try {
+                resp = await streamResponse({
+                  system: liveSystem(locale),
+                  prefix: chartCard(ctx),
+                  user: liveUserMessage(ctx, question, cls),
+                  schemaName: "live_ask", schema: liveAskSchema(ctx),
+                  reasoningEffort: "none", maxOutputTokens: 900, timeoutMs: 30_000,
+                  promptCacheKey: `ask:${bi?.id ?? profile.id}:${targetDate}:${locale}`,
+                }, { onDelta: (d) => fs.push(d), onFirstToken: (ms) => (modelFirstMs = ms) });
+              } catch (e) {
+                lastErr = e;
+                // One bounded retry, only if nothing reached the screen yet.
+                if (shown || attempt > 0 || !isTransientLlmError(errorMessage(e))) break;
+                await new Promise((r) => setTimeout(r, 800));
+              }
+            }
+            const shownByModel = guard ? guard.end() : "";
+            guardHits = guard?.hits ?? [];
+            if (resp) {
+              let parsed: Record<string, unknown> = {};
+              try {
+                parsed = JSON.parse(resp.output_text ?? "{}");
+              } catch { /* keep what was shown */ }
+              if (!shownByModel) emit(template.direct_answer);
+              const pick = parsed.best_window === "g2" ? good[1] ?? good[0] : parsed.best_window === "g1" ? good[0] : null;
+              const cw = parsed.caution_window === "c1" ? caution[0] : null;
+              const al = guardText(safeString(parsed.action_line).slice(0, 200), locale, allowed, Boolean(cls.sensitive));
+              const sd = safeString(parsed.suggested_date);
+              suggestedDate = upcoming.includes(sd) ? sd : null;
+              remember = scope.isFriend ? [] : asArray<string>(parsed.remember).map((x) => safeString(x).trim())
+                .filter((x) => x.length >= 3 && x.length <= 120 && guardText(x, locale, allowed).hits.length === 0).slice(0, 2);
+              const lp = locale === "te" ? { good: "మంచి టైమ్", caution: "జాగ్రత్త టైమ్" } : locale === "hi" ? { good: "अच्छा समय", caution: "सावधानी समय" } : { good: "Good time", caution: "Caution time" };
+              copy = {
+                direct_answer: shown.trim(),
+                best_time: pick ? `${lp.good}: ${formatAskWindow(pick)}` : "",
+                caution_time: cw ? `${lp.caution}: ${formatAskWindow({ ...cw, label: RAHU_LABEL[locale] ?? cw.label }, true)}` : "",
+                better_option: "",
+                simple_why: "",
+                action_line: al.hits.length ? "" : al.text,
+                share_hook: "",
+              };
+              const cost = await logLlmCall(admin, {
+                job_id: null, profile_id: profile.id, purpose: "ask", model: resp.model ?? readingModel(), response_id: resp.id, locale,
+                status: "completed", usage: resp.usage, latency_ms: Date.now() - t0,
+                meta: { stream: true, intent: cls.intent, sensitive: cls.sensitive, screen, first_token_ms: modelFirstMs, first_shown_ms: firstShownMs, guard_hits: guardHits.length },
+              }).catch(() => 0);
+              llm = {
+                model: resp.model ?? readingModel(), response_id: resp.id, topic: safeString(parsed.topic) || "other", suggested_date: suggestedDate,
+                cost_usd: cost, latency_ms: Date.now() - t0, first_token_ms: modelFirstMs, first_shown_ms: firstShownMs,
+                stream: true, intent: cls.intent, guard_hits: guardHits.length, prompt_version: LIVE_PROMPT_VERSION,
+              };
+            } else {
+              const em = errorMessage(lastErr);
+              busy = isQuotaCap(em) || isTransientLlmError(em);
+              partial = Boolean(shown);
+              if (!shown) emit(template.direct_answer);
+              copy = partial ? { ...template, direct_answer: shown.trim() } : template;
+              await logLlmCall(admin, {
+                job_id: null, profile_id: profile.id, purpose: "ask", model: readingModel(), locale,
+                status: "error", error: em.slice(0, 300), latency_ms: Date.now() - t0, meta: { stream: true, partial },
+              }).catch(() => 0);
+              await releaseQuota(admin, profile.id, "ask", askQuotaResult.key);
+              askQuota.remaining = askQuota.remaining == null ? null : askQuota.remaining + 1;
+            }
+          }
+        } else {
+          emit(template.direct_answer);
+        }
+        if (cls.sensitive && llm && !llm.cached) {
+          const note = ASK_STREAM_NOTE[locale] ?? ASK_STREAM_NOTE.en;
+          if (!shown.includes(note)) {
+            emit(" " + note);
+            copy = { ...copy, direct_answer: shown.trim() };
+          }
+        }
+        const provenance = llm
+          ? buildProvenance({ promptVersion: LIVE_PROMPT_VERSION, provider: providerOf(String(llm.model ?? readingModel())), model: String(llm.model ?? readingModel()), source: "llm", factSignature: cacheKey ?? "" })
+          : buildProvenance({ promptVersion: ASK_PROMPT_VERSION, provider: "cached_pack", model: "none", source: "deterministic", factSignature: buildFactSignature([profile.id, bi?.id, sessionId, locale, question, currentLord, currentSubLord]) });
+        const chips = followupChips(cls.intent, screen, locale, { suggestedDate });
+        const { data: saved, error: saveErr } = await supabase.from("chat_messages").insert({
+          session_id: sessionId, profile_id: profile.id, role: "assistant", content: copy.direct_answer,
+          payload: {
+            answer: copy, provenance, ...(cacheKey && llm && !partial ? { cache_key: cacheKey } : {}), ...(llm ? { llm } : {}),
+            chips, remember, stream: true,
+            context: { goodWindows, cautionWindows, currentLord, currentSubLord, screen, engineMode: bi ? resolveEngineMode(bi) : "general_panchanga" },
+          },
+        }).select("id").single();
+        if (saveErr) throw saveErr;
+        await supabase.from("chat_sessions").update({ updated_at: new Date().toISOString(), language_code: locale })
+          .eq("id", sessionId).eq("profile_id", profile.id);
+        send("done", {
+          sessionId, birthInputId: scope.birthInputId, answerId: (saved as { id: string }).id,
+          directAnswer: copy.direct_answer, bestTime: copy.best_time, cautionTime: copy.caution_time,
+          betterOption: copy.better_option, simpleWhy: copy.simple_why, actionLine: copy.action_line, shareHook: copy.share_hook,
+          goodWindows, cautionWindows, provenance, suggestedDate, aiAnswer: Boolean(llm), chips, remember,
+          intent: cls.intent, partial, ...(busy ? { llmBusy: true, retryAfterS: 30 } : {}),
+          timing: { first_shown_ms: firstShownMs, total_ms: Date.now() - t0, first_token_ms: llm?.first_token_ms ?? null },
+          locale,
+          askAccess: { planCode: askQuota.planCode, freeRemainingToday: askQuota.remaining, isPlus: access.isPlus, isPro: access.isPro },
+          access: buildAccessPayload(access),
+        });
+      } catch (e) {
+        await logAppEvent(admin, profile.id, "api", "error", errorMessage(e), e instanceof Error ? e.stack ?? "" : "", { action: "ask_stream" }).catch(() => {});
+        send("error", { error: "Something went wrong. Please try again.", error_code: "internal_error", shown: Boolean(shown) });
+      } finally {
+        closed = true;
+        try {
+          controller.close();
+        } catch { /* already closed */ }
+      }
+    },
+  });
+  return new Response(stream, { headers: sseHeaders(cors) });
+}
+
+// ---------------------------------------------------------------- push hooks (injected by index.ts)
+
+const PROFILE_COLS = "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code, explanation_mode";
+
+/** Morning brief line from the daily context summary (generated on time; null = template). */
+export async function pushBriefLine(admin: SupabaseClient, profileId: string, localeRaw: string, dateStr: string): Promise<{ title?: string; line: string } | null> {
+  if (!askLlmEnabled()) return null;
+  const { data: prof } = await admin.from("profiles").select(PROFILE_COLS).eq("id", profileId).maybeSingle();
+  if (!prof) return null;
+  const bi = await getLatestBirthInput(admin, profileId).catch(() => null);
+  if (!bi) return null;
+  const locale = normalizeLocale(localeRaw);
+  const r = await getDailyContext(admin, prof as ProfRow, bi, locale, dateStr, { generate: true, timeoutMs: 7_000 });
+  if (!r || r.source !== "llm") return null;
+  return { title: r.summary.headline, line: r.summary.line || r.summary.focus };
+}
+
+export async function pushSavedEvents(admin: SupabaseClient, profileId: string, dateStr: string) {
+  const { data, error } = await admin.from("saved_events").select("id, title, event_date, window_start, window_end")
+    .eq("profile_id", profileId).eq("event_date", dateStr).eq("remind", true).limit(3);
+  if (error) return [];
+  return (data ?? []) as { id: string; title: string; event_date: string; window_start: string | null; window_end: string | null }[];
 }

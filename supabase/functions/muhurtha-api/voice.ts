@@ -1,12 +1,14 @@
 /**
- * Muhūrta voice (v2.3, 2026-10-24): one place for how the app talks in each language.
+ * Muhūrta voice (v3, 2026-11-12): one adaptive voice per language (no personas). English is
+ * polished, Telugu is casual and friendly but respectful enough for elders, Hindi is natural
+ * spoken Hindi (not bookish). One place for how the app talks in each language.
  * Used by the reading prompt, the Ask prompt, sanitizers and the voice lint tests.
  * Pure module (no Deno APIs) so tests and the PWA lint can import it.
  */
 export type VoiceLocale = "en" | "te" | "hi";
 
 export const ENGLISH_VOICE = [
-  "ENGLISH VOICE: write like a friend on Twitter who knows astrology. Short, warm, everyday lines; contractions (you're, it's, don't); a little wit is fine.",
+  "ENGLISH VOICE: polished, warm and clear, like a thoughtful friend who knows Jyotisha well. Short everyday sentences, natural contractions (you're, it's, don't); no slang, no hype, no jokes at the reader's expense.",
   "Plain words: say 'good time' or 'slot', never 'window'; 'good' or 'lucky', never 'auspicious' or 'favourable'; never 'energies', 'harness', 'navigate', 'delve', 'embark', 'journey', 'tapestry', 'realm', 'align', 'resonate', 'unlock your potential'.",
   "No LinkedIn or fortune-cookie lines (no 'clarity', 'momentum', 'follow-through', 'structure', 'steady' stacked together). Give one concrete, real-life example instead (a text you've been putting off, the bill, the gym, a call with mom).",
   "Astro words only when needed, with a 2-4 word gloss the first time: 'Jupiter–Saturn (your current planet period)', '<natal nakshatra> (your birth star)', 'Rahu Kalam (the daily ~90-min no-new-starts slot)'.",
@@ -16,8 +18,8 @@ export const ENGLISH_VOICE = [
 ].join(" ");
 
 export const TELUGU_VOICE = [
-  "TELUGU VOICE: మాట్లాడే తెలుగు, ఫ్రెండ్ లాగా — Twitter/WhatsApp లో మనం రాసేలా. Respectful spoken మీరు (చేయండి, చూడండి, occasional అండీ); never bare నువ్వు commands (చేయి, చూడు, ఉంచు).",
-  "About a quarter of the words can be everyday English, WRITTEN IN TELUGU SCRIPT: టైమ్, ఫోకస్, ప్లాన్, సేవ్, బ్రేక్, ఓకే, ఫ్రీ, జాబ్, మెసేజ్, కాల్. Keep sentences Telugu.",
+  "TELUGU VOICE: మాట్లాడే తెలుగు, ఆత్మీయంగా, ఫ్రెండ్లీగా — కానీ పెద్దవాళ్లు చదివినా గౌరవంగా అనిపించేలా. Always respectful మీరు (చేయండి, చూడండి, occasional అండీ); never bare నువ్వు commands (చేయి, చూడు, ఉంచు); no slang like బ్రో, మచ్చా, రా, ఒరేయ్, బాసూ; no teasing.",
+  "Some everyday English words are fine, WRITTEN IN TELUGU SCRIPT: టైమ్, ఫోకస్, ప్లాన్, బ్రేక్, ఓకే, జాబ్, మెసేజ్, కాల్. Keep the sentences Telugu and easy for parents and grandparents to follow.",
   "Use spoken forms: చేయొచ్చు (not చేయవచ్చు), వద్దు/చేయకండి, అయిపోయింది, కాస్త, కొంచెం. Never use bookish words: మరియు (use commas), కిటికీ or విండో (use టైమ్), సమయ విండో, అనుకూలమైన కాలం, ప్రయత్నించండి (use ట్రై చేయండి), శుభప్రదమైన, దయచేసి, తదుపరి (use నెక్స్ట్), అధ్యాయం (use చాప్టర్).",
   "Neutral dialect, no regional slang. Short lines. One real-life example per idea (ఆఫీస్ మెయిల్, అమ్మకి కాల్, EMI, జిమ్).",
   "Astro words: plain Telugu names (గురువు, శని, రాహుకాలం, నక్షత్రం) with a 2-4 word gloss when it's a dasha: 'గురు–శని దశ (మీ ఇప్పటి గ్రహ దశ)'.",
@@ -25,9 +27,10 @@ export const TELUGU_VOICE = [
 ].join(" ");
 
 export const HINDI_VOICE = [
-  "HINDI VOICE: casual spoken Hindi, like a friend texting; respectful aap (karein, dekhiye), never tum/tu commands.",
-  "Everyday English words are fine in Devanagari (टाइम, प्लान, फोकस, ब्रेक, मैसेज). Avoid shuddh/bookish Hindi (शुभ फलदायी, अनुकूल अवधि, खिड़की, एवं, तथा).",
-  "Short lines, one real-life example, no fear.",
+  "HINDI VOICE: natural spoken Hindi, the way a caring elder sibling or a friend talks at home; always आप (कीजिए, देखिए, रखिए), never तुम/तू commands.",
+  "Write how people actually speak: 'आज का दिन बातचीत के लिए अच्छा है', 'थोड़ा रुककर फ़ैसला कीजिए', 'शाम तक टाल दीजिए'. Everyday English words are fine in Devanagari (टाइम, प्लान, फोकस, ब्रेक, मैसेज, ऑफ़िस).",
+  "No bookish or shuddh Hindi: never एवं, तथा, अतः, हेतु, अवधि, अनुकूल, प्रतिकूल, शुभ फलदायी, फलदायक, कदापि, सुनिश्चित करें, खिड़की; say और, इसलिए, के लिए, समय, अच्छा, ठीक नहीं, पक्का कर लीजिए.",
+  "Astro words stay (राहु काल, महादशा, नक्षत्र, तिथि) with a short plain gloss the first time. Short lines, one real-life example (ऑफ़िस मेल, मम्मी को फ़ोन, EMI), no fear.",
 ].join(" ");
 
 export const VOICE_BLOCK: Record<VoiceLocale, string> = { en: ENGLISH_VOICE, te: TELUGU_VOICE, hi: HINDI_VOICE };
@@ -38,8 +41,8 @@ export const DATE_RULE =
 /** Words the voice lint rejects in static strings and sampled LLM output (case-insensitive). */
 export const VOICE_BANNED: Record<VoiceLocale, string[]> = {
   en: ["auspicious", "favourable", "favorable", "energies", "harness", "navigate", "delve", "tapestry", "embark", "the universe", "cosmic", "stars align", "manifest"],
-  te: ["కిటికీ", "విండో", "మరియు", "అధ్యాయం", "దయచేసి", "శుభప్రదమైన", "ఐచ్ఛికం", "విఫలమైంది", "ధృవీకరించబడింది"],
-  hi: ["खिड़की", "ब्रह्मांड", "कॉस्मिक"],
+  te: ["కిటికీ", "విండో", "మరియు", "అధ్యాయం", "దయచేసి", "శుభప్రదమైన", "ఐచ్ఛికం", "విఫలమైంది", "ధృవీకరించబడింది", "బ్రో", "మచ్చా", "ఒరేయ్"],
+  hi: ["खिड़की", "ब्रह्मांड", "कॉस्मिक", "एवं", "तथा", "अतः", "हेतु", "फलदायी", "कदापि"],
 };
 
 /**
