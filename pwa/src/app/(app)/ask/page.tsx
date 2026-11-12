@@ -14,6 +14,9 @@ import type { AskMessage } from "@/lib/types";
 import { clipWords, dedupeSessions, mergeStarters, pickKeyDay, plainStarter } from "@/lib/ask-starters";
 import { bondPost, shortDate, type CalDay } from "@/lib/bond";
 import { fill } from "@/lib/messages-bond";
+import { askStream } from "@/lib/ask-stream";
+import { TypingDots } from "@/components/ask/typing-dots";
+import { ExplainButton } from "@/components/explainer/explain-sheet";
 
 type SessionRow = { id: string; title: string; updatedAt: string };
 type Thread = { messages: AskMessage[]; sessionId?: string; sessions: SessionRow[] };
@@ -28,6 +31,7 @@ const askThreads = new Map<string, Thread>();
 function AskInner() {
   const params = useSearchParams();
   const seed = params.get("q") ?? "";
+  const screen = params.get("screen") ?? "ask";
   const { t, locale } = useLocale();
   const { openPaywall } = usePaywall();
   const engineBody = useEngineBody();
@@ -148,6 +152,57 @@ function AskInner() {
     setBusy(true);
     setRetryQ(null);
 
+    // Streamed answer first (typing dots, then words as they arrive); classic Ask if unavailable.
+    const streamMsgId = crypto.randomUUID();
+    const patchStream = (fn: (m: AskMessage) => AskMessage | null) =>
+      updateThread(key, (t) => ({
+        ...t,
+        messages: t.messages.flatMap((m) => {
+          if (m.id !== streamMsgId) return [m];
+          const next = fn(m);
+          return next ? [next] : [];
+        }),
+      }));
+    updateThread(key, (t) => ({
+      ...t,
+      messages: [...t.messages, { id: streamMsgId, role: "assistant", text: "", streaming: true }],
+    }));
+    try {
+      const mode = await askStream(
+        engineBody("ask_stream", { question: q, screen, ...(sessionId ? { session_id: sessionId } : {}) }),
+        {
+          onMeta: (m) => {
+            const sid = m.sessionId?.toString();
+            if (sid) updateThread(key, (t) => ({ ...t, sessionId: sid }));
+          },
+          onDelta: (txt) => patchStream((m) => ({ ...m, text: m.text + txt })),
+          onDone: (json) => {
+            if (json.llmBusy === true) setRetryQ({ q, s: Number(json.retryAfterS ?? 30) || 30 });
+            const parsed = parseAskAnswer(json);
+            updateThread(key, (t) => ({ ...t, sessionId: parsed.sessionId || t.sessionId }));
+            patchStream((m) => ({ ...m, streaming: false, text: parsed.directAnswer || m.text, meta: parsed }));
+          },
+          onError: (e) => {
+            const errText =
+              e.error_code === "free_ask_limit_reached"
+                ? t("ask.limit")
+                : e.error_code === "ask_fair_use_reached"
+                  ? t("billing.askFair")
+                  : e.error || "Ask failed. Try again.";
+            if (e.error_code === "free_ask_limit_reached") openPaywall("ask");
+            patchStream((m) => (m.text ? { ...m, streaming: false, text: `${m.text}\n\n${t("live.partial")}` } : { ...m, streaming: false, text: errText }));
+          },
+        },
+      );
+      if (mode === "ok") {
+        setBusy(false);
+        return;
+      }
+      patchStream(() => null);
+    } catch {
+      patchStream(() => null);
+    }
+
     try {
       const res = await fetch("/api/engine", {
         method: "POST",
@@ -203,6 +258,9 @@ function AskInner() {
         title={t("ask.title")}
         subtitle={t("ask.subtitle")}
       />
+      <div className="-mt-2 mb-3 flex justify-end">
+        <ExplainButton term="day_card" screen="ask" />
+      </div>
 
       {sessions.length > 0 ? (
         <div className="mb-4 space-y-2">
@@ -293,11 +351,21 @@ function AskInner() {
             >
               {m.text}
             </div>
+          ) : m.streaming ? (
+            <div
+              key={m.id}
+              data-testid="ask-streaming"
+              aria-live="polite"
+              className="mr-4 rounded-2xl border border-line bg-paper px-4 py-3 text-[17px] font-semibold leading-snug text-ink"
+            >
+              {m.text ? <span className="whitespace-pre-wrap">{m.text}</span> : <TypingDots label={t("live.typing")} />}
+            </div>
           ) : m.meta ? (
             <AskAnswerCard
               key={m.id}
               result={m.meta}
               question={messages.slice(0, i).reverse().find((x) => x.role === "user")?.text}
+              onAsk={(q) => void send(q)}
             />
           ) : (
             <div

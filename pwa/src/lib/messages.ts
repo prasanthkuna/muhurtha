@@ -6,6 +6,7 @@ import { READING } from "./messages-reading";
 import { BOND } from "./messages-bond";
 import { PRO } from "./messages-pro";
 import { WELCOME } from "./messages-welcome";
+import { LIVE } from "./messages-live";
 
 type MessageTree = { [key: string]: string | MessageTree };
 
@@ -877,7 +878,7 @@ const hi: MessageTree = {
     legendHint: "हर अध्याय एक ग्रह की दशा का समय है।",
     pickPurpose: "आप क्या योजना बना रहे हैं चुनें, फिर उसका समय देखें।",
     startDate: "इस तारीख से",
-    bestDay: "इस अवधि का सबसे अच्छा दिन",
+    bestDay: "इन दिनों में सबसे अच्छा दिन",
     tapToCheck: "उस दिन को देखने के लिए तारीख टैप करें",
     checkedFor: "जाँची गई तारीख",
     status_matched: "अनुकूल",
@@ -928,6 +929,7 @@ function lookup(tree: MessageTree, path: string): string | undefined {
 
 export function t(locale: AppLocale, key: string): string {
   return (
+    LIVE[locale]?.[key] ??
     PRO[locale]?.[key] ??
     WELCOME[locale]?.[key] ??
     BOND[locale]?.[key] ??
@@ -943,6 +945,7 @@ export function t(locale: AppLocale, key: string): string {
     BOND.en[key] ??
     PRO.en[key] ??
     WELCOME.en[key] ??
+    LIVE.en[key] ??
     key
   );
 }

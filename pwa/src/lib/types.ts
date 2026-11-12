@@ -54,6 +54,8 @@ export type AskMessage = {
   role: "user" | "assistant";
   text: string;
   meta?: AskAnswerResult;
+  /** Streamed answer still arriving (typing indicator while empty). */
+  streaming?: boolean;
 };
 
 export type NatalLuckColour = {

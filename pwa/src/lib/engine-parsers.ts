@@ -45,6 +45,12 @@ export type AskAnswerResult = {
   goodWindows: TimingWindow[];
   cautionWindows: TimingWindow[];
   freeRemainingToday?: number;
+  /** Live AI (streamed Ask): deterministic follow-ups, consent memory candidates, engine date. */
+  chips?: { label: string; kind: string; value: string }[];
+  remember?: string[];
+  suggestedDate?: string | null;
+  partial?: boolean;
+  answerId?: string;
 };
 
 function windows(raw: unknown): TimingWindow[] {
@@ -135,6 +141,15 @@ export function parseAskAnswer(json: Record<string, unknown>): AskAnswerResult {
     shareHook: json.shareHook?.toString(),
     goodWindows: windows(json.goodWindows),
     cautionWindows: windows(json.cautionWindows),
+    chips: Array.isArray(json.chips)
+      ? (json.chips as Record<string, unknown>[])
+        .filter((c) => c && typeof c === "object" && typeof c.label === "string")
+        .map((c) => ({ label: String(c.label), kind: String(c.kind ?? "ask"), value: String(c.value ?? c.label) }))
+      : undefined,
+    remember: Array.isArray(json.remember) ? (json.remember as unknown[]).filter((x): x is string => typeof x === "string") : undefined,
+    suggestedDate: typeof json.suggestedDate === "string" ? json.suggestedDate : null,
+    partial: json.partial === true,
+    answerId: json.answerId?.toString(),
     freeRemainingToday:
       typeof access.freeRemainingToday === "number"
         ? access.freeRemainingToday

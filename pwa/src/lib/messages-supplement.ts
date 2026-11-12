@@ -193,7 +193,7 @@ export const SUPPLEMENT: Record<"te" | "hi", Record<string, string>> = {
     "timing.modeCheck": "एक तारीख जाँचें",
     "timing.modeFind": "तारीख खोजें",
     "timing.dateLabel": "कार्यक्रम की तारीख",
-    "timing.compareRange": "तुलना अवधि",
+    "timing.compareRange": "कितने दिन देखें",
     "timing.days": "दिन",
     "timing.findRun": "तारीखें तुलना करें",
     "timing.compareResults": "सबसे अच्छी तारीखें",
