@@ -1,0 +1,1045 @@
+{
+"source": "Swiss Ephemeris (swisseph-wasm 0.1.0, swe_calc_ut SEFLG_SIDEREAL, SE_SIDM_LAHIRI; asc from swe_houses_ex)",
+"charts": [
+{
+"id": "c00",
+"utc": "2021-02-01T23:17:00Z",
+"lat": 17.385,
+"lng": 78.4867,
+"aya": 24.1516847,
+"asc": 257.348097,
+"g": {
+"Sun": 289.174775,
+"Moon": 162.847495,
+"Mercury": 301.843316,
+"Venus": 276.332571,
+"Mars": 18.920899,
+"Jupiter": 286.14161,
+"Saturn": 281.243077,
+"Rahu": 53.018116,
+"TrueRahu": 54.156837
+},
+"retro": {
+"Mercury": true,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c01",
+"utc": "1971-04-05T23:06:00Z",
+"lat": 13.0827,
+"lng": 80.2707,
+"aya": 23.4556425,
+"asc": 324.893814,
+"g": {
+"Sun": 352.054106,
+"Moon": 119.060038,
+"Mercury": 9.511792,
+"Venus": 315.334623,
+"Mars": 261.121036,
+"Jupiter": 222.714105,
+"Saturn": 27.317697,
+"Rahu": 297.473206,
+"TrueRahu": 298.988254
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": false
+}
+},
+{
+"id": "c02",
+"utc": "2009-02-19T13:02:00Z",
+"lat": 28.6139,
+"lng": 77.209,
+"aya": 23.9847192,
+"asc": 131.725837,
+"g": {
+"Sun": 307.031023,
+"Moon": 245.820455,
+"Mercury": 281.555819,
+"Venus": 347.27689,
+"Mars": 287.565828,
+"Jupiter": 286.546019,
+"Saturn": 145.732134,
+"Rahu": 284.350815,
+"TrueRahu": 285.182417
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c03",
+"utc": "1943-02-07T07:32:00Z",
+"lat": 19.076,
+"lng": 72.8777,
+"aya": 23.0623831,
+"asc": 38.918377,
+"g": {
+"Sun": 294.595621,
+"Moon": 326.627756,
+"Mercury": 272.032944,
+"Venus": 314.349893,
+"Mars": 255.335117,
+"Jupiter": 83.819238,
+"Saturn": 42.527145,
+"Rahu": 122.477854,
+"TrueRahu": 121.899365
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": false
+}
+},
+{
+"id": "c04",
+"utc": "2017-01-18T06:45:00Z",
+"lat": 12.9716,
+"lng": 77.5946,
+"aya": 24.0952427,
+"asc": 7.602886,
+"g": {
+"Sun": 274.267537,
+"Moon": 166.000607,
+"Mercury": 250.212596,
+"Venus": 321.296717,
+"Mars": 328.450574,
+"Jupiter": 178.482217,
+"Saturn": 239.16542,
+"Rahu": 131.217811,
+"TrueRahu": 129.817412
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c05",
+"utc": "2023-12-18T13:14:00Z",
+"lat": 22.5726,
+"lng": 88.3639,
+"aya": 24.1918296,
+"asc": 87.35902,
+"g": {
+"Sun": 242.152488,
+"Moon": 316.075722,
+"Mercury": 251.711988,
+"Venus": 202.171761,
+"Mars": 233.215895,
+"Jupiter": 11.66367,
+"Saturn": 307.972728,
+"Rahu": 357.398718,
+"TrueRahu": 358.431606
+},
+"retro": {
+"Mercury": true,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": false
+}
+},
+{
+"id": "c06",
+"utc": "1997-10-09T00:48:00Z",
+"lat": 40.7128,
+"lng": -74.006,
+"aya": 23.8259435,
+"asc": 43.507097,
+"g": {
+"Sun": 171.945342,
+"Moon": 255.94977,
+"Mercury": 168.326306,
+"Venus": 216.937498,
+"Mars": 223.302767,
+"Jupiter": 288.268792,
+"Saturn": 353.173722,
+"Rahu": 144.347652,
+"TrueRahu": 145.60408
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c07",
+"utc": "1960-12-14T10:17:00Z",
+"lat": 51.5074,
+"lng": -0.1278,
+"aya": 23.3116904,
+"asc": 273.272689,
+"g": {
+"Sun": 239.130251,
+"Moon": 185.028004,
+"Mercury": 226.77389,
+"Venus": 281.511655,
+"Mars": 81.422647,
+"Jupiter": 256.736441,
+"Saturn": 264.257255,
+"Rahu": 136.963563,
+"TrueRahu": 136.493598
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": true,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c08",
+"utc": "1959-04-25T10:06:00Z",
+"lat": -33.8688,
+"lng": 151.2093,
+"aya": 23.2887856,
+"asc": 239.495181,
+"g": {
+"Sun": 11.169666,
+"Moon": 222.435505,
+"Mercury": 344.129296,
+"Venus": 49.121824,
+"Mars": 75.22676,
+"Jupiter": 216.625549,
+"Saturn": 253.712439,
+"Rahu": 168.706206,
+"TrueRahu": 169.681978
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": true
+}
+},
+{
+"id": "c09",
+"utc": "1951-07-04T11:54:00Z",
+"lat": 37.7749,
+"lng": -122.4194,
+"aya": 23.1797359,
+"asc": 64.421199,
+"g": {
+"Sun": 78.520687,
+"Moon": 80.386876,
+"Mercury": 88.87824,
+"Venus": 123.621386,
+"Mars": 67.162174,
+"Jupiter": 349.489353,
+"Saturn": 153.458066,
+"Rahu": 319.835572,
+"TrueRahu": 318.364696
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c10",
+"utc": "1984-10-09T01:46:00Z",
+"lat": 1.3521,
+"lng": 103.8198,
+"aya": 23.6443661,
+"asc": 216.236851,
+"g": {
+"Sun": 172.308457,
+"Moon": 342.248402,
+"Mercury": 171.073455,
+"Venus": 202.748814,
+"Mars": 249.00727,
+"Jupiter": 251.923126,
+"Saturn": 201.5665,
+"Rahu": 35.951631,
+"TrueRahu": 34.4535
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c11",
+"utc": "1998-09-04T12:05:00Z",
+"lat": 25.2048,
+"lng": 55.2708,
+"aya": 23.8385821,
+"asc": 273.810094,
+"g": {
+"Sun": 137.924778,
+"Moon": 291.528378,
+"Mercury": 120.665136,
+"Venus": 123.316869,
+"Mars": 105.569499,
+"Jupiter": 330.741034,
+"Saturn": 9.455057,
+"Rahu": 126.835374,
+"TrueRahu": 127.653616
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": true
+}
+},
+{
+"id": "c12",
+"utc": "2010-05-27T20:39:00Z",
+"lat": 59.9139,
+"lng": 10.7522,
+"aya": 24.0024011,
+"asc": 228.295726,
+"g": {
+"Sun": 42.44158,
+"Moon": 221.182199,
+"Mercury": 17.618658,
+"Venus": 75.32544,
+"Mars": 120.704081,
+"Jupiter": 334.617346,
+"Saturn": 153.832962,
+"Rahu": 259.851692,
+"TrueRahu": 258.288424
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c13",
+"utc": "1986-10-07T22:04:00Z",
+"lat": 64.1466,
+"lng": -21.9426,
+"aya": 23.6722389,
+"asc": 86.305219,
+"g": {
+"Sun": 170.669566,
+"Moon": 225.500804,
+"Mercury": 191.831128,
+"Venus": 205.595088,
+"Mars": 275.719224,
+"Jupiter": 320.922812,
+"Saturn": 222.290108,
+"Rahu": 357.328614,
+"TrueRahu": 357.218932
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": false
+}
+},
+{
+"id": "c14",
+"utc": "1945-11-08T09:05:00Z",
+"lat": 17.385,
+"lng": 78.4867,
+"aya": 23.1008121,
+"asc": 326.743408,
+"g": {
+"Sun": 202.511928,
+"Moon": 239.630033,
+"Mercury": 222.942906,
+"Venus": 182.011842,
+"Mars": 95.933052,
+"Jupiter": 172.790995,
+"Saturn": 91.803952,
+"Rahu": 69.217405,
+"TrueRahu": 67.533434
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c15",
+"utc": "1969-02-13T08:29:00Z",
+"lat": 13.0827,
+"lng": 80.2707,
+"aya": 23.425754,
+"asc": 63.356862,
+"g": {
+"Sun": 301.043638,
+"Moon": 255.728742,
+"Mercury": 277.317906,
+"Venus": 346.727786,
+"Mars": 210.946571,
+"Jupiter": 161.741459,
+"Saturn": 357.794324,
+"Rahu": 338.892264,
+"TrueRahu": 337.388671
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": false
+}
+},
+{
+"id": "c16",
+"utc": "2021-06-06T11:22:00Z",
+"lat": 28.6139,
+"lng": 77.209,
+"aya": 24.1564468,
+"asc": 201.756398,
+"g": {
+"Sun": 51.825409,
+"Moon": 8.610263,
+"Mercury": 58.632012,
+"Venus": 70.635277,
+"Mars": 92.714084,
+"Jupiter": 307.712742,
+"Saturn": 289.206524,
+"Rahu": 46.420429,
+"TrueRahu": 46.610378
+},
+"retro": {
+"Mercury": true,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c17",
+"utc": "1966-11-09T22:59:00Z",
+"lat": 19.076,
+"lng": 72.8777,
+"aya": 23.3941532,
+"asc": 172.010794,
+"g": {
+"Sun": 203.705175,
+"Moon": 167.675359,
+"Mercury": 219.061443,
+"Venus": 203.938255,
+"Mars": 143.220931,
+"Jupiter": 100.875764,
+"Saturn": 329.76891,
+"Rahu": 22.684668,
+"TrueRahu": 22.79806
+},
+"retro": {
+"Mercury": true,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c18",
+"utc": "2022-02-20T20:10:00Z",
+"lat": 12.9716,
+"lng": 77.5946,
+"aya": 24.1663671,
+"asc": 232.293647,
+"g": {
+"Sun": 307.9983,
+"Moon": 178.385534,
+"Mercury": 282.036144,
+"Venus": 265.377212,
+"Mars": 265.853161,
+"Jupiter": 317.733403,
+"Saturn": 293.688596,
+"Rahu": 32.676073,
+"TrueRahu": 32.087432
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c19",
+"utc": "2008-12-08T05:29:00Z",
+"lat": 22.5726,
+"lng": 88.3639,
+"aya": 23.9819151,
+"asc": 307.306388,
+"g": {
+"Sun": 232.514502,
+"Moon": 351.110381,
+"Mercury": 239.446052,
+"Venus": 276.299968,
+"Mars": 231.861887,
+"Jupiter": 269.677171,
+"Saturn": 147.275333,
+"Rahu": 288.235901,
+"TrueRahu": 286.910104
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c20",
+"utc": "1988-05-21T22:35:00Z",
+"lat": 40.7128,
+"lng": -74.006,
+"aya": 23.6948793,
+"asc": 199.254782,
+"g": {
+"Sun": 37.372255,
+"Moon": 108.203365,
+"Mercury": 59.214613,
+"Venus": 66.750887,
+"Mars": 306.061796,
+"Jupiter": 23.486768,
+"Saturn": 247.579282,
+"Rahu": 325.956195,
+"TrueRahu": 326.494313
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c21",
+"utc": "1968-11-11T01:14:00Z",
+"lat": 51.5074,
+"lng": -0.1278,
+"aya": 23.4221479,
+"asc": 141.518234,
+"g": {
+"Sun": 205.293609,
+"Moon": 89.299137,
+"Mercury": 190.516407,
+"Venus": 241.912602,
+"Mars": 157.670123,
+"Jupiter": 155.747195,
+"Saturn": 356.679095,
+"Rahu": 343.889524,
+"TrueRahu": 345.353304
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c22",
+"utc": "1944-06-13T08:04:00Z",
+"lat": -33.8688,
+"lng": 151.2093,
+"aya": 23.0811957,
+"asc": 256.442245,
+"g": {
+"Sun": 59.086632,
+"Moon": 324.745272,
+"Mercury": 39.930483,
+"Venus": 55.300602,
+"Mars": 109.613768,
+"Jupiter": 119.132345,
+"Saturn": 66.015231,
+"Rahu": 96.404579,
+"TrueRahu": 95.132427
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c23",
+"utc": "1967-10-23T10:13:00Z",
+"lat": 37.7749,
+"lng": -122.4194,
+"aya": 23.4074401,
+"asc": 133.802792,
+"g": {
+"Sun": 185.910048,
+"Moon": 60.375715,
+"Mercury": 203.605706,
+"Venus": 140.547588,
+"Mars": 246.838861,
+"Jupiter": 127.235328,
+"Saturn": 344.060717,
+"Rahu": 4.271626,
+"TrueRahu": 4.509513
+},
+"retro": {
+"Mercury": true,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c24",
+"utc": "2023-08-13T20:29:00Z",
+"lat": 1.3521,
+"lng": 103.8198,
+"aya": 24.1869836,
+"asc": 78.380826,
+"g": {
+"Sun": 116.654336,
+"Moon": 88.78076,
+"Mercury": 143.604443,
+"Venus": 116.04647,
+"Mars": 147.102364,
+"Jupiter": 20.628459,
+"Saturn": 310.656212,
+"Rahu": 4.112692,
+"TrueRahu": 3.248969
+},
+"retro": {
+"Mercury": false,
+"Venus": true,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c25",
+"utc": "1958-05-05T07:47:00Z",
+"lat": 25.2048,
+"lng": 55.2708,
+"aya": 23.2752075,
+"asc": 107.517842,
+"g": {
+"Sun": 21.035413,
+"Moon": 225.828516,
+"Mercury": 357.721553,
+"Venus": 336.53103,
+"Mars": 312.769192,
+"Jupiter": 181.285053,
+"Saturn": 241.694763,
+"Rahu": 187.523499,
+"TrueRahu": 187.980779
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": true
+}
+},
+{
+"id": "c26",
+"utc": "2011-09-09T23:37:00Z",
+"lat": 59.9139,
+"lng": 10.7522,
+"aya": 24.0203817,
+"asc": 96.47329,
+"g": {
+"Sun": 142.918071,
+"Moon": 295.779517,
+"Mercury": 127.132787,
+"Venus": 149.608552,
+"Mars": 90.347916,
+"Jupiter": 16.142874,
+"Saturn": 172.135635,
+"Rahu": 234.938901,
+"TrueRahu": 235.355319
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": false
+}
+},
+{
+"id": "c27",
+"utc": "1994-10-13T11:14:00Z",
+"lat": 64.1466,
+"lng": -21.9426,
+"aya": 23.7841976,
+"asc": 200.438926,
+"g": {
+"Sun": 176.105116,
+"Moon": 286.757588,
+"Mercury": 191.558039,
+"Venus": 204.222162,
+"Mars": 101.09382,
+"Jupiter": 203.793881,
+"Saturn": 312.502468,
+"Rahu": 202.191896,
+"TrueRahu": 201.29805
+},
+"retro": {
+"Mercury": true,
+"Venus": true,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c28",
+"utc": "1957-09-16T02:48:00Z",
+"lat": 17.385,
+"lng": 78.4867,
+"aya": 23.2663666,
+"asc": 180.839668,
+"g": {
+"Sun": 149.699651,
+"Moon": 47.000146,
+"Mercury": 138.604896,
+"Venus": 188.911555,
+"Mars": 151.522189,
+"Jupiter": 164.669337,
+"Saturn": 225.393198,
+"Rahu": 199.775667,
+"TrueRahu": 198.338933
+},
+"retro": {
+"Mercury": true,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c29",
+"utc": "1946-02-05T20:10:00Z",
+"lat": 13.0827,
+"lng": 80.2707,
+"aya": 23.1042328,
+"asc": 221.832813,
+"g": {
+"Sun": 293.340802,
+"Moon": 339.545994,
+"Mercury": 289.462312,
+"Venus": 294.362845,
+"Mars": 82.673805,
+"Jupiter": 184.219027,
+"Saturn": 86.422576,
+"Rahu": 64.47664,
+"TrueRahu": 65.722589
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": true,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c30",
+"utc": "1994-10-03T12:24:00Z",
+"lat": 28.6139,
+"lng": 77.209,
+"aya": 23.783817,
+"asc": 343.608565,
+"g": {
+"Sun": 166.278065,
+"Moon": 143.763315,
+"Mercury": 190.938675,
+"Venus": 202.48924,
+"Mars": 95.565671,
+"Jupiter": 201.777959,
+"Saturn": 313.006155,
+"Rahu": 202.71924,
+"TrueRahu": 201.446188
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c31",
+"utc": "2016-08-17T08:35:00Z",
+"lat": 19.076,
+"lng": 72.8777,
+"aya": 24.0893555,
+"asc": 227.166154,
+"g": {
+"Sun": 120.777334,
+"Moon": 287.527064,
+"Mercury": 148.136419,
+"Venus": 140.297967,
+"Mars": 222.22131,
+"Jupiter": 151.121724,
+"Saturn": 225.703415,
+"Rahu": 139.37453,
+"TrueRahu": 138.660183
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c32",
+"utc": "1941-11-24T03:43:00Z",
+"lat": 12.9716,
+"lng": 77.5946,
+"aya": 23.0455536,
+"asc": 256.529897,
+"g": {
+"Sun": 218.434117,
+"Moon": 289.01073,
+"Mercury": 203.328351,
+"Venus": 265.621023,
+"Mars": 349.239504,
+"Jupiter": 55.271159,
+"Saturn": 31.502212,
+"Rahu": 145.802791,
+"TrueRahu": 146.735644
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": true
+}
+},
+{
+"id": "c33",
+"utc": "2008-05-25T20:21:00Z",
+"lat": 22.5726,
+"lng": 88.3639,
+"aya": 23.9744043,
+"asc": 345.838541,
+"g": {
+"Sun": 41.001067,
+"Moon": 284.435121,
+"Mercury": 57.536521,
+"Venus": 37.123121,
+"Mars": 104.769091,
+"Jupiter": 267.974625,
+"Saturn": 128.154806,
+"Rahu": 298.6425,
+"TrueRahu": 297.615882
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": false
+}
+},
+{
+"id": "c34",
+"utc": "1954-05-14T05:29:00Z",
+"lat": 40.7128,
+"lng": -74.006,
+"aya": 23.2196831,
+"asc": 288.449006,
+"g": {
+"Sun": 29.662554,
+"Moon": 169.365276,
+"Mercury": 36.017552,
+"Venus": 55.412531,
+"Mars": 254.789081,
+"Jupiter": 64.676469,
+"Saturn": 191.526829,
+"Rahu": 264.47304,
+"TrueRahu": 263.077857
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": true
+}
+},
+{
+"id": "c35",
+"utc": "1940-12-24T08:32:00Z",
+"lat": 51.5074,
+"lng": -0.1278,
+"aya": 23.0327526,
+"asc": 254.218836,
+"g": {
+"Sun": 249.370408,
+"Moon": 189.371357,
+"Mercury": 239.15173,
+"Venus": 221.365208,
+"Mars": 209.275455,
+"Jupiter": 12.72127,
+"Saturn": 15.103053,
+"Rahu": 163.544498,
+"TrueRahu": 163.993761
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": true
+}
+},
+{
+"id": "c36",
+"utc": "1962-09-04T20:19:00Z",
+"lat": -33.8688,
+"lng": 151.2093,
+"aya": 23.3357583,
+"asc": 140.548505,
+"g": {
+"Sun": 138.47675,
+"Moon": 200.900669,
+"Mercury": 164.580617,
+"Venus": 184.615515,
+"Mars": 75.125012,
+"Jupiter": 313.821464,
+"Saturn": 282.390416,
+"Rahu": 103.609411,
+"TrueRahu": 105.061893
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": true
+}
+},
+{
+"id": "c37",
+"utc": "2021-09-20T06:09:00Z",
+"lat": 37.7749,
+"lng": -122.4194,
+"aya": 24.1604928,
+"asc": 55.180137,
+"g": {
+"Sun": 153.351328,
+"Moon": 324.469578,
+"Mercury": 178.964603,
+"Venus": 196.600154,
+"Mars": 159.240013,
+"Jupiter": 299.443456,
+"Saturn": 283.080071,
+"Rahu": 40.814797,
+"TrueRahu": 39.900086
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": true
+}
+},
+{
+"id": "c38",
+"utc": "1987-03-18T16:58:00Z",
+"lat": 1.3521,
+"lng": 103.8198,
+"aya": 23.678426,
+"asc": 240.314987,
+"g": {
+"Sun": 333.883434,
+"Moon": 192.53384,
+"Mercury": 307.860176,
+"Venus": 294.44568,
+"Mars": 24.188293,
+"Jupiter": 340.135964,
+"Saturn": 237.354698,
+"Rahu": 348.755167,
+"TrueRahu": 347.828859
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": false,
+"Saturn": false
+}
+},
+{
+"id": "c39",
+"utc": "1940-10-11T15:01:00Z",
+"lat": 25.2048,
+"lng": 55.2708,
+"aya": 23.0299336,
+"asc": 17.127859,
+"g": {
+"Sun": 175.112842,
+"Moon": 303.816247,
+"Mercury": 197.992947,
+"Venus": 132.340438,
+"Mars": 160.855473,
+"Jupiter": 20.454511,
+"Saturn": 20.055603,
+"Rahu": 167.451596,
+"TrueRahu": 168.012326
+},
+"retro": {
+"Mercury": false,
+"Venus": false,
+"Mars": false,
+"Jupiter": true,
+"Saturn": true
+}
+}
+]
+}

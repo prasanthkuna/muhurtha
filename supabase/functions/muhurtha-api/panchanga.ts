@@ -5,7 +5,7 @@
  * Purpose-specific ceremony Muhurtas require separate reviewed rules.
  */
 import { DateTime } from "luxon";
-import { moonSiderealLongitudeDeg, sunTropicalLongitudeDeg, lahiriAyanamsaDeg } from "./ephemeris.ts";
+import { moonSiderealLongitudeDeg, sunSiderealLongitudeDeg } from "./ephemeris.ts";
 import { NAKSHATRAS } from "./vimshottari.ts";
 import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
 
@@ -17,8 +17,7 @@ const RASHIS = ["mesha","vrishabha","mithuna","karka","simha","kanya","tula","vr
 const TARAS = ["Janma","Sampat","Vipat","Kshema","Pratyak","Sadhana","Naidhana","Mitra","Parama Mitra"];
 const norm = (degrees: number) => ((degrees % 360) + 360) % 360;
 function sunSidereal(instant: Date): number {
-  const jd = instant.getTime() / 86400000 + 2440587.5;
-  return norm(sunTropicalLongitudeDeg(instant) - lahiriAyanamsaDeg(jd));
+  return sunSiderealLongitudeDeg(instant);
 }
 function karana(index: number): string {
   if (index === 0) return "Kimstughna";

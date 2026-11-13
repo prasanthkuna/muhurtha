@@ -44,10 +44,20 @@ const BODY: Partial<Record<GrahaKey, Astronomy.Body>> = {
   Saturn: Astronomy.Body.Saturn,
 };
 
+/**
+ * Tropical longitude on the MEAN equinox of date. astronomy-engine's Ecliptic() is the true
+ * equinox (nutation included); Lahiri sidereal positions (Swiss Ephemeris SEFLG_SIDEREAL) are
+ * mean-equinox, so nutation in longitude (up to ~17") is removed here. Checked against Swiss
+ * Ephemeris on 40 charts (accuracy_test.ts): Moon < 3", Lagna < 1".
+ */
+export function nutationLonDeg(time: Astronomy.AstroTime): number {
+  return Astronomy.e_tilt(time).dpsi / 3600;
+}
+
 function tropicalLon(body: Astronomy.Body, utc: Date): number {
   const time = Astronomy.MakeTime(utc);
   const vec = Astronomy.GeoVector(body, time, true);
-  return norm(Astronomy.Ecliptic(vec).elon);
+  return norm(Astronomy.Ecliptic(vec).elon - nutationLonDeg(time));
 }
 
 /** Mean lunar node (Meeus 47.7), tropical, of date. */
@@ -73,11 +83,13 @@ export function lagnaSidereal(utc: Date, latDeg: number, lngDeg: number): number
   const time = Astronomy.MakeTime(utc);
   const gast = Astronomy.SiderealTime(time); // hours
   const ramc = norm(gast * 15 + lngDeg) * Math.PI / 180;
-  const T = (julianDayUt(utc) - 2451545.0) / 36525;
-  const eps = (23.4392911 - 0.0130042 * T) * Math.PI / 180;
+  // Apparent sidereal time pairs with the TRUE obliquity; the result is on the true equinox, so
+  // nutation in longitude is removed before the (mean-equinox) Lahiri ayanamsa.
+  const tilt = Astronomy.e_tilt(time);
+  const eps = tilt.tobl * Math.PI / 180;
   const phi = latDeg * Math.PI / 180;
   const asc = Math.atan2(Math.cos(ramc), -(Math.sin(ramc) * Math.cos(eps) + Math.tan(phi) * Math.sin(eps)));
-  const tropical = norm(asc * 180 / Math.PI);
+  const tropical = norm(asc * 180 / Math.PI - tilt.dpsi / 3600);
   return norm(tropical - lahiriTrueDeg(julianDayUt(utc)));
 }
 

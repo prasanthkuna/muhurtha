@@ -55,7 +55,8 @@ export function moonSiderealLongitudeDeg(utc: Date): number {
   const time = Astronomy.MakeTime(utc);
   const vec = Astronomy.GeoVector(Astronomy.Body.Moon, time, true);
   const ecl = Astronomy.Ecliptic(vec);
-  const tropical = ecl.elon;
+  // Mean equinox of date (remove nutation in longitude) to match Swiss Ephemeris Lahiri.
+  const tropical = ecl.elon - Astronomy.e_tilt(time).dpsi / 3600;
   const jd = julianDayUt(utc);
   const aya = lahiriAyanamsaDeg(jd);
   let sid = tropical - aya;
@@ -72,6 +73,13 @@ export function sunTropicalLongitudeDeg(utc: Date): number {
   while (lon < 0) lon += 360;
   while (lon >= 360) lon -= 360;
   return lon;
+}
+
+/** Sun sidereal (Lahiri, mean equinox of date): matches Swiss Ephemeris SEFLG_SIDEREAL. */
+export function sunSiderealLongitudeDeg(utc: Date): number {
+  const time = Astronomy.MakeTime(utc);
+  const sid = sunTropicalLongitudeDeg(utc) - Astronomy.e_tilt(time).dpsi / 3600 - lahiriAyanamsaDeg(utc.getTime() / 86400000 + 2440587.5);
+  return ((sid % 360) + 360) % 360;
 }
 
 /** 27 nakshatras × 13°20′; each pada = 3°20′. */
