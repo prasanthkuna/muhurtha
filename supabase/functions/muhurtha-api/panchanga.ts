@@ -180,6 +180,9 @@ export type QuickDayFacts = {
   rank: number;
   good: { start: string; end: string }[];
   rahu: { start: string; end: string } | null;
+  /** Local sunrise / sunset "HH:mm" (for hora lords). */
+  sunrise?: string;
+  sunset?: string;
   /** 0..29 (14 Purnima, 29 Amavasya) */
   tithiIndex: number;
   /** 0..26 */
@@ -234,6 +237,8 @@ export function quickDayFacts(args: {
     rank,
     good: windows.good.map((w) => ({ start: w.start, end: w.end })),
     rahu: rahu ? { start: rahu.start, end: rahu.end } : null,
+    sunrise: DateTime.fromJSDate(sun.sunrise, { zone: args.zone }).toFormat("HH:mm"),
+    sunset: DateTime.fromJSDate(sun.sunset, { zone: args.zone }).toFormat("HH:mm"),
     tithiIndex: n.tithi,
     nakIndex: n.nakshatra,
     natalNakIndex: natalNak >= 0 ? natalNak : null,
