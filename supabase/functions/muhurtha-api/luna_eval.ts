@@ -13,7 +13,7 @@ import {
 } from "./live_ai.ts";
 import { costUsd, readingModel, type ReasoningEffort, streamResponse } from "./openai_responses.ts";
 import { jargonHits, VOICE_BANNED } from "./voice.ts";
-import { BULK_SHARDS, mergeShards, planShards, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
+import { BULK_SHARDS, mergeShards, offScriptShare, planShards, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
 import { themeOk } from "./theme_check.ts";
 import { buildSystemPrompt, mergeRepair, repairPrompt, repairScope, sanitizeContent, type V2Content, validateContent } from "./reading_v2.ts";
 import { createWithSchema } from "./reading_jobs.ts";
@@ -304,6 +304,7 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
   const errs: Record<string, string> = {};
   const init = zeroT(), fill = zeroT(), lazy = zeroT();
   let firstToken: number | null = null;
+  const retried: string[] = [];
   const run = async (p: (typeof plans)[number], t: ReturnType<typeof zeroT>, content?: Partial<V2Content> | null) => {
     for (let a = 0; a < 2; a++) {
       try {
@@ -314,6 +315,10 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
         addT(t, r.model, r.usage);
         times[p.key] = Date.now() - t0;
         const parsed = JSON.parse(r.output_text ?? "null");
+        if (parsed && a === 0 && offScriptShare(facts, parsed) > 0.3) {
+          retried.push(p.key); // production retries off-script parts once
+          continue;
+        }
         if (parsed) {
           delete errs[p.key];
           return parsed as Partial<V2Content>;
@@ -390,7 +395,7 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
     checks: { valid: v.ok, valid_after_fill: vf.ok, fatal: vf.fatal, flags: vf.flags.length, theme_ok: theme.ok, theme_fails: theme.fails, all_days: allDays, unsupported_pct: unsupportedPct },
     latency_ms: readyMs, first_token_ms: firstToken, first_shown_ms: firstInsight,
     output: {
-      v: 4, shard_ms: times, errors: errs, ready_ms: readyMs, fill_ms: fillMs, lazy_ms: lazyMs, lazy_chapters: lazyN,
+      v: 4, shard_ms: times, errors: errs, off_script_retries: retried, ready_ms: readyMs, fill_ms: fillMs, lazy_ms: lazyMs, lazy_chapters: lazyN,
       initial: { ...init, cost: round6(init.cost) }, fill: { ...fill, cost: round6(fill.cost) }, lazy: { ...lazy, cost: round6(lazy.cost) },
       cost_usd: round6(init.cost + fill.cost), cost_with_lazy: round6(init.cost + fill.cost + lazy.cost),
       input_tokens: init.input + fill.input, output_tokens: init.output + fill.output, cache_write_tokens: init.cache_write + fill.cache_write,

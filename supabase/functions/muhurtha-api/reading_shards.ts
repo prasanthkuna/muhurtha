@@ -16,7 +16,7 @@ import {
 } from "./reading_v2.ts";
 import { createResponse, type ReasoningEffort, type ResponseObject, streamResponse } from "./openai_responses.ts";
 import { compileContext, partInstructionV4, planPartsV4 } from "./reading_v4.ts";
-import { isV4 } from "./reading_v2.ts";
+import { isV4, scriptShare } from "./reading_v2.ts";
 
 export type ShardKey = "A" | "B" | "B2" | "C" | "C2" | "C3" | "D" | "F1" | "F2" | "L";
 /** Chapter and day parts: bulk prose, effort tunable separately (READING_EFFORT_BULK). */
@@ -174,6 +174,17 @@ export async function shardCall(
     }
   }
   return go(false);
+}
+
+/** Share of written days/chapters not in the reading's script (model drifted language). */
+export function offScriptShare(f: V2Facts, c: Partial<V2Content> | null): number {
+  if (!c || f.locale === "en") return 0;
+  const texts = [
+    ...(c.days ?? []).map((d) => [d.title, d.line, d.body].join(" ")),
+    ...(c.chapters ?? []).map((x) => [x.title, x.body].join(" ")),
+  ];
+  if (!texts.length) return 0;
+  return texts.filter((t) => scriptShare(t, f.locale) < 0.6).length / texts.length;
 }
 
 /** Ids a part was asked for but did not return (union schema allows empty arrays). */

@@ -35,7 +35,7 @@ import {
   type ResponseObject,
 } from "./openai_responses.ts";
 import { chapterPlanV4, fillPlansV4, newItemScope } from "./reading_v4.ts";
-import { mergeShards, planShards, previewFrom, readingEffort, type ReadingPreview, type ShardKey, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
+import { mergeShards, offScriptShare, planShards, previewFrom, readingEffort, type ReadingPreview, type ShardKey, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
 
 /** Job attempts come from maxAttempts() in llm_policy.ts (Luna: first try + one retry). */
 export { isQuotaCap } from "./llm_policy.ts";
@@ -845,6 +845,8 @@ async function advanceSharded(
     totals.cost_usd += cost;
     const parsed = resp.status === "completed" ? parseContent(resp.output_text) : null;
     const missing = parsed && isV3(facts) ? shardMissing(p, parsed as Partial<V2Content>) : [];
+    // v4: a part written in the wrong script (seen: Telugu drifting to Tamil) is retried once.
+    if (parsed && isV4(facts) && e.tries < SHARD_TRIES && offScriptShare(facts, parsed as Partial<V2Content>) > 0.3) missing.push("off_script");
     // Union-schema parts may skip ids: retry once, then accept what came back (validation decides).
     const content = parsed && (missing.length === 0 || e.tries >= SHARD_TRIES)
       ? (isV3(facts) ? shardOnly(p, parsed as Partial<V2Content>) : parsed)
@@ -1042,9 +1044,21 @@ async function runParts(
   const facts = reading.facts!;
   const totals: Totals = { input_tokens: 0, cached_tokens: 0, output_tokens: 0, reasoning_tokens: 0, cost_usd: 0 };
   const t0 = Date.now();
-  const res = await Promise.allSettled(plans.map((p) =>
-    shardCall(facts, p, { background: false, timeoutMs: FILL_TIMEOUT_MS, content, metadata: { reading_id: reading.id, shard: p.key } })
-  ));
+  const call = async (p: (typeof plans)[number]) => {
+    const go = () => shardCall(facts, p, { background: false, timeoutMs: FILL_TIMEOUT_MS, content, metadata: { reading_id: reading.id, shard: p.key } });
+    const r = await go();
+    const parsed = r.status === "completed" ? parseContent(r.output_text) : null;
+    if (!parsed || offScriptShare(facts, parsed) <= 0.3) return r;
+    // Wrong script (model drift): log the first try and write the part again once.
+    totals.cost_usd += await logCall(admin, {
+      job_id: jobId, profile_id: reading.profile_id, purpose: "reading_shard", model: r.model ?? readingModel(), response_id: r.id,
+      locale: reading.locale, status: "off_script", usage: r.usage, latency_ms: Date.now() - t0, meta: { shard: p.key, retry: true },
+    });
+    totals.input_tokens += r.usage?.input_tokens ?? 0;
+    totals.output_tokens += r.usage?.output_tokens ?? 0;
+    return await go();
+  };
+  const res = await Promise.allSettled(plans.map(call));
   const parts: Partial<V2Content>[] = [];
   const errors: string[] = [];
   for (let i = 0; i < plans.length; i++) {

@@ -647,7 +647,7 @@ const TIME_RE: RegExp[] = [
   /\d+\s*बजे/,
 ];
 
-function scriptShare(text: string, locale: ReadingLocale): number {
+export function scriptShare(text: string, locale: ReadingLocale): number {
   const re = SCRIPT_RE[locale];
   if (!re) return 1;
   const letters = text.match(LETTER_RE)?.length ?? 0;
@@ -975,9 +975,13 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
       run("profile" as Flag["section"], "profile", [pr.title, pr.summary, ...(pr.strengths ?? []), ...(pr.watchouts ?? []), pr.work_style, pr.relationship_style].join(" "), pr.evidence_ids, []);
     }
     for (const a of c.areas ?? []) run("areas", a.area_id, `${a.headline} ${a.summary}`, a.evidence_ids, []);
+    const lordsOf = (f: V2ChapterFact | undefined) => f ? [f.md, f.ad, ...(f.md_lords ?? [])].filter(Boolean) : [];
     for (const ch of c.chapters ?? []) {
-      const f = chFact.get(Number(ch.chapter_id));
-      run("chapters", Number(ch.chapter_id), `${ch.title} ${ch.highlight} ${ch.body}`, ch.evidence_ids, f ? [f.md, f.ad, ...(f.md_lords ?? [])].filter(Boolean) : []);
+      const id = Number(ch.chapter_id);
+      // A chapter may name its own period lords and the neighbouring chapters' lords ("after the
+      // Venus sub-period ..."): those are dasha facts, not chart claims.
+      const allowed = [...lordsOf(chFact.get(id)), ...lordsOf(chFact.get(id - 1)), ...lordsOf(chFact.get(id + 1))];
+      run("chapters", id, `${ch.title} ${ch.highlight} ${ch.body}`, ch.evidence_ids, allowed);
     }
   }
 
