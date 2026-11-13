@@ -7,6 +7,9 @@ import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts
 import { evaluateDay, type QuickDayFacts, quickDayFacts } from "./panchanga.ts";
 import { AD_THEME, horaLord, horaTheme, nakGoodFor, nakMeaning, taraMeaning, tithiBase, tithiGoodFor, tithiMeaning, yogaMeaning } from "./meanings.ts";
 import { planDayAngles } from "./angles.ts";
+import { grahasAt, natalGrahas } from "./grahas.ts";
+import { buildChartPack } from "./jyotisha.ts";
+import { buildStory, chartFacts, readingV4Enabled } from "./reading_v4.ts";
 import { SCREEN_JOB, valueMeaning } from "./engine_copy.ts";
 import { scoreDay } from "./calendar.ts";
 import {
@@ -3122,12 +3125,24 @@ function partOfDay(hhmm: string): string {
   return "evening";
 }
 
+/** Natal chart for the rule engine: exact instant + birth place when known, else local noon (no Lagna). */
+export function natalChartFor(bi: BioRow, tz: string) {
+  const zone = resolveBirthZone(bi, tz);
+  const exact = birthInstantUtc(bi, zone);
+  const lat = bi.birth_lat != null ? Number(bi.birth_lat) : null;
+  const lng = bi.birth_lng != null ? Number(bi.birth_lng) : null;
+  const precise = Boolean(exact) && resolveEngineMode(bi) === "full_chart" && lat != null && lng != null;
+  const at = exact ?? DateTime.fromISO(`${String(bi.date_of_birth).slice(0, 10)}T12:00:00`, { zone }).toUTC().toJSDate();
+  return natalGrahas(at, lat, lng, precise);
+}
+
 export function buildReadingFacts(
   profile: ProfRow,
   bi: BioRow,
   locale: AppLocale,
   dateStr: string,
   subjectName: string | null,
+  opts: { v4?: boolean } = {},
 ): V2Facts {
   const tz = profile.current_timezone ?? "Asia/Kolkata";
   const refInstant = parseDateAsUtcInstant(dateStr, tz);
@@ -3228,9 +3243,24 @@ export function buildReadingFacts(
   }));
   const arch = kernel?.natal.archetype;
   const intent = profile.onboarding_intent ?? {};
+  const v4 = opts.v4 ?? readingV4Enabled();
+  const areaIds = isChild ? [...CHILD_AREAS] : [...ADULT_AREAS];
+  let chart: V2Facts["chart"];
+  let story: V2Facts["story"];
+  if (v4) {
+    try {
+      const pack = buildChartPack(natalChartFor(bi, tz), { md: lords?.mdLord ?? null, ad: lords?.adLord ?? null, transit: grahasAt(refInstant) });
+      chart = chartFacts(pack, areaIds);
+      const archPhrases = [arch?.core, arch?.strength, arch?.shadow, arch?.stressPattern].filter((x): x is string => typeof x === "string");
+      story = buildStory({ chapters, current_chapter_id: plans.find((p) => p.tense === "current")?.id ?? null, is_child: isChild }, chart, archPhrases);
+    } catch (e) {
+      console.warn("[reading] chart pack failed", e instanceof Error ? e.message : e);
+    }
+  }
   return {
     schema_version: 2,
-    facts_version: 3,
+    facts_version: chart ? 4 : 3,
+    ...(chart ? { chart, story } : {}),
     meanings: meaningsFor(days),
     locale: locale as V2Facts["locale"],
     generation_date: dateStr,

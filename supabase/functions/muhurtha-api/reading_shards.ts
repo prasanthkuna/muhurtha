@@ -14,9 +14,11 @@ import {
   type V2Content,
   type V2Facts,
 } from "./reading_v2.ts";
-import { createResponse, type ReasoningEffort, type ResponseObject } from "./openai_responses.ts";
+import { createResponse, type ReasoningEffort, type ResponseObject, streamResponse } from "./openai_responses.ts";
+import { compileContext, partInstructionV4, planPartsV4 } from "./reading_v4.ts";
+import { isV4 } from "./reading_v2.ts";
 
-export type ShardKey = "A" | "B" | "B2" | "C" | "C2" | "C3" | "D";
+export type ShardKey = "A" | "B" | "B2" | "C" | "C2" | "C3" | "D" | "F1" | "F2" | "L";
 /** Chapter and day parts: bulk prose, effort tunable separately (READING_EFFORT_BULK). */
 export const BULK_SHARDS: ShardKey[] = ["B", "B2", "C", "C2", "C3"];
 export type ShardPlan = { key: ShardKey; scope: SchemaScope; maxTokens: number; note: string };
@@ -41,6 +43,7 @@ export function shardStaggerMs(): number {
 export const READING_EFFORT_DEFAULT: ReasoningEffort = "none";
 
 export function planShards(f: V2Facts): ShardPlan[] {
+  if (isV4(f)) return planPartsV4(f);
   const cur = f.current_chapter_id;
   const dayIds = f.days.map((d) => d.date);
   const firstDays = dayIds.slice(0, 3);
@@ -83,6 +86,7 @@ export function planShards(f: V2Facts): ShardPlan[] {
 }
 
 export function shardInstruction(f: V2Facts, p: ShardPlan): string {
+  if (isV4(f)) return partInstructionV4(f, p as Parameters<typeof partInstructionV4>[1]);
   const ids: string[] = [];
   if (p.scope.chapters?.length) ids.push(`chapters ${JSON.stringify(p.scope.chapters)}`);
   if (p.scope.days?.length) ids.push(`days ${JSON.stringify(p.scope.days)}`);
@@ -110,8 +114,40 @@ let lengthsOk: boolean | null = null;
 export async function shardCall(
   f: V2Facts,
   p: ShardPlan,
-  o: { background: boolean; effort?: ReasoningEffort; metadata?: Record<string, string>; cacheKey?: string; timeoutMs?: number },
+  o: { background: boolean; effort?: ReasoningEffort; metadata?: Record<string, string>; cacheKey?: string; timeoutMs?: number; content?: Partial<V2Content> | null; stream?: { onFirstToken?: (ms: number) => void } },
 ): Promise<ResponseObject> {
+  if (isV4(f)) {
+    // v4: a compiled, part-specific context and a compact part schema (no union schema, no
+    // placeholder fields). One-off prompts: no prompt-cache writes.
+    const compiled = compileContext(f, p as Parameters<typeof compileContext>[1], o.content);
+    const req = (withLengths: boolean) => ({
+      system: buildSystemPrompt(f),
+      user: compiled.user + "\n\n" + shardInstruction(f, p),
+      schemaName: `muhurta_part_${p.key.toLowerCase()}`,
+      schema: buildReadingSchema(f, { withLengths, scope: p.scope }),
+      background: o.background,
+      reasoningEffort: o.effort ?? shardEffort(p.key),
+      maxOutputTokens: p.maxTokens,
+      metadata: o.metadata,
+      timeoutMs: o.timeoutMs,
+      promptCacheMode: "explicit" as const,
+    });
+    const run = (withLengths: boolean) => o.stream && !o.background
+      ? streamResponse(req(withLengths), { onDelta: () => {}, onFirstToken: o.stream.onFirstToken })
+      : createResponse(req(withLengths));
+    if (lengthsOk !== false) {
+      try {
+        const r = await run(true);
+        lengthsOk = true;
+        return r;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/maxLength|max_length|not permitted|unsupported/i.test(msg) || !/:400:/.test(msg)) throw e;
+        lengthsOk = false;
+      }
+    }
+    return run(false);
+  }
   const go = (withLengths: boolean) =>
     createResponse({
       system: buildSystemPrompt(f),

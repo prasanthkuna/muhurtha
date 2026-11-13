@@ -17,7 +17,7 @@ const BI = {
   birth_lat: 15.8492886, birth_lng: 80.3546764, birth_timezone: "Asia/Kolkata", birth_place: "Chirala",
 };
 // deno-lint-ignore no-explicit-any
-const facts = (loc: "en" | "te" | "hi" = "en") => buildReadingFacts(PROF as any, BI as any, loc, "2026-11-12", null);
+const facts = (loc: "en" | "te" | "hi" = "en") => buildReadingFacts(PROF as any, BI as any, loc, "2026-11-12", null, { v4: false });
 
 Deno.test("meaning tables cover every star, tithi, yoga, tara and hora in EN/TE/HI", () => {
   for (const n of NAKSHATRAS) {

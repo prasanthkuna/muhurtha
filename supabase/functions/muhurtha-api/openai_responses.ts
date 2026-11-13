@@ -25,6 +25,10 @@ export type ResponseUsage = {
   output_tokens: number;
   reasoning_tokens: number;
   total_tokens: number;
+  /** Input tokens billed as cache writes (GPT-5.6+); excluded from cached_tokens. */
+  cache_write_tokens?: number;
+  cache_write_30m_tokens?: number;
+  cache_write_12h_tokens?: number;
 };
 
 export type ResponseStatus =
@@ -81,11 +85,21 @@ export function priceFor(model: string): { input: number; cached: number; output
   return PRICES[key];
 }
 
+/**
+ * Billed cost. GPT-5.6+ (incl. Luna) bill input three ways: ordinary, cache reads (0.1x) and cache
+ * writes (1.25x for the default 30-minute lifetime, 2.5x for 12 h). `cached_tokens` excludes
+ * writes, so ordinary = input - cached - writes.
+ */
 export function costUsd(model: string, u: ResponseUsage | null): number {
   if (!u) return 0;
   const p = priceFor(model);
-  const uncached = Math.max(0, u.input_tokens - u.cached_tokens);
-  return (uncached * p.input + u.cached_tokens * p.cached + u.output_tokens * p.output) / 1_000_000;
+  const w30 = u.cache_write_30m_tokens ?? 0;
+  const w12 = u.cache_write_12h_tokens ?? 0;
+  const writes = Math.max(u.cache_write_tokens ?? 0, w30 + w12);
+  // A total without the lifetime split is billed at the default 30-minute rate.
+  const w30b = writes - w12;
+  const ordinary = Math.max(0, u.input_tokens - u.cached_tokens - writes);
+  return (ordinary * p.input + u.cached_tokens * p.cached + w30b * p.input * 1.25 + w12 * p.input * 2.5 + u.output_tokens * p.output) / 1_000_000;
 }
 
 function apiKey(): string {
@@ -99,6 +113,9 @@ export function parseUsage(u: any): ResponseUsage | null {
     ? {
       input_tokens: Number(u.input_tokens ?? 0),
       cached_tokens: Number(u.input_tokens_details?.cached_tokens ?? 0),
+      cache_write_tokens: Number(u.input_tokens_details?.cache_write_tokens ?? 0),
+      cache_write_30m_tokens: Number(u.input_tokens_details?.cache_write_tokens_details?.ttl_30m_tokens ?? 0),
+      cache_write_12h_tokens: Number(u.input_tokens_details?.cache_write_tokens_details?.ttl_12h_tokens ?? 0),
       output_tokens: Number(u.output_tokens ?? 0),
       reasoning_tokens: Number(u.output_tokens_details?.reasoning_tokens ?? 0),
       total_tokens: Number(u.total_tokens ?? 0),
@@ -151,7 +168,15 @@ export type CreateResponseInput = {
   promptCacheKey?: string;
   /** Kept for call-site compatibility; ignored (single model). */
   chainDepth?: number;
+  /**
+   * "explicit" with no breakpoints = no prompt caching and no cache-write charge. For one-off
+   * prompts (a reading part is never re-sent) writes cost 1.25x and are never read back.
+   */
+  promptCacheMode?: "explicit" | "implicit";
 };
+
+/** Set false after the API rejects prompt_cache_options once (then requests omit it). */
+let cacheOptionsOk = true;
 
 function requestBody(input: CreateResponseInput, model: string, stream: boolean): Record<string, unknown> {
   const body: Record<string, unknown> = {
@@ -173,6 +198,7 @@ function requestBody(input: CreateResponseInput, model: string, stream: boolean)
   if (input.previousResponseId) body.previous_response_id = input.previousResponseId;
   if (input.metadata) body.metadata = input.metadata;
   if (input.promptCacheKey) body.prompt_cache_key = input.promptCacheKey.slice(0, 64);
+  if (input.promptCacheMode && cacheOptionsOk) body.prompt_cache_options = { mode: input.promptCacheMode };
   return body;
 }
 
@@ -190,6 +216,10 @@ export async function createResponse(input: CreateResponseInput): Promise<Respon
     const raw = await res.json().catch(() => null);
     if (!res.ok) {
       const msg = raw?.error?.message ?? `http_${res.status}`;
+      if (res.status === 400 && input.promptCacheMode && cacheOptionsOk && /prompt_cache_options/i.test(String(msg))) {
+        cacheOptionsOk = false;
+        return await createResponse(input);
+      }
       throw new Error(`openai_create_failed:${res.status}:${String(msg).slice(0, 300)}`);
     }
     return parseResponse(raw);
@@ -229,6 +259,11 @@ export async function streamResponse(input: CreateResponseInput, h: StreamHandle
     });
     if (!res.ok || !res.body) {
       const raw = await res.json().catch(() => null);
+      if (res.status === 400 && input.promptCacheMode && cacheOptionsOk && /prompt_cache_options/i.test(String(raw?.error?.message ?? ""))) {
+        cacheOptionsOk = false;
+        clearTimeout(total);
+        return await streamResponse(input, h);
+      }
       throw new Error(`openai_create_failed:${res.status}:${String(raw?.error?.message ?? "").slice(0, 300)}`);
     }
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();

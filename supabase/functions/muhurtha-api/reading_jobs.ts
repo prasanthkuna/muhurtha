@@ -197,7 +197,7 @@ async function logCall(
     cost_usd: cost,
     latency_ms: row.latency_ms ?? null,
     error: row.error ?? null,
-    meta: row.meta ?? null,
+    meta: row.usage?.cache_write_tokens ? { ...(row.meta ?? {}), cache_write: row.usage.cache_write_tokens } : row.meta ?? null,
   });
   return cost;
 }

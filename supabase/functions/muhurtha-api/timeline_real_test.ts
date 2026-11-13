@@ -37,7 +37,7 @@ const BI = {
 
 Deno.test("v2 facts carry summary rows; sanitize drops summary bodies; view exposes kind + ages", () => {
   // deno-lint-ignore no-explicit-any
-  const facts = buildReadingFacts(PROF as any, BI as any, "en", "2026-11-01", null);
+  const facts = buildReadingFacts(PROF as any, BI as any, "en", "2026-11-01", null, { v4: false });
   const kinds = facts.chapters.map((c) => c.kind);
   assertEquals(facts.chapters.map((c) => c.chapter_id), facts.chapters.map((_, i) => i), "ids 0..n-1 in order");
   assert(kinds.includes("summary") && kinds.includes("detail"));

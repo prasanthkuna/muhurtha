@@ -3,10 +3,33 @@ import { liveFacts } from "./engine.ts";
 import { syntheticProfiles, evalCases, scriptShare } from "./luna_eval.ts";
 import { mergeShards, planShards, previewFrom } from "./reading_shards.ts";
 import { normalizePrefs } from "./push.ts";
+import { chapterPlanV4, fillPlansV4, requiredIdsV4 } from "./reading_v4.ts";
 
-Deno.test("shards cover every engine id exactly once, A carries Decode + current chapter", () => {
+Deno.test("v4 parts: initial + background days + on-demand chapters cover every id exactly once", () => {
   for (const sp of syntheticProfiles(12)) {
     const f = liveFacts(sp.prof, sp.bi, sp.locale, "2026-11-12", null)!;
+    assertEquals(f.facts_version, 4);
+    const plans = planShards(f);
+    assertEquals(plans.map((p) => p.key), ["A", "B", "C", "D"]);
+    const req = requiredIdsV4(f);
+    const days = [...plans.flatMap((p) => p.scope.days ?? []), ...fillPlansV4(f, null).flatMap((p) => p.scope.days ?? [])];
+    // fill plans cover all days when nothing is written; with the initial days written they cover the rest.
+    const written = { days: req.days.map((date) => ({ date })) } as never;
+    const rest = fillPlansV4(f, written).flatMap((p) => p.scope.days ?? []);
+    assertEquals([...req.days, ...rest].sort(), f.days.map((d) => d.date).sort());
+    assert(days.length >= f.days.length);
+    const a = plans[0];
+    assert(a.scope.profile && (a.scope.areas ?? []).length === f.area_ids.length);
+    if (f.current_chapter_id != null) assert(plans[1].scope.chapters?.includes(f.current_chapter_id));
+    assertEquals(plans.filter((p) => p.scope.extras).length, 1);
+    const other = f.chapters.find((c) => !req.chapters.includes(c.chapter_id));
+    if (other) assert(chapterPlanV4(f, null, other.chapter_id)!.scope.chapters!.includes(other.chapter_id));
+  }
+});
+
+Deno.test("v3 shards cover every engine id exactly once, A carries Decode + current chapter", () => {
+  for (const sp of syntheticProfiles(12)) {
+    const f = { ...liveFacts(sp.prof, sp.bi, sp.locale, "2026-11-12", null)!, facts_version: 3 as const, chart: undefined };
     const plans = planShards(f);
     const days = plans.flatMap((p) => p.scope.days ?? []);
     const ch = plans.flatMap((p) => p.scope.chapters ?? []);
