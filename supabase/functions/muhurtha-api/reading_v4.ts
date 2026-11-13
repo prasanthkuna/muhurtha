@@ -256,8 +256,21 @@ export function partInstructionV4(f: V2Facts, p: V4Plan): string {
     `PART ${p.key}: write ${p.note} (${ids.join("; ")}). Each listed id exactly once.`,
     p.key === "F1" || p.key === "F2" ? "Other days are already written: never reuse a title, body opener or chip from titles_already_used / openers_already_used." : "",
     p.key === "L" ? "Other chapters are already written: never reuse a title or its first word from titles_already_used." : "",
-    `Language: ${f.locale}.`,
+    LANGUAGE_LINE[f.locale] ?? `Language: ${f.locale}.`,
   ].filter(Boolean).join("\n");
+}
+
+const LANGUAGE_LINE: Record<string, string> = {
+  en: "Language: English.",
+  te: "Language: Telugu. Write EVERY text field (titles, lines, bodies, chips, window notes) in Telugu script (తెలుగు), casual but respectful; English words only where everyday Telugu speech uses them, never whole English sentences.",
+  hi: "Language: Hindi. Write EVERY text field (titles, lines, bodies, chips, window notes) in Devanagari (हिन्दी), warm and respectful; English words only where everyday Hindi speech uses them, never whole English sentences.",
+};
+
+/** One bounded repair for freshly written items (fill days / on-demand chapters). */
+export function newItemScope(v: { flags: { section: string; id: string | number }[] }, days: string[], chapters: number[]): { days?: string[]; chapters?: number[] } | null {
+  const d = [...new Set(v.flags.filter((f) => f.section === "days" && days.includes(String(f.id))).map((f) => String(f.id)))].sort().slice(0, 18);
+  const c = [...new Set(v.flags.filter((f) => f.section === "chapters" && chapters.includes(Number(f.id))).map((f) => Number(f.id)))];
+  return d.length || c.length ? { ...(d.length ? { days: d } : {}), ...(c.length ? { chapters: c } : {}) } : null;
 }
 
 export function v4SystemRules(f: V2Facts): string[] {

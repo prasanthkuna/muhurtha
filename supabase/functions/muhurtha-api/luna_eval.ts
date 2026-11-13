@@ -18,7 +18,7 @@ import { themeOk } from "./theme_check.ts";
 import { buildSystemPrompt, mergeRepair, repairPrompt, repairScope, sanitizeContent, type V2Content, validateContent } from "./reading_v2.ts";
 import { createWithSchema } from "./reading_jobs.ts";
 import { isV4 } from "./reading_v2.ts";
-import { chapterPlanV4, fillPlansV4 } from "./reading_v4.ts";
+import { chapterPlanV4, fillPlansV4, newItemScope } from "./reading_v4.ts";
 import { moonSiderealLongitudeDeg, nakshatraMetaFromSiderealLon } from "./ephemeris.ts";
 import { lagnaSidereal } from "./grahas.ts";
 
@@ -351,8 +351,24 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
   const fills = await Promise.all(fp.map((p) => run(p, fill, final)));
   const have = new Set(final.days.map((d) => d.date));
   const newDays = fills.flatMap((x) => x?.days ?? []).filter((d) => !have.has(d.date));
-  const full = sanitizeContent({ ...final, days: [...final.days, ...newDays].sort((a, b) => a.date.localeCompare(b.date)) }, facts);
-  const vf = validateContent(full, facts);
+  let full = sanitizeContent({ ...final, days: [...final.days, ...newDays].sort((a, b) => a.date.localeCompare(b.date)) }, facts);
+  let vf = validateContent(full, facts);
+  // Same one repair of the new days as production (fillDaysV4 -> repairNew).
+  const fillFlagsBefore = vf.flags.filter((f) => f.section === "days" && newDays.some((d) => d.date === String(f.id))).length;
+  const fscope = newItemScope(vf, newDays.map((d) => d.date), []);
+  if (fscope) {
+    try {
+      const r = await createWithSchema(facts, { system: buildSystemPrompt(facts), user: repairPrompt(facts, full, vf, fscope), scope: fscope, background: false });
+      addT(fill, r.model, r.usage);
+      const patch = JSON.parse(r.output_text ?? "null");
+      if (patch) {
+        full = sanitizeContent(mergeRepair(full, patch), facts);
+        vf = validateContent(full, facts);
+      }
+    } catch (e) {
+      errs.fill_repair = (e instanceof Error ? e.message : String(e)).slice(0, 160);
+    }
+  }
   const fillMs = Date.now() - t0 - readyMs;
   // One on-demand chapter batch (a past chapter, as a Pro user browsing back).
   const unwritten = facts.chapters.find((c) => !full.chapters.some((x) => Number(x.chapter_id) === c.chapter_id));
@@ -380,7 +396,13 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
       input_tokens: init.input + fill.input, output_tokens: init.output + fill.output, cache_write_tokens: init.cache_write + fill.cache_write,
       chapters: facts.chapters.length, written_chapters: full.chapters.length,
       claims: st.claims ?? 0, unsupported_claims: st.unsupported_claims ?? 0, unsupported_pct: unsupportedPct,
-      theme: vf.stats.theme, flags_before_repair: v0.flags.length, repaired: Boolean(scope),
+      theme: vf.stats.theme, flags_before_repair: v0.flags.length, repaired: Boolean(scope), fill_flags_before_repair: fillFlagsBefore,
+      unsupported_sample: vf.flags.filter((f) => f.reasons.some((r) => r.startsWith("unsupported_claim"))).slice(0, 4).map((f) => {
+        const item = f.section === "chapters" ? full.chapters.find((c) => String(c.chapter_id) === String(f.id))
+          : f.section === "areas" ? full.areas.find((a) => a.area_id === f.id) : f.section === ("profile" as never) ? full.profile : null;
+        return { at: `${f.section}:${f.id}`, reasons: f.reasons, cited: (item as { evidence_ids?: string[] } | null)?.evidence_ids ?? [], text: JSON.stringify(item ?? {}).slice(0, 700) };
+      }),
+      script_sample: vf.flags.filter((f) => f.reasons.includes("wrong_script")).slice(0, 2).map((f) => JSON.stringify(full.days.find((d) => d.date === String(f.id)) ?? {}).slice(0, 500)),
       flag_sample: vf.flags.slice(0, 25).map((f) => `${f.section}:${f.id}:${f.reasons.join("|")}`),
       reasons: vf.flags.flatMap((f) => f.reasons).reduce((m: Record<string, number>, r) => {
         const k = r.split(":")[0];

@@ -34,7 +34,7 @@ import {
   retrieveResponse,
   type ResponseObject,
 } from "./openai_responses.ts";
-import { chapterPlanV4, fillPlansV4 } from "./reading_v4.ts";
+import { chapterPlanV4, fillPlansV4, newItemScope } from "./reading_v4.ts";
 import { mergeShards, planShards, previewFrom, readingEffort, type ReadingPreview, type ShardKey, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
 
 /** Job attempts come from maxAttempts() in llm_policy.ts (Luna: first try + one retry). */
@@ -223,6 +223,8 @@ export async function createWithSchema(
       maxOutputTokens: args.scope ? 12000 : 40000,
       metadata: args.metadata,
       chainDepth: args.chainDepth,
+      // Repairs are one-off prompts (they carry the draft): never pay for a cache write.
+      ...(args.scope ? { promptCacheMode: "explicit" as const } : {}),
     });
   if (lengthsSupported !== false) {
     try {
@@ -603,6 +605,8 @@ async function polishAndSave(
 }
 
 /** Keep a task alive past the response (edge waitUntil) or just let it run. */
+export { repairNew as repairNewItems };
+
 export function background(task: Promise<unknown>): void {
   const guarded = task.catch((e) => console.warn("[reading] background task failed", e instanceof Error ? e.message : e));
   // deno-lint-ignore no-explicit-any
@@ -1015,7 +1019,7 @@ export async function runInlineA(admin: SupabaseClient, jobId: string, reading: 
   });
 }
 
-type FillState = { status: "running" | "done" | "failed"; tries: number; at: string; days?: number; cost_usd?: number; ms?: number; error?: string };
+type FillState = { status: "running" | "done" | "failed"; tries: number; at: string; days?: number; cost_usd?: number; ms?: number; error?: string; flagged?: number };
 
 async function addJobCost(admin: SupabaseClient, readingId: string, add: Totals): Promise<void> {
   const job = await latestJob(admin, readingId);
@@ -1062,6 +1066,63 @@ async function runParts(
   }
   return { parts, totals, errors };
 }
+
+/** Validate the new items in context and run one repair on the flagged ones (if any). */
+async function repairNew(
+  admin: SupabaseClient,
+  reading: ReadingRow,
+  base: V2Content,
+  add: Partial<V2Content>,
+  jobId: string | null,
+): Promise<{ add: Partial<V2Content>; totals: Totals; flagged: number }> {
+  const facts = reading.facts!;
+  const totals: Totals = { input_tokens: 0, cached_tokens: 0, output_tokens: 0, reasoning_tokens: 0, cost_usd: 0 };
+  const days = new Map((base.days ?? []).map((d) => [d.date, d]));
+  for (const d of add.days ?? []) days.set(d.date, d);
+  const chs = new Map((base.chapters ?? []).map((c) => [Number(c.chapter_id), c]));
+  for (const c of add.chapters ?? []) chs.set(Number(c.chapter_id), c);
+  const tmp = sanitizeContent({ ...base, days: [...days.values()].sort((a, b) => a.date.localeCompare(b.date)), chapters: [...chs.values()].sort((a, b) => Number(a.chapter_id) - Number(b.chapter_id)) }, facts);
+  const v = validateContent(tmp, facts);
+  const scope = newItemScope(v, (add.days ?? []).map((d) => d.date), (add.chapters ?? []).map((c) => Number(c.chapter_id)));
+  if (!scope) return { add, totals, flagged: 0 };
+  const t0 = Date.now();
+  try {
+    const r = await createWithSchema(facts, {
+      system: buildSystemPrompt(facts), user: repairPrompt(facts, tmp, v, scope), scope, background: false, chainDepth: 2,
+      metadata: { reading_id: reading.id, purpose: "repair" },
+    });
+    totals.cost_usd += await logCall(admin, {
+      job_id: jobId, profile_id: reading.profile_id, purpose: "repair", model: r.model ?? readingModel(), response_id: r.id,
+      locale: reading.locale, status: r.status, usage: r.usage, latency_ms: Date.now() - t0, meta: { flagged: v.flags.length, scope: "new_items" },
+    });
+    totals.input_tokens += r.usage?.input_tokens ?? 0;
+    totals.cached_tokens += r.usage?.cached_tokens ?? 0;
+    totals.output_tokens += r.usage?.output_tokens ?? 0;
+    totals.reasoning_tokens += r.usage?.reasoning_tokens ?? 0;
+    const patch = parseContent(r.output_text);
+    if (!patch) return { add, totals, flagged: v.flags.length };
+    const fixed = sanitizeContent(mergeRepair(tmp, patch), facts);
+    const pickD = new Set((add.days ?? []).map((d) => d.date)), pickC = new Set((add.chapters ?? []).map((c) => Number(c.chapter_id)));
+    return {
+      add: {
+        ...(add.days ? { days: fixed.days.filter((d) => pickD.has(d.date)) } : {}),
+        ...(add.chapters ? { chapters: fixed.chapters.filter((c) => pickC.has(Number(c.chapter_id))) } : {}),
+      },
+      totals, flagged: v.flags.length,
+    };
+  } catch (e) {
+    await logCall(admin, {
+      job_id: jobId, profile_id: reading.profile_id, purpose: "repair", model: readingModel(), locale: reading.locale,
+      status: "error", error: (e instanceof Error ? e.message : String(e)).slice(0, 300), latency_ms: Date.now() - t0,
+    });
+    return { add, totals, flagged: v.flags.length };
+  }
+}
+
+const sumT = (a: Totals, b: Totals): Totals => ({
+  input_tokens: a.input_tokens + b.input_tokens, cached_tokens: a.cached_tokens + b.cached_tokens, output_tokens: a.output_tokens + b.output_tokens,
+  reasoning_tokens: a.reasoning_tokens + b.reasoning_tokens, cost_usd: a.cost_usd + b.cost_usd,
+});
 
 /** Merge new days/chapters into the saved reading (optimistic on updated_at), re-validate, save. */
 async function mergeIntoReading(
@@ -1121,12 +1182,15 @@ export async function fillDaysV4(admin: SupabaseClient, readingId: string): Prom
   const wanted = new Set(plans.flatMap((p) => p.scope.days ?? []));
   const got = days.filter((d) => wanted.has(d.date));
   const missing = [...wanted].filter((d) => !got.find((x) => x.date === d));
+  const rep = got.length ? await repairNew(admin, r, r.content, { days: got }, job?.id ?? null) : null;
+  const fixedDays = rep?.add.days ?? got;
+  out.totals = rep ? sumT(out.totals, rep.totals) : out.totals;
   const state: FillState = {
     status: missing.length ? "failed" : "done", tries, at: new Date().toISOString(), days: got.length,
     cost_usd: Number(((fill?.cost_usd ?? 0) + out.totals.cost_usd).toFixed(6)), ms: Date.now() - t0,
     ...(out.errors.length || missing.length ? { error: [...out.errors, missing.length ? `missing:${missing.length}` : ""].filter(Boolean).join("; ").slice(0, 300) } : {}),
   };
-  const saved = await mergeIntoReading(admin, readingId, { days: got }, () => ({ fill: state }));
+  const saved = await mergeIntoReading(admin, readingId, { days: fixedDays }, () => ({ fill: { ...state, flagged: rep?.flagged ?? 0 } }));
   if (!saved.ok) {
     await admin.from("readings").update({ validation: { ...(r.validation ?? {}), fill: { ...state, status: "failed", error: "merge_rejected" } } })
       .eq("id", readingId);
@@ -1148,7 +1212,10 @@ export async function writeChaptersV4(
   if (!plan) return { written: [], already: true };
   const out = await runParts(admin, r, r.content, [plan], (await latestJob(admin, readingId))?.id ?? null);
   const want = new Set(plan.scope.chapters ?? []);
-  const chapters = out.parts.flatMap((p) => p.chapters ?? []).filter((c) => want.has(Number(c.chapter_id)));
+  const raw = out.parts.flatMap((p) => p.chapters ?? []).filter((c) => want.has(Number(c.chapter_id)));
+  const rep = raw.length ? await repairNew(admin, r, r.content, { chapters: raw }, null) : null;
+  const chapters = rep?.add.chapters?.length ? rep.add.chapters : raw;
+  if (rep) out.totals = sumT(out.totals, rep.totals);
   await addJobCost(admin, readingId, out.totals);
   if (!chapters.length) return { written: [], error: out.errors.join("; ") || "no_content", cost_usd: out.totals.cost_usd };
   const saved = await mergeIntoReading(admin, readingId, { chapters }, (v) => v.fill ? { fill: v.fill } : {});
