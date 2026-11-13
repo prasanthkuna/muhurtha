@@ -38,8 +38,10 @@ export const OVERUSED: Record<Loc, string[]> = {
   te: ["సింపుల్", "ప్రశాంతంగా", "తెలిసిన", "నెమ్మదిగా", "ఒక్క పని"],
   hi: ["सरल", "शांत", "परिचित", "छोटा कदम", "धीरे"],
 };
-const TRAIT_STOP = new Set(["something", "usable", "things", "person", "people", "practical", "everything", "anything", "though", "through", "piece", "pieces", "every", "their", "being", "makes", "making", "small", "control"]);
-const TITLE_ALLOW = new Set(["haste", "hasty", "mulch", "revel", "swat", "magic", "maghi", "rohan", "chips", "ardent", "pushes", "pushed", "pusher", "shiva", "indra", "brahma"]);
+const TRAIT_STOP = new Set(["something", "usable", "things", "person", "people", "practical", "everything", "anything", "though", "through", "piece", "pieces", "every", "their", "being", "makes", "making", "small", "control", "family", "elders", "pressure", "required", "missing", "around", "matter", "matters", "someone", "others", "little", "always", "enough", "really", "rather", "needed", "wanting", "feeling", "change", "changes", "should", "before", "after", "between", "within", "yourself"]);
+/** Grounding words (the engine's facts) are allowed to recur; they are not a template. */
+const GROUNDING_GRAM: Record<Loc, RegExp> = { en: /birth star|your star|tithi|full moon|new moon/i, te: /జన్మ నక్షత్ర|పుట్టిన నక్షత్ర|నక్షత్రం|తిథి|తార/, hi: /जन्म नक्षत्र|नक्षत्र|तिथि|तारा/ };
+const TITLE_ALLOW = new Set(["push", "magnet", "magic", "chit", "rohin", "mule", "mulan", "haste", "hasty", "mulch", "revel", "swat", "magic", "maghi", "rohan", "chips", "ardent", "pushes", "pushed", "pusher", "shiva", "indra", "brahma"]);
 
 const words = (s: string) => (s.toLowerCase().match(/[\p{L}\p{M}']+/gu) ?? []);
 
@@ -65,7 +67,7 @@ export function misspelledNames(title: string): string[] {
     const w = raw.replace(/['’]s$/, "").toLowerCase();
     if (w.length < 4 || NAMES.includes(w) || TITLE_ALLOW.has(w)) continue;
     if (!/^[A-Z]/.test(raw)) continue;
-    const near = NAMES.find((n) => n.slice(0, 2) === w.slice(0, 2) && Math.abs(n.length - w.length) <= 2 && lev(n, w) <= (n.length >= 6 ? 2 : 1));
+    const near = NAMES.find((n) => n.slice(0, 2) === w.slice(0, 2) && Math.abs(n.length - w.length) <= 1 && lev(n, w) <= (n.length >= 6 ? 2 : 1));
     if (near) out.push(`${raw}->${near}`);
   }
   return out;
@@ -109,7 +111,9 @@ export function themeCheck(days: (V2DayCopy & { date: string })[], facts: V2Fact
       }
     }
     const tw = words(text);
-    const hasTrait = stems.length > 0 && tw.some((w) => stems.some((s) => w.startsWith(s)));
+    // A trait mention: two distinct trait stems, or one long distinctive one ("perfect", "authority").
+    const hits = new Set(stems.filter((s) => tw.some((w) => w.startsWith(s))));
+    const hasTrait = hits.size >= 2 || [...hits].some((s) => tw.some((w) => w.startsWith(s) && w.length >= 7));
     if (hasTrait) {
       traitDays += 1;
       const a = angle.get(d.date);
@@ -128,7 +132,7 @@ export function themeCheck(days: (V2DayCopy & { date: string })[], facts: V2Fact
     const seen = new Set<string>();
     for (let i = 0; i + 4 <= bw.length; i++) {
       const g = bw.slice(i, i + 4).join(" ");
-      if (seen.has(g)) continue;
+      if (seen.has(g) || GROUNDING_GRAM[loc].test(g)) continue;
       seen.add(g);
       const list = gramDays.get(g) ?? [];
       list.push(d.date);

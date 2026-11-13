@@ -263,7 +263,9 @@ export function buildUnionSchema(facts: V2Facts, withLengths: boolean): Json {
   const full = buildReadingSchema(facts, { withLengths }) as { properties: Record<string, Json & { minItems?: number }> };
   const props: Record<string, Json> = {};
   for (const [k, v] of Object.entries(full.properties)) {
-    if (k === "profile" || k === "push") props[k] = nullable(v);
+    // push stays required (tiny; a nullable push was skipped by the extras part), profile is nullable.
+    if (k === "profile") props[k] = nullable(v);
+    else if (k === "push") props[k] = v;
     else props[k] = { ...(v as Record<string, unknown>), minItems: 0 } as Json;
   }
   return obj(props);
@@ -388,11 +390,11 @@ function dayRulesV3(facts: V2Facts): string[] {
   const te = facts.locale === "te";
   return [
     "2. Day cards follow the engine's `angle` for that date; the angles are already spread so no two neighbouring days share an area, action or opener. Write the day ABOUT angle.area, suggest angle.action, write in angle.tone, and open the body the way angle.opener says (" + OPENERS_LINE + ").",
-    "2a. The reason comes from angle.lead: star -> MEANINGS.stars[nakshatra]; tithi -> MEANINGS.tithis[the tithi's last word]; tara -> MEANINGS.taras[tara] (how today's star sits with their birth star); yoga -> MEANINGS.yogas[yoga]. Say that meaning in fresh, everyday words tied to angle.area, and name the lead fact once (the star, tithi or yoga name; for tara, say 'your birth star' relation in plain words), mid-sentence. Never open a body with the star name. Never write '<star> is today's star', 'today's star is <star>'" + (te ? ", 'ఈరోజు నక్షత్రం <star>' / '<star> నక్షత్రం ఈరోజు'" : "") + " or the word 'hint'.",
+    "2a. The reason comes from angle.lead: star -> MEANINGS.stars[nakshatra]; tithi -> MEANINGS.tithis[the tithi's last word]; tara -> MEANINGS.taras[tara] (how today's star sits with their birth star); yoga -> MEANINGS.yogas[yoga]. Say that meaning in fresh, everyday words tied to angle.area and make the why explicit (" + (te ? "కాబట్టి / అందుకే / కావడంతో" : facts.locale === "hi" ? "क्योंकि / इसलिए / की वजह से" : "because / so / which means") + "), and name the lead fact once (the star, tithi or yoga name; for tara, say 'your birth star' relation in plain words), mid-sentence. Never open a body with the star name. Never write '<star> is today's star', 'today's star is <star>'" + (te ? ", 'ఈరోజు నక్షత్రం <star>' / '<star> నక్షత్రం ఈరోజు'" : "") + " or the word 'hint'.",
     "2b. One screen shows title, line, body, do/avoid chips and the slot note together, so each takes a DIFFERENT job: line = the one-sentence verdict; body = the why + one concrete example in angle.area; do/avoid = two other actions not named in the body; the slot note = what that slot suits. Never repeat a task across them. The calendar field holds the Calendar tab's tags; agree with them.",
     "2c. Personality: mention the natal trait (natal.archetype / signals) ONLY on days whose angle.trait_ok is true, at most once. On every other day say nothing about their character (no 'your eye for detail', 'perfectionist', 'you like things just right').",
     "2d. Titles: 2-5 words, each title fresh (different first word from the previous three days), concrete to angle.area/action. No '<Star>'s <Noun>' formula. If a title names a star or tithi, spell it exactly as in FACTS (e.g. Pushya, never 'Pushy').",
-    "2e. Word budget across all days: 'familiar', 'simple', 'gentle', 'quiet/quietly', 'steady', 'small step', 'one thing' each at most once per five days; prefer the specific noun or verb.",
+    "2e. Word budget across all days: 'familiar', 'simple', 'gentle', 'quiet/quietly', 'steady', 'small step', 'one thing' each at most once per five days; prefer the specific noun or verb. Vary HOW you give the reason too: never reuse one sentence frame across days (" + (te ? "'… రోజు కాబట్టి', '… కావడంతో ఈరోజు'" : facts.locale === "hi" ? "'… का दिन है, इसलिए', '… की याद दिलाता है', '… का संकेत देता है'" : "'… is a day for …, so', 'which means today'") + " at most twice in the whole reading).",
     "3. window_notes: exactly ONE note, for the window whose writer is \"llm\" (slot = angle.slot); the app writes the other slots from the engine's hora and Rahu Kalam tables. The note ties that slot's `suits` to angle.area; never start it with 'Use this slot', 'A good slot', 'Good for' or 'This slot'. Never write times; the app shows them.",
     "4. There are no weekday cards in this reading; weeks/months use best_days and light_days (weekday + star) to say which days to use and which to keep light; never write dates.",
   ];
@@ -689,7 +691,11 @@ export function groundingProblems(
   }
   const hint = tithiHint(fx.tithi);
   if (hint && /purnima|amavasya|ekadashi/i.test(fx.tithi)) {
-    const words = locale === "te" ? /(పౌర్ణమి|పున్నమి|అమావాస్య|ఏకాదశి)/ : /(full moon|purnima|new moon|amavasya|ekadashi)/i;
+    const words = locale === "te"
+      ? /(పౌర్ణమి|పున్నమి|అమావాస్య|ఏకాదశి)/
+      : locale === "hi"
+      ? /(पूर्णिमा|पूनम|अमावस्या|अमावस|एकादशी|full moon|new moon|purnima|amavasya|ekadashi)/i
+      : /(full moon|purnima|new moon|amavasya|ekadashi)/i;
     if (!words.test(text)) out.push("tithi_missed");
   }
   return [...new Set(out)];

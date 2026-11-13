@@ -95,11 +95,11 @@ export function shardInstruction(f: V2Facts, p: ShardPlan): string {
   if (v3) {
     if (p.scope.profile) fill.push("profile");
     if (p.scope.areas?.length) fill.push("areas (every area)");
-    if (p.scope.extras) fill.push("ask_starters (4), remedies (3), push");
+    if (p.scope.extras) fill.push("ask_starters (4), remedies (3), push (all five keys, each with title and body)");
   }
   return [
     `PART ${p.key}: write ONLY ${p.note} (${ids.join("; ") || "as listed in the schema"}).`,
-    ...(v3 ? [`Fill exactly: ${[...ids, ...fill].join("; ")}. Every other array stays empty ([]); profile and push stay null unless listed. Each listed id appears exactly once.`] : []),
+    ...(v3 ? [`Fill exactly: ${[...ids, ...fill].join("; ")}. Every other array stays empty ([]); profile stays null unless listed${p.scope.extras ? "" : "; push is required by the schema, so fill it with short placeholders (it is discarded)"}. Each listed id appears exactly once.`] : []),
     "Other parts of the same reading are written in parallel from the same FACTS; follow every rule exactly as for the full reading." + titles,
     `Language: ${f.locale}.`,
   ].join("\n");

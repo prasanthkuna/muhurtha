@@ -204,7 +204,7 @@ async function logCall(
 
 export { logCall as logLlmCall };
 
-async function createWithSchema(
+export async function createWithSchema(
   facts: V2Facts,
   args: { system: string; user: string; scope?: Parameters<typeof buildReadingSchema>[1]["scope"]; background: boolean; metadata?: Record<string, string>; model?: string; chainDepth?: number },
 ): Promise<ResponseObject> {

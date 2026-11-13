@@ -15,7 +15,8 @@ import { costUsd, readingModel, type ReasoningEffort, streamResponse } from "./o
 import { jargonHits, VOICE_BANNED } from "./voice.ts";
 import { BULK_SHARDS, mergeShards, planShards, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
 import { themeOk } from "./theme_check.ts";
-import { sanitizeContent, type V2Content, validateContent } from "./reading_v2.ts";
+import { buildSystemPrompt, mergeRepair, repairPrompt, repairScope, sanitizeContent, type V2Content, validateContent } from "./reading_v2.ts";
+import { createWithSchema } from "./reading_jobs.ts";
 
 type L = "en" | "te" | "hi";
 const CITIES = [
@@ -216,7 +217,10 @@ export async function runReadingCase(i: number, effort: ReasoningEffort, date: s
         cached += r.usage?.cached_tokens ?? 0;
         input += r.usage?.input_tokens ?? 0;
         last = JSON.parse(r.output_text ?? "null");
-        if (shardMissing(p, last as never).length === 0) return shardOnly(p, last as never);
+        if (shardMissing(p, last as never).length === 0) {
+          delete errs[p.key];
+          return shardOnly(p, last as never);
+        }
         errs[p.key] = `missing:${shardMissing(p, last as never).slice(0, 4).join(",")}`;
       } catch (e) {
         errs[p.key] = (e instanceof Error ? e.message : String(e)).slice(0, 160);
@@ -230,7 +234,27 @@ export async function runReadingCase(i: number, effort: ReasoningEffort, date: s
   const rest = await Promise.all(plans.filter((p) => p !== a).map(run));
   const parts = [await aDone, ...rest];
   const merged = sanitizeContent(mergeShards(parts.filter((x): x is Partial<V2Content> => Boolean(x))), facts);
-  const v = validateContent(merged, facts);
+  const v0 = validateContent(merged, facts);
+  // Same one targeted repair as production (polishAndSave), so the eval scores what users see.
+  let v = v0;
+  let final = merged;
+  let repairMs = 0;
+  const scope = v0.ok ? repairScope(v0) : null;
+  if (scope) {
+    const tr = Date.now();
+    try {
+      const r = await createWithSchema(facts, { system: buildSystemPrompt(facts), user: repairPrompt(facts, merged, v0, scope), scope, background: false });
+      cost += costUsd(r.model ?? readingModel(), r.usage);
+      const patch = JSON.parse(r.output_text ?? "null");
+      if (patch) {
+        final = sanitizeContent(mergeRepair(merged, patch), facts);
+        v = validateContent(final, facts);
+      }
+    } catch (e) {
+      errs.repair = (e instanceof Error ? e.message : String(e)).slice(0, 160);
+    }
+    repairMs = Date.now() - tr;
+  }
   const theme = v.stats.theme ? themeOk(v.stats.theme) : { ok: false, fails: ["no_theme_stats"] };
   return {
     case_id: `reading-${effort}-p${i}`, locale: sp.locale, pass: v.ok && Object.keys(errs).length === 0 && theme.ok,
@@ -238,12 +262,15 @@ export async function runReadingCase(i: number, effort: ReasoningEffort, date: s
     latency_ms: Date.now() - t0, first_token_ms: times.A ?? null,
     output: {
       effort, shard_ms: times, errors: errs, cost_usd: Math.round(cost * 1e6) / 1e6, chapters: facts.chapters.length,
-      input_tokens: input, cached_tokens: cached, theme: v.stats.theme, reasons: v.flags.flatMap((f) => f.reasons).reduce((m: Record<string, number>, r) => {
+      input_tokens: input, cached_tokens: cached, theme: v.stats.theme, theme_before_repair: v0.stats.theme, flags_before_repair: v0.flags.length,
+      repair_ms: repairMs, repaired_days: scope?.days?.length ?? 0,
+      flag_sample: v.flags.slice(0, 25).map((f) => `${f.section}:${f.id}:${f.reasons.join("|")}`),
+      reasons: v.flags.flatMap((f) => f.reasons).reduce((m: Record<string, number>, r) => {
         const k = r.split(":")[0];
         m[k] = (m[k] ?? 0) + 1;
         return m;
       }, {}),
-      sample_days: merged.days.slice(0, 3).map((d) => ({ date: d.date, title: d.title, line: d.line, body: d.body })),
+      sample_days: final.days.slice(0, 3).map((d) => ({ date: d.date, title: d.title, line: d.line, body: d.body })),
     },
   };
 }
