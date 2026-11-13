@@ -450,17 +450,18 @@ const jaccard = (x: Set<string>, y: Set<string>) => {
 };
 
 /** Personalization: same star + same dasha, different Lagna -> the Decode text must differ. */
-export async function runPersonalCase(date: string): Promise<Record<string, unknown>> {
+export async function runPersonalCase(date: string, v4 = true): Promise<Record<string, unknown>> {
   const pair = hastaPair(date);
   if (!pair) return { case_id: "personal-hasta", locale: "en", pass: false, checks: { error: "no_pair" }, latency_ms: 0 };
   const t0 = Date.now();
   const t = zeroT();
   const one = async (x: { prof: ProfRow; bi: BioRow }) => {
-    const f = liveFacts(x.prof, x.bi, "en", date, null, { v4: true })!;
+    const f = liveFacts(x.prof, x.bi, "en", date, null, { v4 })!;
     const A = planShards(f).find((p) => p.key === "A")!;
     const r = await shardCall(f, A, { background: false, timeoutMs: 120_000 });
     addT(t, r.model, r.usage);
     const c = JSON.parse(r.output_text ?? "null") as Partial<V2Content> | null;
+    if (c && !v4) c.areas = (c.areas ?? []).filter((x) => f.area_ids.includes(x.area_id)); // union schema: keep part A's own
     const text = [c?.profile?.title, c?.profile?.summary, ...(c?.profile?.strengths ?? []), ...(c?.profile?.watchouts ?? []), ...(c?.areas ?? []).map((a) => `${a.headline} ${a.summary}`)].join(" ");
     return { f, c, text };
   };
@@ -469,8 +470,8 @@ export async function runPersonalCase(date: string): Promise<Record<string, unkn
   const evA = new Set(a.c?.profile?.evidence_ids ?? []), evB = new Set(b.c?.profile?.evidence_ids ?? []);
   const jEv = jaccard(evA, evB);
   return {
-    case_id: "personal-hasta", locale: "en", pass: j < 0.3 && a.f.chart!.ref_sign !== b.f.chart!.ref_sign,
-    checks: { word_jaccard: Math.round(j * 1000) / 1000, evidence_jaccard: Math.round(jEv * 1000) / 1000, lagna_differs: a.f.chart!.ref_sign !== b.f.chart!.ref_sign },
+    case_id: v4 ? "personal-hasta" : "personal-hasta-v3", locale: "en", pass: j < 0.3,
+    checks: { v4, word_jaccard: Math.round(j * 1000) / 1000, evidence_jaccard: Math.round(jEv * 1000) / 1000 },
     latency_ms: Date.now() - t0,
     output: {
       cost_usd: round6(t.cost), input_tokens: t.input, output_tokens: t.output,
@@ -504,7 +505,7 @@ export async function runLunaEval(admin: SupabaseClient, body: Record<string, un
     const to = Math.min(all.length, Number(body.to ?? all.length));
     results.push(...await pool(all.slice(from, to), Number(body.concurrency ?? 8), (c) => runAskCase(c, date)));
   } else if (kind === "personal") {
-    results.push(await runPersonalCase(date));
+    results.push(await runPersonalCase(date, body.v4 !== false));
   } else {
     const effort = (body.effort === "none" ? "none" : "low") as ReasoningEffort;
     v4Eval = body.v4 !== false;

@@ -42,7 +42,7 @@ export type ReadingStory = {
 
 /** Off switch for new readings (env READING_V4=0 keeps v3). */
 /** Rollout switch: env READING_V4 ("1"/"0") wins; otherwise the code default below. */
-export const READING_V4_DEFAULT = false;
+export const READING_V4_DEFAULT = true;
 export function readingV4Enabled(): boolean {
   const env = (Deno.env.get("READING_V4") ?? "").trim();
   return env ? env !== "0" : READING_V4_DEFAULT;
