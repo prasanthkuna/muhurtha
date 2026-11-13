@@ -18,6 +18,8 @@ import {
   repairScope,
   sanitizeContent,
   isV3,
+  isV4,
+  READING_PROMPT_VERSION_V4,
   validateContent,
   type V2Content,
   type V2Facts,
@@ -32,6 +34,7 @@ import {
   retrieveResponse,
   type ResponseObject,
 } from "./openai_responses.ts";
+import { chapterPlanV4, fillPlansV4 } from "./reading_v4.ts";
 import { mergeShards, planShards, previewFrom, readingEffort, type ReadingPreview, type ShardKey, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
 
 /** Job attempts come from maxAttempts() in llm_policy.ts (Luna: first try + one retry). */
@@ -95,7 +98,7 @@ export type JobRow = {
 };
 
 export type ShardEntry = {
-  status: "queued" | "running" | "done";
+  status: "queued" | "running" | "inline" | "done";
   rid: string | null;
   tries: number;
   submitted_at?: string;
@@ -336,7 +339,7 @@ export async function startReading(
       source: "llm",
       provider: providerOf(readingModel()),
       model: readingModel(),
-      prompt_version: READING_PROMPT_VERSION,
+      prompt_version: isV4(args.facts) ? READING_PROMPT_VERSION_V4 : READING_PROMPT_VERSION,
       generated_for_date: args.facts.generation_date,
     }).select(READING_COLS).single();
     if (error) {
@@ -593,7 +596,18 @@ async function polishAndSave(
       console.warn("[reading] onReady hook failed", e instanceof Error ? e.message : e);
     }
   }
+  // v4: the reading is usable now (7 written days + engine cards); write the remaining days in
+  // the background so Calendar/Today keep their full written copy (Pro value).
+  if (saved && isV4(facts)) background(fillDaysV4(admin, reading.id).then(() => {}));
   return job;
+}
+
+/** Keep a task alive past the response (edge waitUntil) or just let it run. */
+export function background(task: Promise<unknown>): void {
+  const guarded = task.catch((e) => console.warn("[reading] background task failed", e instanceof Error ? e.message : e));
+  // deno-lint-ignore no-explicit-any
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(guarded);
 }
 
 export type JobProgress = {
@@ -690,6 +704,14 @@ export async function submitShards(admin: SupabaseClient, job: JobRow, reading: 
   const parts: ShardState["parts"] = {};
   const pending = plans.filter((p) => prev[p.key]?.status !== "done");
   for (const p of plans) if (prev[p.key]?.status === "done") parts[p.key] = prev[p.key];
+  // v4: part A (Decode) runs inline as a streamed foreground call, so the first insight does
+  // not wait on background polling; everything else is background with no stagger.
+  const inlineA = isV4(facts) && inlineAEnabled() && pending.some((p) => p.key === "A");
+  if (inlineA) {
+    const a = pending.find((p) => p.key === "A")!;
+    pending.splice(pending.indexOf(a), 1);
+    parts.A = { status: "inline", rid: null, tries: (prev.A?.tries ?? 0) + 1, submitted_at: new Date().toISOString() };
+  }
   const submit = (p: (typeof plans)[number]) =>
     shardCall(facts, p, {
       background: true,
@@ -728,8 +750,9 @@ export async function submitShards(admin: SupabaseClient, job: JobRow, reading: 
       status: "create_failed", error: firstErr.slice(0, 500),
     });
   }
-  const anyRunning = Object.values(parts).some((x) => x?.status === "running");
+  const anyRunning = Object.values(parts).some((x) => x?.status === "running" || x?.status === "inline");
   const dayCap = firstErr ? isQuotaCap(firstErr) : false;
+  if (inlineA) background(runInlineA(admin, job.id, reading));
   return await updateJob(admin, job.id, {
     status: anyRunning ? "running" : "queued",
     stage: anyRunning ? "writing" : "retrying",
@@ -782,6 +805,13 @@ async function advanceSharded(
   };
   let firstInsight = job.first_insight_ms ?? null;
   let exhausted = "";
+  for (const p of plans) {
+    const e = parts[p.key];
+    // An inline part whose worker died (timeout, instance recycled): hand it to the background path.
+    if (e?.status === "inline" && now - Date.parse(e.submitted_at ?? job.created_at) > INLINE_STALE_MS) {
+      parts[p.key] = { status: "queued", rid: null, tries: e.tries, error: "inline_timeout" };
+    }
+  }
   const running = plans.filter((p) => parts[p.key]?.status === "running" && parts[p.key]?.rid);
   const fetched = await Promise.allSettled(running.map((p) => retrieveResponse(parts[p.key]!.rid!)));
   const retry: typeof plans = [];
@@ -829,6 +859,7 @@ async function advanceSharded(
     const e = parts[p.key];
     if (!e) parts[p.key] = { status: "queued", rid: null, tries: 0 };
     else if (e.status === "queued" && !retry.includes(p)) retry.push(p);
+    // inline parts are being written by their own worker: leave them alone.
   }
   // One bounded retry per shard; then the job parks (done shards kept) or fails.
   const again = retry.filter((p) => (parts[p.key]?.tries ?? 0) < SHARD_TRIES);
@@ -893,5 +924,253 @@ export function shardProgress(reading: ReadingRow, job: JobRow | null): { done: 
   const parts = job.shards.parts ?? {};
   const done = plans.filter((p) => parts[p.key]?.status === "done").length;
   const a = parts.A?.status === "done" ? parts.A.content as Partial<V2Content> : null;
-  return { done, total: plans.length, preview: a ? previewFrom(reading.facts, a) : null, first_insight_ms: job.first_insight_ms ?? null };
+  // v4: the preview uses every finished part (A = profile, B = chapters, C = days).
+  const merged = a && isV4(reading.facts)
+    ? mergeShards(plans.filter((p) => parts[p.key]?.status === "done").map((p) => parts[p.key]!.content as Partial<V2Content>))
+    : a;
+  return { done, total: plans.length, preview: merged ? previewFrom(reading.facts, merged) : null, first_insight_ms: job.first_insight_ms ?? null };
+}
+
+// ---------------------------------------------------------------- v4 progressive generation
+
+const INLINE_STALE_MS = 120_000;
+const INLINE_TIMEOUT_MS = 90_000;
+const FILL_TIMEOUT_MS = 150_000;
+const FILL_TRIES = 3;
+const FILL_STALE_MS = 5 * 60_000;
+
+export function inlineAEnabled(): boolean {
+  return (Deno.env.get("READING_INLINE_A") ?? "1") !== "0";
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Claim the job row (same lock as advanceSharded), apply a patch to fresh shard state, release. */
+async function withJobClaim(admin: SupabaseClient, jobId: string, fn: (job: JobRow) => Partial<JobRow> | null): Promise<boolean> {
+  for (let i = 0; i < 80; i++) {
+    const now = Date.now();
+    const { data } = await admin.from("generation_jobs").update({
+      claimed_until: new Date(now + 15_000).toISOString(), updated_at: new Date().toISOString(),
+    }).eq("id", jobId).in("status", ["queued", "running", "processing"])
+      .or(`claimed_until.is.null,claimed_until.lt.${new Date(now).toISOString()}`).select("*");
+    const job = (data ?? [])[0] as JobRow | undefined;
+    if (job) {
+      const patch = fn(job);
+      // last_polled_at in the past so the next poll/sweep advances the job right away.
+      await updateJob(admin, jobId, { ...(patch ?? {}), claimed_until: null, last_polled_at: new Date(Date.now() - 10_000).toISOString() });
+      return true;
+    }
+    const { data: still } = await admin.from("generation_jobs").select("status").eq("id", jobId).maybeSingle();
+    if (!still || !["queued", "running", "processing"].includes(String((still as { status: string }).status))) return false;
+    await sleep(750);
+  }
+  return false;
+}
+
+/** Inline part A: a streamed foreground call; the result lands in the job's shard state. */
+export async function runInlineA(admin: SupabaseClient, jobId: string, reading: ReadingRow): Promise<void> {
+  const facts = reading.facts!;
+  const plan = planShards(facts).find((p) => p.key === "A")!;
+  const t0 = Date.now();
+  let firstToken: number | null = null;
+  let resp: ResponseObject | null = null;
+  let err = "";
+  try {
+    resp = await shardCall(facts, plan, {
+      background: false, timeoutMs: INLINE_TIMEOUT_MS,
+      metadata: { job_id: jobId, reading_id: reading.id, locale: reading.locale, shard: "A" },
+      stream: { onFirstToken: (ms) => (firstToken = ms) },
+    });
+  } catch (e) {
+    err = e instanceof Error ? e.message : String(e);
+  }
+  const ms = Date.now() - t0;
+  const parsed = resp?.status === "completed" ? parseContent(resp.output_text) : null;
+  const { data: jrow } = await admin.from("generation_jobs").select("profile_id, created_at").eq("id", jobId).maybeSingle();
+  const cost = await logCall(admin, {
+    job_id: jobId, profile_id: (jrow as { profile_id?: string } | null)?.profile_id ?? reading.profile_id, purpose: "reading_shard",
+    model: resp?.model ?? readingModel(), response_id: resp?.id ?? null, locale: reading.locale,
+    status: resp?.status ?? "error", usage: resp?.usage, latency_ms: ms, error: err ? err.slice(0, 300) : resp?.error ?? resp?.incomplete_reason,
+    meta: { shard: "A", inline: true, first_token_ms: firstToken },
+  });
+  await withJobClaim(admin, jobId, (job) => {
+    const parts = { ...(job.shards?.parts ?? {}) };
+    const e = parts.A;
+    if (e?.status !== "inline") return null; // superseded (timed out and resubmitted): drop it
+    const patch: Partial<JobRow> = {
+      input_tokens: job.input_tokens + (resp?.usage?.input_tokens ?? 0),
+      cached_tokens: job.cached_tokens + (resp?.usage?.cached_tokens ?? 0),
+      output_tokens: job.output_tokens + (resp?.usage?.output_tokens ?? 0),
+      reasoning_tokens: job.reasoning_tokens + (resp?.usage?.reasoning_tokens ?? 0),
+      cost_usd: Number(job.cost_usd ?? 0) + cost,
+    };
+    if (parsed) {
+      parts.A = { ...e, status: "done", ms, content: parsed as unknown as Record<string, unknown> };
+      if (job.first_insight_ms == null) patch.first_insight_ms = Date.now() - Date.parse(job.created_at);
+    } else {
+      parts.A = { status: "queued", rid: null, tries: e.tries, error: (err || `no_content:${resp?.status ?? ""}`).slice(0, 200) };
+    }
+    patch.shards = { v: 1, parts };
+    return patch;
+  });
+}
+
+type FillState = { status: "running" | "done" | "failed"; tries: number; at: string; days?: number; cost_usd?: number; ms?: number; error?: string };
+
+async function addJobCost(admin: SupabaseClient, readingId: string, add: Totals): Promise<void> {
+  const job = await latestJob(admin, readingId);
+  if (!job) return;
+  await admin.from("generation_jobs").update({
+    input_tokens: job.input_tokens + add.input_tokens, cached_tokens: job.cached_tokens + add.cached_tokens,
+    output_tokens: job.output_tokens + add.output_tokens, reasoning_tokens: job.reasoning_tokens + add.reasoning_tokens,
+    cost_usd: Number(job.cost_usd ?? 0) + add.cost_usd, updated_at: new Date().toISOString(),
+  }).eq("id", job.id);
+}
+
+/** Run part plans in parallel (foreground), log each, return parsed parts + totals. */
+async function runParts(
+  admin: SupabaseClient,
+  reading: ReadingRow,
+  content: V2Content,
+  plans: ReturnType<typeof fillPlansV4>,
+  jobId: string | null,
+): Promise<{ parts: Partial<V2Content>[]; totals: Totals; errors: string[] }> {
+  const facts = reading.facts!;
+  const totals: Totals = { input_tokens: 0, cached_tokens: 0, output_tokens: 0, reasoning_tokens: 0, cost_usd: 0 };
+  const t0 = Date.now();
+  const res = await Promise.allSettled(plans.map((p) =>
+    shardCall(facts, p, { background: false, timeoutMs: FILL_TIMEOUT_MS, content, metadata: { reading_id: reading.id, shard: p.key } })
+  ));
+  const parts: Partial<V2Content>[] = [];
+  const errors: string[] = [];
+  for (let i = 0; i < plans.length; i++) {
+    const r = res[i];
+    const resp = r.status === "fulfilled" ? r.value : null;
+    const err = r.status === "rejected" ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : "";
+    totals.cost_usd += await logCall(admin, {
+      job_id: jobId, profile_id: reading.profile_id, purpose: "reading_shard", model: resp?.model ?? readingModel(),
+      response_id: resp?.id ?? null, locale: reading.locale, status: resp?.status ?? "error", usage: resp?.usage,
+      latency_ms: Date.now() - t0, error: err ? err.slice(0, 300) : resp?.error ?? resp?.incomplete_reason, meta: { shard: plans[i].key },
+    });
+    totals.input_tokens += resp?.usage?.input_tokens ?? 0;
+    totals.cached_tokens += resp?.usage?.cached_tokens ?? 0;
+    totals.output_tokens += resp?.usage?.output_tokens ?? 0;
+    totals.reasoning_tokens += resp?.usage?.reasoning_tokens ?? 0;
+    const parsed = resp?.status === "completed" ? parseContent(resp.output_text) : null;
+    if (parsed) parts.push(parsed);
+    else errors.push(`${plans[i].key}:${err || resp?.status || "no_content"}`.slice(0, 160));
+  }
+  return { parts, totals, errors };
+}
+
+/** Merge new days/chapters into the saved reading (optimistic on updated_at), re-validate, save. */
+async function mergeIntoReading(
+  admin: SupabaseClient,
+  readingId: string,
+  add: Partial<V2Content>,
+  extra: (validation: Validation & { fill?: FillState }) => Record<string, unknown>,
+): Promise<{ ok: boolean; validation?: Validation }> {
+  for (let i = 0; i < 4; i++) {
+    const { data } = await admin.from("readings").select(`${READING_COLS}, validation`).eq("id", readingId).maybeSingle();
+    const r = data as (ReadingRow & { validation: Validation & { fill?: FillState } | null }) | null;
+    if (!r || r.status !== "ready" || !r.content || !r.facts) return { ok: false };
+    const cur = r.content;
+    const days = new Map((cur.days ?? []).map((d) => [d.date, d]));
+    for (const d of add.days ?? []) if (!days.has(d.date)) days.set(d.date, d);
+    const chapters = new Map((cur.chapters ?? []).map((c) => [Number(c.chapter_id), c]));
+    for (const c of add.chapters ?? []) if (!chapters.has(Number(c.chapter_id))) chapters.set(Number(c.chapter_id), c);
+    const merged = sanitizeContent({
+      ...cur,
+      days: [...days.values()].sort((a, b) => a.date.localeCompare(b.date)),
+      chapters: [...chapters.values()].sort((a, b) => Number(a.chapter_id) - Number(b.chapter_id)),
+    }, r.facts);
+    const v = validateContent(merged, r.facts);
+    if (!v.ok) return { ok: false, validation: v }; // never replace a good reading with a broken one
+    const prevV = (r.validation ?? {}) as Validation & { fill?: FillState };
+    const validation = { ...v, ...extra(prevV) } as Validation;
+    const { data: upd } = await admin.from("readings").update({ content: merged, validation, updated_at: new Date().toISOString() })
+      .eq("id", readingId).eq("updated_at", r.updated_at).select("id");
+    if ((upd ?? []).length) return { ok: true, validation };
+    await sleep(300 + Math.random() * 500);
+  }
+  return { ok: false };
+}
+
+/** v4 background day fill (after ready, and from the sweep for anything left pending). */
+export async function fillDaysV4(admin: SupabaseClient, readingId: string): Promise<Record<string, unknown>> {
+  const { data } = await admin.from("readings").select(`${READING_COLS}, validation`).eq("id", readingId).maybeSingle();
+  const r = data as (ReadingRow & { validation: (Validation & { fill?: FillState }) | null }) | null;
+  if (!r || r.status !== "ready" || !r.content || !r.facts || !isV4(r.facts)) return { skipped: "not_v4_ready" };
+  const fill = r.validation?.fill;
+  if (fill?.status === "done") return { skipped: "done" };
+  if (fill?.status === "running" && Date.now() - Date.parse(fill.at) < FILL_STALE_MS) return { skipped: "running" };
+  if ((fill?.tries ?? 0) >= FILL_TRIES) return { skipped: "exhausted" };
+  const plans = fillPlansV4(r.facts, r.content);
+  const tries = (fill?.tries ?? 0) + 1;
+  // Claim (optimistic on updated_at): one filler per reading.
+  const claim: FillState = { status: plans.length ? "running" : "done", tries, at: new Date().toISOString() };
+  const { data: claimed } = await admin.from("readings").update({
+    validation: { ...(r.validation ?? {}), fill: claim }, updated_at: new Date().toISOString(),
+  }).eq("id", readingId).eq("updated_at", r.updated_at).select("id");
+  if (!(claimed ?? []).length) return { skipped: "raced" };
+  if (!plans.length) return { done: true, days: 0 };
+  const t0 = Date.now();
+  const job = await latestJob(admin, readingId);
+  const out = await runParts(admin, r, r.content, plans, job?.id ?? null);
+  const days = out.parts.flatMap((p) => p.days ?? []);
+  const wanted = new Set(plans.flatMap((p) => p.scope.days ?? []));
+  const got = days.filter((d) => wanted.has(d.date));
+  const missing = [...wanted].filter((d) => !got.find((x) => x.date === d));
+  const state: FillState = {
+    status: missing.length ? "failed" : "done", tries, at: new Date().toISOString(), days: got.length,
+    cost_usd: Number(((fill?.cost_usd ?? 0) + out.totals.cost_usd).toFixed(6)), ms: Date.now() - t0,
+    ...(out.errors.length || missing.length ? { error: [...out.errors, missing.length ? `missing:${missing.length}` : ""].filter(Boolean).join("; ").slice(0, 300) } : {}),
+  };
+  const saved = await mergeIntoReading(admin, readingId, { days: got }, () => ({ fill: state }));
+  if (!saved.ok) {
+    await admin.from("readings").update({ validation: { ...(r.validation ?? {}), fill: { ...state, status: "failed", error: "merge_rejected" } } })
+      .eq("id", readingId);
+  }
+  await addJobCost(admin, readingId, out.totals);
+  return { done: saved.ok && !missing.length, days: got.length, missing: missing.length, cost_usd: out.totals.cost_usd, ms: state.ms };
+}
+
+/** v4 on demand: write the opened chapter (and its neighbours) and save them into the reading. */
+export async function writeChaptersV4(
+  admin: SupabaseClient,
+  readingId: string,
+  chapterId: number,
+): Promise<{ written: number[]; already?: boolean; error?: string; cost_usd?: number }> {
+  const { data } = await admin.from("readings").select(READING_COLS).eq("id", readingId).maybeSingle();
+  const r = data as ReadingRow | null;
+  if (!r || r.status !== "ready" || !r.content || !r.facts || !isV4(r.facts)) return { written: [], error: "not_v4_ready" };
+  const plan = chapterPlanV4(r.facts, r.content, chapterId);
+  if (!plan) return { written: [], already: true };
+  const out = await runParts(admin, r, r.content, [plan], (await latestJob(admin, readingId))?.id ?? null);
+  const want = new Set(plan.scope.chapters ?? []);
+  const chapters = out.parts.flatMap((p) => p.chapters ?? []).filter((c) => want.has(Number(c.chapter_id)));
+  await addJobCost(admin, readingId, out.totals);
+  if (!chapters.length) return { written: [], error: out.errors.join("; ") || "no_content", cost_usd: out.totals.cost_usd };
+  const saved = await mergeIntoReading(admin, readingId, { chapters }, (v) => v.fill ? { fill: v.fill } : {});
+  return saved.ok
+    ? { written: chapters.map((c) => Number(c.chapter_id)), cost_usd: out.totals.cost_usd }
+    : { written: [], error: "merge_rejected", cost_usd: out.totals.cost_usd };
+}
+
+/** Sweep: v4 readings whose day fill is pending or failed (bounded tries). */
+export async function sweepFillsV4(admin: SupabaseClient, limit = 1): Promise<Record<string, unknown>[]> {
+  const since = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  const { data } = await admin.from("readings").select("id, validation, ready_at")
+    .eq("status", "ready").eq("prompt_version", READING_PROMPT_VERSION_V4).gt("ready_at", since)
+    .lt("ready_at", new Date(Date.now() - 90_000).toISOString())
+    .order("ready_at", { ascending: false }).limit(25);
+  const todo = ((data ?? []) as { id: string; validation: { fill?: FillState } | null }[]).filter((x) => {
+    const f = x.validation?.fill;
+    if (!f) return true;
+    if (f.status === "done" || f.tries >= FILL_TRIES) return false;
+    return Date.now() - Date.parse(f.at) > (f.status === "running" ? FILL_STALE_MS : 60_000);
+  }).slice(0, limit);
+  const out: Record<string, unknown>[] = [];
+  for (const x of todo) out.push({ id: x.id, ...(await fillDaysV4(admin, x.id)) });
+  return out;
 }

@@ -157,6 +157,14 @@ function monthYear(iso: string | null | undefined): string {
   return m ? `${m[1]}-${m[2]}` : "";
 }
 
+function chartNotes(f: NonNullable<LiveContextInput["facts"]>): string[] {
+  const ev = new Map(f.chart!.evidence.map((e) => [e.id, e.ref]));
+  const ids = [...f.chart!.top.slice(0, 4)];
+  const cur = f.chapters.find((x) => x.chapter_id === f.current_chapter_id);
+  if (cur) ids.push(`md:${cur.md.toLowerCase()}`, `ad:${String(cur.ad ?? "").toLowerCase()}`, "md-ad");
+  return [...new Set(ids)].map((id) => ev.get(id)).filter((x): x is string => Boolean(x)).slice(0, 6);
+}
+
 /** Engine-verified chart card: identical for every call that day, so it caches. */
 export function chartCard(c: LiveContextInput): string {
   const f = c.facts;
@@ -171,6 +179,9 @@ export function chartCard(c: LiveContextInput): string {
   const card = {
     subject: c.subject,
     natal: { birth_star: natal.nakshatra ?? null, moon_sign: natal.moon_sign ?? natal.moonSign ?? null, lagna: natal.lagna ?? null },
+    // v4 rule-engine facts (D1, Parashari): the few strongest placements/yogas, plus the current
+    // dasha lords' natal role, so answers can say *why* without inventing chart facts.
+    ...(f?.chart ? { chart_notes: chartNotes(f) } : {}),
     current_chapter: cur
       ? { md: cur.md, ad: cur.ad || null, from: monthYear(cur.start_iso), until: monthYear(cur.end_iso), domains: cur.domains, support: cur.support, pressure: cur.pressure, title: c.reading?.chapterTitle ?? null, highlight: c.reading?.chapterHighlight ?? null }
       : null,

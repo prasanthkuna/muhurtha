@@ -49,6 +49,8 @@ import {
   logLlmCall,
   startReading,
   sweepReadingJobs,
+  sweepFillsV4,
+  writeChaptersV4,
   type JobProgress,
   type JobRow,
   type ReadingRow,
@@ -3480,11 +3482,13 @@ export async function startGoldenReading(
 export async function sweepReadings(admin: SupabaseClient, body: Record<string, unknown>) {
   const responseId = typeof body.response_id === "string" ? body.response_id : undefined;
   const readings = await sweepReadingJobs(admin, onReadingReady, { responseId });
+  const fills = responseId ? [] : await sweepFillsV4(admin).catch((e) => [{ error: errorMessage(e) }]);
   const pairs = await sweepPairReadings(admin, { responseId }).catch((e) => ({ considered: 0, error: errorMessage(e) }));
   return {
     ...readings,
-    considered: Number(readings.considered ?? 0) + Number(pairs.considered ?? 0),
+    considered: Number(readings.considered ?? 0) + Number(pairs.considered ?? 0) + fills.length,
     pairs,
+    ...(fills.length ? { fills } : {}),
   };
 }
 
@@ -7403,11 +7407,22 @@ async function liveCrudAction(action: string, admin: SupabaseClient, profile: Pr
 
 export const LIVE_ACTIONS = new Set([
   "explain_get", "daily_context_get", "memory_list", "memory_save", "memory_delete",
-  "saved_event_list", "saved_event_save", "saved_event_delete",
+  "saved_event_list", "saved_event_save", "saved_event_delete", "reading_chapter",
 ]);
 
 async function handleLiveAction(action: string, supabase: SupabaseClient, admin: SupabaseClient, profile: ProfRow, body: Record<string, unknown>) {
   if (action === "explain_get") return await explainTerm(admin, supabase, profile, body);
+  if (action === "reading_chapter") {
+    // v4: write a life chapter (and its neighbours) the first time it is opened.
+    const readingId = String(body.pack_id ?? body.reading_id ?? "");
+    const chapterId = Number(body.chapter_id);
+    if (!readingId || !Number.isInteger(chapterId)) throw new ActionError("missing_id", "pack_id and chapter_id required", 400);
+    const { data: r } = await admin.from("readings").select("id, profile_id, status").eq("id", readingId).maybeSingle();
+    if (!r || (r as { profile_id: string }).profile_id !== profile.id) throw new ActionError("not_found", "Reading not found", 404);
+    // Free plans see only the current + next chapter, which part B already wrote.
+    if (!(await getSubscriptionAccess(admin, profile.id)).isPro) throw new ActionError("pro_required", "Pro unlocks every chapter", 402);
+    return await writeChaptersV4(admin, readingId, chapterId);
+  }
   if (action === "daily_context_get") {
     const locale = requestLocale(body, profile);
     const tz = profile.current_timezone ?? "Asia/Kolkata";
