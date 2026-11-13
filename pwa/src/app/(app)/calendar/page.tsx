@@ -1,7 +1,6 @@
 "use client";
 
 import { ExplainRow } from "@/components/explainer/explain-sheet";
-import { DailySummaryStrip } from "@/components/live/daily-summary-strip";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
@@ -235,8 +234,7 @@ export default function CalendarPage() {
   return (
     <div className="mx-auto max-w-lg">
       <PageHeader eyebrow={t("nav.calendar")} title={t("cal.title")} subtitle={t("cal.sub")} className="mb-5" />
-      <DailySummaryStrip />
-      <ExplainRow screen="calendar" terms={[{ term: "good_slot" }, { term: "tara_bala" }, { term: "chandrashtama" }, { term: "rahu_kalam" }]} />
+      <ExplainRow screen="calendar" terms={[{ term: "tara_bala", value: pickedDay?.tara ?? undefined }, { term: "nakshatra", value: pickedDay?.nakshatra ?? undefined }, { term: "chandrashtama" }, { term: "good_slot" }]} />
       <div className="mb-4 flex gap-1 rounded-full bg-canvas p-1" role="tablist">
         {(["month", "year"] as const).map((v) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} className={cn("min-h-10 flex-1 rounded-full text-sm font-semibold", view === v ? "bg-paper text-ink shadow-sm" : "text-ink-tertiary")} data-testid={`cal-view-${v}`}>

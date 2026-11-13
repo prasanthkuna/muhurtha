@@ -1,7 +1,6 @@
 "use client";
 
 import { ExplainRow } from "@/components/explainer/explain-sheet";
-import { DailySummaryStrip } from "@/components/live/daily-summary-strip";
 import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { TodayBondLine } from "@/components/bond/today-bond-line";
@@ -312,12 +311,17 @@ export default function TodayPage() {
       )}
 
       {isToday && !dayLoading ? <TodayBondLine /> : null}
-      {isToday && !dayLoading ? <DailySummaryStrip className="rounded-2xl border border-gold-accent/30 bg-gold-wash/40 px-4 py-3" /> : null}
       {!dayLoading ? (
         <ExplainRow
           screen="today"
           className="mt-1"
-          terms={[{ term: "rahu_kalam" }, { term: "good_slot" }, { term: "tara_bala" }, { term: "tithi" }, { term: "nakshatra" }]}
+          terms={[
+            { term: "nakshatra", value: day?.dayStar ?? undefined },
+            { term: "tithi", value: day?.tithi ?? undefined },
+            { term: "tara_bala", value: day?.tara ?? undefined },
+            { term: "good_slot" },
+            { term: "rahu_kalam" },
+          ]}
         />
       ) : null}
 

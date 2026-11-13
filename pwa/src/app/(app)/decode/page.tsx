@@ -1,7 +1,6 @@
 "use client";
 
 import { ExplainRow } from "@/components/explainer/explain-sheet";
-import { DailySummaryStrip } from "@/components/live/daily-summary-strip";
 import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { ChevronRight } from "@/components/celestial/muh-icon";
@@ -18,7 +17,6 @@ import { AfterReadingInstall } from "@/components/pwa/after-reading-install";
 import { clip, rashiGlyph } from "@/lib/share/builders";
 import { fill, nakLabel } from "@/lib/messages-bond";
 import { calWhyLine } from "@/lib/cal-text";
-import { areasIn, mergeStems, restates } from "@/lib/day-dedupe";
 
 const ADULT_ONLY_DOMAINS = new Set(["career", "money", "business", "relationship"]);
 
@@ -48,22 +46,6 @@ export default function DecodePage() {
   const todayWhy = today?.calendar?.why
     ? calWhyLine({ why: today.calendar.why, nakshatra: today.dayStar ?? null, natal_star: today.calendar.natalStar ?? null }, t, locale)
     : "";
-  // "Good for" must bring a different idea than Today's subtitle (and the reason above it):
-  // skip lines that restate it or only repeat its life areas; else fall back to a calendar area
-  // the subtitle doesn't mention.
-  const todayDo = (() => {
-    if (!today) return "";
-    const seen = mergeStems(today.oneLine, todayWhy);
-    const said = new Set([...areasIn(today.oneLine), ...areasIn(todayWhy)]);
-    const line = (today.betterFor ?? []).find((x) => {
-      if (!x || restates(x, seen, 0.34)) return false;
-      const a = areasIn(x);
-      return !a.length || a.some((y) => !said.has(y));
-    });
-    if (line) return line;
-    const area = (today.calendar?.favours ?? []).find((f) => f !== "rest" && !said.has(f));
-    return area ? t(`cal.area.${area}`) : "";
-  })();
 
   return (
     <div className="space-y-6" data-testid="decode-loaded">
@@ -90,7 +72,6 @@ export default function DecodePage() {
           </>
         )}
 
-        <DailySummaryStrip className="rounded-2xl border border-gold-accent/30 bg-gold-wash/40 px-4 py-3" />
         <ExplainRow
           screen="decode"
           className=""
@@ -114,9 +95,6 @@ export default function DecodePage() {
               <p className="mt-1 line-clamp-2 text-[15px] font-medium text-ink" data-testid="decode-today-why">
                 {today.birthStarToday ? t("decode.hero.birthStarDay") : todayWhy || (today.dayStar ? fill(t("decode.hero.todayStar"), { star: nakLabel(today.dayStar, locale) }) : t("decode.hero.openToday"))}
               </p>
-              {todayDo ? (
-                <p className="mt-0.5 line-clamp-1 text-xs text-ink-tertiary">{fill(t("decode.hero.goodFor"), { what: todayDo })}</p>
-              ) : null}
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-gold-text" aria-hidden />
           </Link>

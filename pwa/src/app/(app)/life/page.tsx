@@ -1,7 +1,6 @@
 "use client";
 
 import { ExplainRow } from "@/components/explainer/explain-sheet";
-import { DailySummaryStrip } from "@/components/live/daily-summary-strip";
 import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -287,7 +286,6 @@ export default function LifeIndexPage() {
       <Link href="/decode" className="-mt-2 inline-flex text-sm font-semibold text-gold-text underline-offset-4 hover:underline" data-testid="life-open-decode">
         {t("life.openDecode")} →
       </Link>
-      <DailySummaryStrip className="rounded-2xl border border-gold-accent/30 bg-gold-wash/40 px-4 py-3" />
       <ExplainRow screen="life" className="" terms={[{ term: "life_chapter" }, { term: "mahadasha" }, { term: "antardasha" }]} />
       {currentChapter ? (
         <Link
