@@ -30,6 +30,10 @@ export type ChapterView = {
   tense: "past" | "current" | "future";
   proLocked: boolean;
   evidenceLine: string;
+  /** v4: not written yet (engine card); written on first open. */
+  pending: boolean;
+  /** v4: rule-engine facts the chapter cites (English refs). */
+  evidence: string[];
   shareHook: string;
   mahadashaLord: string;
   antardashaLord: string;

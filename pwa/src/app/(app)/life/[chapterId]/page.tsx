@@ -3,7 +3,7 @@
 import { ReadingUnavailable } from "@/components/shell/reading-unavailable";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChapterHeroCard } from "@/components/celestial/chapter-hero-card";
 import { ChevronLeft } from "@/components/celestial/muh-icon";
 import { ProseBlock } from "@/components/editorial/prose-block";
@@ -11,7 +11,7 @@ import { LoadingState } from "@/components/editorial/loading-state";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { PageHeader } from "@/components/editorial/page-header";
 import { WhyLink, WhySheet } from "@/components/explainer/why-sheet";
-import { useAppData } from "@/context/app-data-context";
+import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { grahaName } from "@/design-system/graha";
 import { explainerForGraha } from "@/lib/jyotish-explainers";
@@ -41,8 +41,40 @@ function ChipRow({ label, items }: { label: string; items: string[] }) {
 export default function LifeChapterPage() {
   const params = useParams<{ chapterId: string }>();
   const { t, locale } = useLocale();
-  const { views, loading, error } = useAppData();
+  const { views, loading, error, pack, isPro, refresh } = useAppData();
+  const engineBody = useEngineBody();
   const [whyOpen, setWhyOpen] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const asked = useRef<string | null>(null);
+  const pendingChapter = views?.chapterById(params.chapterId);
+  const needsWrite = Boolean(pendingChapter?.pending && isPro && !pendingChapter.proLocked);
+  const readingId = pack?.readingVersion?.split(":")[0] ?? "";
+
+  // v4 readings write past/far chapters on first open (the engine card shows meanwhile).
+  useEffect(() => {
+    if (!needsWrite || !readingId || !pendingChapter || asked.current === pendingChapter.id) return;
+    asked.current = pendingChapter.id;
+    setWriting(true);
+    let alive = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/engine", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(engineBody("reading_chapter", { pack_id: readingId, chapter_id: pendingChapter.sortOrder })),
+        });
+        const j = (await res.json().catch(() => ({}))) as { written?: number[] };
+        if (res.ok && (j.written?.length ?? 0) > 0) await refresh();
+      } catch {
+        /* the engine card stays; next open retries */
+      } finally {
+        if (alive) setWriting(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [needsWrite, readingId, pendingChapter, engineBody, refresh]);
 
   if (loading && !views) return <LoadingState message={t("life.chapterLoading")} />;
   if (error || !views) {
@@ -96,6 +128,9 @@ export default function LifeChapterPage() {
       </div>
 
       <ProseBlock>
+        {writing ? (
+          <p data-testid="chapter-writing" className="mb-3 animate-pulse text-sm text-gold-text">{t("life.writingChapter")}</p>
+        ) : null}
         <p className="whitespace-pre-wrap text-base leading-relaxed text-ink-secondary">{chapter.body}</p>
       </ProseBlock>
 
@@ -119,6 +154,16 @@ export default function LifeChapterPage() {
             {t("life.traditionalBasis")}
           </summary>
           <p className="mt-2 text-ink-secondary">{chapter.evidenceLine}</p>
+          {chapter.evidence.length > 0 && locale === "en" ? (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-tertiary">{t("life.chartBasis")}</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-ink-secondary">
+                {chapter.evidence.slice(0, 4).map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="mt-2 flex items-center gap-2">
             <p className="text-xs text-ink-tertiary">
               {[chapter.mahadashaLord, chapter.antardashaLord].filter(Boolean).map((l) => grahaName(l, locale)).join(" · ")}

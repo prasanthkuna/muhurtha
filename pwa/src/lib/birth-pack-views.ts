@@ -136,6 +136,8 @@ export class BirthPackViews {
           tense,
           proLocked: p.proLocked === true,
           evidenceLine: p.evidenceLine?.toString() ?? "",
+          pending: p.pending === true,
+          evidence: strList(p.evidence),
           shareHook: p.shareHook?.toString() ?? "",
           mahadashaLord: p.mahadashaLord?.toString() ?? "",
           antardashaLord: p.antardashaLord?.toString() ?? "",

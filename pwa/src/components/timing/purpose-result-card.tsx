@@ -88,6 +88,12 @@ export function PurposeResultCard({
         <div className="flex items-start justify-between gap-3">
           <p className="text-xs uppercase tracking-wide text-gold-text">
             {label} · {status}
+            <span
+              data-testid="timing-preliminary"
+              className="ml-2 inline-block rounded-full border border-line px-2 py-0.5 align-middle text-[10px] font-medium normal-case tracking-normal text-ink-tertiary"
+            >
+              {t("timing.preliminary")}
+            </span>
           </p>
           <ShareCardButton type={shareType} build={buildShare} className="-mt-1 shrink-0" />
         </div>
@@ -98,6 +104,7 @@ export function PurposeResultCard({
         ) : null}
         <p className="mt-2 font-serif text-xl text-ink">{result.headline}</p>
         <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{result.summary}</p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-tertiary">{t("timing.preliminaryNote")}</p>
 
         {result.personalSignals.length > 0 ? (
           <ul className="mt-3 space-y-1 border-l-2 border-gold-accent/40 pl-3 text-sm text-ink">
