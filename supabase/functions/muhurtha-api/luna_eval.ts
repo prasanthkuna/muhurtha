@@ -17,6 +17,10 @@ import { BULK_SHARDS, mergeShards, planShards, shardCall, shardEffort, shardMiss
 import { themeOk } from "./theme_check.ts";
 import { buildSystemPrompt, mergeRepair, repairPrompt, repairScope, sanitizeContent, type V2Content, validateContent } from "./reading_v2.ts";
 import { createWithSchema } from "./reading_jobs.ts";
+import { isV4 } from "./reading_v2.ts";
+import { chapterPlanV4, fillPlansV4 } from "./reading_v4.ts";
+import { moonSiderealLongitudeDeg, nakshatraMetaFromSiderealLon } from "./ephemeris.ts";
+import { lagnaSidereal } from "./grahas.ts";
 
 type L = "en" | "te" | "hi";
 const CITIES = [
@@ -198,6 +202,7 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
 export async function runReadingCase(i: number, effort: ReasoningEffort, date: string): Promise<Record<string, unknown>> {
   const sp = syntheticProfiles(30)[i];
   const facts = liveFacts(sp.prof, sp.bi, sp.locale, date, null)!;
+  if (isV4(facts)) return await runReadingCaseV4(i, facts, sp.locale);
   const plans = planShards(facts);
   const t0 = Date.now();
   const times: Record<string, number> = {};
@@ -275,6 +280,177 @@ export async function runReadingCase(i: number, effort: ReasoningEffort, date: s
   };
 }
 
+type U = { input_tokens?: number; cached_tokens?: number; output_tokens?: number; cache_write_tokens?: number } | null | undefined;
+const zeroT = () => ({ input: 0, cached: 0, output: 0, cache_write: 0, cost: 0 });
+const addT = (t: ReturnType<typeof zeroT>, model: string | undefined, u: U) => {
+  t.input += u?.input_tokens ?? 0;
+  t.cached += u?.cached_tokens ?? 0;
+  t.output += u?.output_tokens ?? 0;
+  t.cache_write += u?.cache_write_tokens ?? 0;
+  t.cost += costUsd(model ?? readingModel(), u as never);
+};
+const round6 = (x: number) => Math.round(x * 1e6) / 1e6;
+
+/**
+ * v4 reading exactly as production runs it: A streamed (first insight), B/C/D in parallel, merge,
+ * validate, one repair; then the background day fill (F1/F2) and one on-demand chapter batch.
+ */
+async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> & object, locale: string): Promise<Record<string, unknown>> {
+  const t0 = Date.now();
+  const plans = planShards(facts);
+  const times: Record<string, number> = {};
+  const errs: Record<string, string> = {};
+  const init = zeroT(), fill = zeroT(), lazy = zeroT();
+  let firstToken: number | null = null;
+  const run = async (p: (typeof plans)[number], t: ReturnType<typeof zeroT>, content?: Partial<V2Content> | null) => {
+    for (let a = 0; a < 2; a++) {
+      try {
+        const r = await shardCall(facts, p, {
+          background: false, timeoutMs: 140_000, content,
+          ...(p.key === "A" ? { stream: { onFirstToken: () => (firstToken ??= Date.now() - t0) } } : {}),
+        });
+        addT(t, r.model, r.usage);
+        times[p.key] = Date.now() - t0;
+        const parsed = JSON.parse(r.output_text ?? "null");
+        if (parsed) {
+          delete errs[p.key];
+          return parsed as Partial<V2Content>;
+        }
+        errs[p.key] = "no_content";
+      } catch (e) {
+        errs[p.key] = (e instanceof Error ? e.message : String(e)).slice(0, 160);
+      }
+    }
+    return null;
+  };
+  const parts = await Promise.all(plans.map((p) => run(p, init)));
+  const firstInsight = times.A ?? null;
+  const merged = sanitizeContent(mergeShards(parts.filter((x): x is Partial<V2Content> => Boolean(x))), facts);
+  const v0 = validateContent(merged, facts);
+  let v = v0;
+  let final = merged;
+  const scope = v0.ok ? repairScope(v0) : null;
+  if (scope) {
+    try {
+      const r = await createWithSchema(facts, { system: buildSystemPrompt(facts), user: repairPrompt(facts, merged, v0, scope), scope, background: false });
+      addT(init, r.model, r.usage);
+      const patch = JSON.parse(r.output_text ?? "null");
+      if (patch) {
+        final = sanitizeContent(mergeRepair(merged, patch), facts);
+        v = validateContent(final, facts);
+      }
+    } catch (e) {
+      errs.repair = (e instanceof Error ? e.message : String(e)).slice(0, 160);
+    }
+  }
+  const readyMs = Date.now() - t0;
+  // Background fill (production: right after ready).
+  const fp = fillPlansV4(facts, final);
+  const fills = await Promise.all(fp.map((p) => run(p, fill, final)));
+  const have = new Set(final.days.map((d) => d.date));
+  const newDays = fills.flatMap((x) => x?.days ?? []).filter((d) => !have.has(d.date));
+  const full = sanitizeContent({ ...final, days: [...final.days, ...newDays].sort((a, b) => a.date.localeCompare(b.date)) }, facts);
+  const vf = validateContent(full, facts);
+  const fillMs = Date.now() - t0 - readyMs;
+  // One on-demand chapter batch (a past chapter, as a Pro user browsing back).
+  const unwritten = facts.chapters.find((c) => !full.chapters.some((x) => Number(x.chapter_id) === c.chapter_id));
+  let lazyMs = 0, lazyN = 0;
+  if (unwritten) {
+    const lp = chapterPlanV4(facts, full, unwritten.chapter_id)!;
+    const tl = Date.now();
+    const out = await run(lp, lazy, full);
+    lazyMs = Date.now() - tl;
+    lazyN = (out?.chapters ?? []).length;
+  }
+  const theme = vf.stats.theme ? themeOk(vf.stats.theme) : { ok: false, fails: ["no_theme_stats"] };
+  const st = vf.stats as Record<string, unknown>;
+  const unsupportedPct = Number(st.unsupported_pct ?? 0);
+  const allDays = full.days.length === facts.days.length;
+  return {
+    case_id: `reading-v4-p${i}`, locale,
+    pass: v.ok && vf.ok && Object.keys(errs).length === 0 && theme.ok && allDays && unsupportedPct <= 5,
+    checks: { valid: v.ok, valid_after_fill: vf.ok, fatal: vf.fatal, flags: vf.flags.length, theme_ok: theme.ok, theme_fails: theme.fails, all_days: allDays, unsupported_pct: unsupportedPct },
+    latency_ms: readyMs, first_token_ms: firstToken, first_shown_ms: firstInsight,
+    output: {
+      v: 4, shard_ms: times, errors: errs, ready_ms: readyMs, fill_ms: fillMs, lazy_ms: lazyMs, lazy_chapters: lazyN,
+      initial: { ...init, cost: round6(init.cost) }, fill: { ...fill, cost: round6(fill.cost) }, lazy: { ...lazy, cost: round6(lazy.cost) },
+      cost_usd: round6(init.cost + fill.cost), cost_with_lazy: round6(init.cost + fill.cost + lazy.cost),
+      input_tokens: init.input + fill.input, output_tokens: init.output + fill.output, cache_write_tokens: init.cache_write + fill.cache_write,
+      chapters: facts.chapters.length, written_chapters: full.chapters.length,
+      claims: st.claims ?? 0, unsupported_claims: st.unsupported_claims ?? 0, unsupported_pct: unsupportedPct,
+      theme: vf.stats.theme, flags_before_repair: v0.flags.length, repaired: Boolean(scope),
+      flag_sample: vf.flags.slice(0, 25).map((f) => `${f.section}:${f.id}:${f.reasons.join("|")}`),
+      reasons: vf.flags.flatMap((f) => f.reasons).reduce((m: Record<string, number>, r) => {
+        const k = r.split(":")[0];
+        m[k] = (m[k] ?? 0) + 1;
+        return m;
+      }, {}),
+      profile: final.profile ? { title: final.profile.title, summary: final.profile.summary } : null,
+      sample_chapter: final.chapters.find((c) => Number(c.chapter_id) === facts.current_chapter_id) ?? null,
+      sample_days: full.days.slice(0, 3).map((d) => ({ date: d.date, title: d.title, line: d.line, body: d.body })),
+    },
+  };
+}
+
+/** Two synthetic charts: Moon in Hasta both times, same dasha, different Lagna (Hyderabad). */
+export function hastaPair(date: string): { a: { prof: ProfRow; bi: BioRow }; b: { prof: ProfRow; bi: BioRow } } | null {
+  const base = syntheticProfiles(1)[0];
+  for (let d = 0; d < 365 * 8; d++) {
+    const iso = new Date(Date.UTC(1986, 0, 1 + d)).toISOString().slice(0, 10);
+    const ta = new Date(`${iso}T00:00:00Z`), tb = new Date(`${iso}T03:00:00Z`);
+    const na = nakshatraMetaFromSiderealLon(moonSiderealLongitudeDeg(ta)), nb = nakshatraMetaFromSiderealLon(moonSiderealLongitudeDeg(tb));
+    if (na.name !== "Hasta" || nb.name !== "Hasta") continue;
+    if (Math.floor(lagnaSidereal(ta, 17.385, 78.4867) / 30) === Math.floor(lagnaSidereal(tb, 17.385, 78.4867) / 30)) continue;
+    const mk = (t: string, k: string) => ({
+      prof: { ...base.prof, id: `00000000-0000-4000-9000-00000000000${k}`, current_city: "Hyderabad", current_lat: 17.385, current_lng: 78.4867, language_code: "en" },
+      bi: { ...base.bi, id: `00000000-0000-4000-9000-00000000000${k}`, profile_id: `00000000-0000-4000-9000-00000000000${k}`, date_of_birth: iso, exact_birth_time: t, birth_input_mode: "exact", time_bucket: null, birth_place: "Hyderabad", birth_lat: 17.385, birth_lng: 78.4867 },
+    });
+    const a = mk("05:30", "1"), b = mk("08:30", "2");
+    const fa = liveFacts(a.prof, a.bi, "en", date, null), fb = liveFacts(b.prof, b.bi, "en", date, null);
+    const cur = (f: typeof fa) => f?.chapters.find((c) => c.chapter_id === f.current_chapter_id);
+    if (fa && fb && cur(fa)?.md === cur(fb)?.md && cur(fa)?.ad === cur(fb)?.ad) return { a, b };
+  }
+  return null;
+}
+
+const words = (s: string) => new Set(s.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter((w) => w.length > 3));
+const jaccard = (x: Set<string>, y: Set<string>) => {
+  let inter = 0;
+  for (const w of x) if (y.has(w)) inter++;
+  return inter / Math.max(1, x.size + y.size - inter);
+};
+
+/** Personalization: same star + same dasha, different Lagna -> the Decode text must differ. */
+export async function runPersonalCase(date: string): Promise<Record<string, unknown>> {
+  const pair = hastaPair(date);
+  if (!pair) return { case_id: "personal-hasta", locale: "en", pass: false, checks: { error: "no_pair" }, latency_ms: 0 };
+  const t0 = Date.now();
+  const t = zeroT();
+  const one = async (x: { prof: ProfRow; bi: BioRow }) => {
+    const f = liveFacts(x.prof, x.bi, "en", date, null)!;
+    const A = planShards(f).find((p) => p.key === "A")!;
+    const r = await shardCall(f, A, { background: false, timeoutMs: 120_000 });
+    addT(t, r.model, r.usage);
+    const c = JSON.parse(r.output_text ?? "null") as Partial<V2Content> | null;
+    const text = [c?.profile?.title, c?.profile?.summary, ...(c?.profile?.strengths ?? []), ...(c?.profile?.watchouts ?? []), ...(c?.areas ?? []).map((a) => `${a.headline} ${a.summary}`)].join(" ");
+    return { f, c, text };
+  };
+  const [a, b] = await Promise.all([one(pair.a), one(pair.b)]);
+  const j = jaccard(words(a.text), words(b.text));
+  const evA = new Set(a.c?.profile?.evidence_ids ?? []), evB = new Set(b.c?.profile?.evidence_ids ?? []);
+  const jEv = jaccard(evA, evB);
+  return {
+    case_id: "personal-hasta", locale: "en", pass: j < 0.3 && a.f.chart!.ref_sign !== b.f.chart!.ref_sign,
+    checks: { word_jaccard: Math.round(j * 1000) / 1000, evidence_jaccard: Math.round(jEv * 1000) / 1000, lagna_differs: a.f.chart!.ref_sign !== b.f.chart!.ref_sign },
+    latency_ms: Date.now() - t0,
+    output: {
+      cost_usd: round6(t.cost), input_tokens: t.input, output_tokens: t.output,
+      a: { title: a.c?.profile?.title, summary: a.c?.profile?.summary, evidence: [...evA] },
+      b: { title: b.c?.profile?.title, summary: b.c?.profile?.summary, evidence: [...evB] },
+    },
+  };
+}
+
 async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -291,13 +467,15 @@ async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Prom
 export async function runLunaEval(admin: SupabaseClient, body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const runId = String(body.run_id ?? `eval-${Date.now()}`).slice(0, 60);
   const date = DateTime.now().setZone("Asia/Kolkata").toISODate()!;
-  const kind = body.kind === "reading" ? "reading" : "ask";
+  const kind = body.kind === "reading" ? "reading" : body.kind === "personal" ? "personal" : "ask";
   const results: Record<string, unknown>[] = [];
   if (kind === "ask") {
     const all = evalCases(Number(body.profiles ?? 30), Number(body.per_profile ?? 5));
     const from = Math.max(0, Number(body.from ?? 0));
     const to = Math.min(all.length, Number(body.to ?? all.length));
     results.push(...await pool(all.slice(from, to), Number(body.concurrency ?? 8), (c) => runAskCase(c, date)));
+  } else if (kind === "personal") {
+    results.push(await runPersonalCase(date));
   } else {
     const effort = (body.effort === "none" ? "none" : "low") as ReasoningEffort;
     const ids = (Array.isArray(body.profiles) ? body.profiles : [0, 1, 2]).map(Number);
