@@ -13,8 +13,9 @@ import {
 } from "./live_ai.ts";
 import { costUsd, readingModel, type ReasoningEffort, streamResponse } from "./openai_responses.ts";
 import { jargonHits, VOICE_BANNED } from "./voice.ts";
-import { mergeShards, planShards, shardCall } from "./reading_shards.ts";
-import { sanitizeContent, validateContent } from "./reading_v2.ts";
+import { BULK_SHARDS, mergeShards, planShards, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
+import { themeOk } from "./theme_check.ts";
+import { sanitizeContent, type V2Content, validateContent } from "./reading_v2.ts";
 
 type L = "en" | "te" | "hi";
 const CITIES = [
@@ -189,7 +190,10 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
   };
 }
 
-/** Sharded reading on a synthetic profile at one effort: shard A time (first insight) and full time. */
+/**
+ * Sharded reading on a synthetic profile; `effort` applies to the chapter/day parts (A and D keep
+ * the production effort). Reports shard times, cache hits, validator + theme-checker results.
+ */
 export async function runReadingCase(i: number, effort: ReasoningEffort, date: string): Promise<Record<string, unknown>> {
   const sp = syntheticProfiles(30)[i];
   const facts = liveFacts(sp.prof, sp.bi, sp.locale, date, null)!;
@@ -198,26 +202,49 @@ export async function runReadingCase(i: number, effort: ReasoningEffort, date: s
   const times: Record<string, number> = {};
   const errs: Record<string, string> = {};
   let cost = 0;
-  const parts = await Promise.all(plans.map(async (p) => {
+  let cached = 0;
+  let input = 0;
+  const cacheKey = `evalrd:${sp.bi.id}:${effort}:${Date.now() % 100000}`;
+  const run = async (p: (typeof plans)[number]) => {
+    let last: unknown = null;
     for (let a = 0; a < 2; a++) {
       try {
-        const r = await shardCall(facts, p, { background: false, effort, cacheKey: `evalrd:${sp.bi.id}:${effort}`, timeoutMs: 140_000 });
+        const eff = BULK_SHARDS.includes(p.key) ? effort : shardEffort(p.key);
+        const r = await shardCall(facts, p, { background: false, effort: eff, cacheKey, timeoutMs: 140_000 });
         times[p.key] = Date.now() - t0;
         cost += costUsd(r.model ?? readingModel(), r.usage);
-        return JSON.parse(r.output_text ?? "null");
+        cached += r.usage?.cached_tokens ?? 0;
+        input += r.usage?.input_tokens ?? 0;
+        last = JSON.parse(r.output_text ?? "null");
+        if (shardMissing(p, last as never).length === 0) return shardOnly(p, last as never);
+        errs[p.key] = `missing:${shardMissing(p, last as never).slice(0, 4).join(",")}`;
       } catch (e) {
         errs[p.key] = (e instanceof Error ? e.message : String(e)).slice(0, 160);
       }
     }
-    return null;
-  }));
-  const merged = sanitizeContent(mergeShards(parts), facts);
+    return last ? shardOnly(p, last as never) : null;
+  };
+  const a = plans.find((p) => p.key === "A")!;
+  const aDone = run(a);
+  await new Promise((r) => setTimeout(r, shardStaggerMs()));
+  const rest = await Promise.all(plans.filter((p) => p !== a).map(run));
+  const parts = [await aDone, ...rest];
+  const merged = sanitizeContent(mergeShards(parts.filter((x): x is Partial<V2Content> => Boolean(x))), facts);
   const v = validateContent(merged, facts);
+  const theme = v.stats.theme ? themeOk(v.stats.theme) : { ok: false, fails: ["no_theme_stats"] };
   return {
-    case_id: `reading-${effort}-p${i}`, locale: sp.locale, pass: v.ok && Object.keys(errs).length === 0,
-    checks: { valid: v.ok, fatal: v.fatal, flags: v.flags.length, all_shards: parts.every(Boolean) },
+    case_id: `reading-${effort}-p${i}`, locale: sp.locale, pass: v.ok && Object.keys(errs).length === 0 && theme.ok,
+    checks: { valid: v.ok, fatal: v.fatal, flags: v.flags.length, all_shards: parts.every(Boolean), theme_ok: theme.ok, theme_fails: theme.fails },
     latency_ms: Date.now() - t0, first_token_ms: times.A ?? null,
-    output: { effort, shard_ms: times, errors: errs, cost_usd: Math.round(cost * 1e6) / 1e6, chapters: facts.chapters.length },
+    output: {
+      effort, shard_ms: times, errors: errs, cost_usd: Math.round(cost * 1e6) / 1e6, chapters: facts.chapters.length,
+      input_tokens: input, cached_tokens: cached, theme: v.stats.theme, reasons: v.flags.flatMap((f) => f.reasons).reduce((m: Record<string, number>, r) => {
+        const k = r.split(":")[0];
+        m[k] = (m[k] ?? 0) + 1;
+        return m;
+      }, {}),
+      sample_days: merged.days.slice(0, 3).map((d) => ({ date: d.date, title: d.title, line: d.line, body: d.body })),
+    },
   };
 }
 
