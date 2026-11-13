@@ -17,6 +17,7 @@ import {
   repairPrompt,
   repairScope,
   sanitizeContent,
+  isV3,
   validateContent,
   type V2Content,
   type V2Facts,
@@ -31,7 +32,7 @@ import {
   retrieveResponse,
   type ResponseObject,
 } from "./openai_responses.ts";
-import { mergeShards, planShards, previewFrom, readingEffort, type ReadingPreview, type ShardKey, shardCall } from "./reading_shards.ts";
+import { mergeShards, planShards, previewFrom, readingEffort, type ReadingPreview, type ShardKey, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
 
 /** Job attempts come from maxAttempts() in llm_policy.ts (Luna: first try + one retry). */
 export { isQuotaCap } from "./llm_policy.ts";
@@ -689,13 +690,26 @@ export async function submitShards(admin: SupabaseClient, job: JobRow, reading: 
   const parts: ShardState["parts"] = {};
   const pending = plans.filter((p) => prev[p.key]?.status !== "done");
   for (const p of plans) if (prev[p.key]?.status === "done") parts[p.key] = prev[p.key];
-  const results = await Promise.allSettled(pending.map((p) =>
+  const submit = (p: (typeof plans)[number]) =>
     shardCall(facts, p, {
       background: true,
       metadata: { job_id: job.id, reading_id: reading.id, locale: reading.locale, shard: p.key },
       cacheKey: `rd:${reading.id}`,
-    })
-  ));
+    });
+  // Part A first; the rest a few seconds later so they read the shared prefix from the prompt cache.
+  const first = pending.find((p) => p.key === "A");
+  const rest = pending.filter((p) => p !== first);
+  const results: PromiseSettledResult<Awaited<ReturnType<typeof submit>>>[] = new Array(pending.length);
+  if (first && rest.length && isV3(facts)) {
+    const [a] = await Promise.allSettled([submit(first)]);
+    results[pending.indexOf(first)] = a;
+    await new Promise((r) => setTimeout(r, shardStaggerMs()));
+    const rs = await Promise.allSettled(rest.map(submit));
+    rest.forEach((p, i) => (results[pending.indexOf(p)] = rs[i]));
+  } else {
+    const rs = await Promise.allSettled(pending.map(submit));
+    rs.forEach((r, i) => (results[i] = r));
+  }
   let firstErr = "";
   pending.forEach((p, i) => {
     const r = results[i];
@@ -788,19 +802,26 @@ async function advanceSharded(
     const cost = await logCall(admin, {
       job_id: job.id, profile_id: job.profile_id, purpose: "reading_shard", model: resp.model ?? readingModel(), response_id: resp.id,
       locale: reading.locale, status: resp.status, usage: resp.usage, latency_ms: now - sub,
-      error: resp.error ?? resp.incomplete_reason, meta: { shard: p.key, effort: readingEffort(), tries: e.tries },
+      error: resp.error ?? resp.incomplete_reason, meta: { shard: p.key, effort: shardEffort(p.key), tries: e.tries, cached: resp.usage?.cached_tokens ?? 0 },
     });
     totals.input_tokens += resp.usage?.input_tokens ?? 0;
     totals.cached_tokens += resp.usage?.cached_tokens ?? 0;
     totals.output_tokens += resp.usage?.output_tokens ?? 0;
     totals.reasoning_tokens += resp.usage?.reasoning_tokens ?? 0;
     totals.cost_usd += cost;
-    const content = resp.status === "completed" ? parseContent(resp.output_text) : null;
+    const parsed = resp.status === "completed" ? parseContent(resp.output_text) : null;
+    const missing = parsed && isV3(facts) ? shardMissing(p, parsed as Partial<V2Content>) : [];
+    // Union-schema parts may skip ids: retry once, then accept what came back (validation decides).
+    const content = parsed && (missing.length === 0 || e.tries >= SHARD_TRIES)
+      ? (isV3(facts) ? shardOnly(p, parsed as Partial<V2Content>) : parsed)
+      : null;
     if (content) {
-      parts[p.key] = { ...e, status: "done", ms: now - sub, content: content as unknown as Record<string, unknown>, error: undefined };
+      parts[p.key] = { ...e, status: "done", ms: now - sub, content: content as unknown as Record<string, unknown>, error: missing.length ? `partial:${missing.slice(0, 5).join(",")}` : undefined };
       if (p.key === "A" && firstInsight == null) firstInsight = now - Date.parse(job.created_at);
     } else {
-      e.error = `no_content:${resp.status}:${resp.error ?? resp.incomplete_reason ?? ""}`.slice(0, 200);
+      e.error = parsed
+        ? `missing:${missing.slice(0, 6).join(",")}`.slice(0, 200)
+        : `no_content:${resp.status}:${resp.error ?? resp.incomplete_reason ?? ""}`.slice(0, 200);
       retry.push(p);
     }
   }

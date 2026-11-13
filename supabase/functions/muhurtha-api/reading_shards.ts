@@ -6,6 +6,8 @@
  */
 import {
   buildReadingSchema,
+  buildUnionSchema,
+  isV3,
   buildSystemPrompt,
   buildUserPrompt,
   type SchemaScope,
@@ -14,13 +16,26 @@ import {
 } from "./reading_v2.ts";
 import { createResponse, type ReasoningEffort, type ResponseObject } from "./openai_responses.ts";
 
-export type ShardKey = "A" | "B" | "B2" | "C" | "C2" | "D";
+export type ShardKey = "A" | "B" | "B2" | "C" | "C2" | "C3" | "D";
+/** Chapter and day parts: bulk prose, effort tunable separately (READING_EFFORT_BULK). */
+export const BULK_SHARDS: ShardKey[] = ["B", "B2", "C", "C2", "C3"];
 export type ShardPlan = { key: ShardKey; scope: SchemaScope; maxTokens: number; note: string };
 
 /** Effort for the structured reading; picked by the Luna eval (none vs low). */
 export function readingEffort(): ReasoningEffort {
   const v = (Deno.env.get("READING_EFFORT") ?? "").trim();
   return v === "low" || v === "none" ? v : READING_EFFORT_DEFAULT;
+}
+/** Effort per part: A (first insight) and D use READING_EFFORT; chapters/days may use READING_EFFORT_BULK. */
+export function shardEffort(key: ShardKey): ReasoningEffort {
+  if (!BULK_SHARDS.includes(key)) return readingEffort();
+  const v = (Deno.env.get("READING_EFFORT_BULK") ?? "").trim();
+  return v === "low" || v === "none" ? v : readingEffort();
+}
+/** Delay between submitting part A and the rest, so A writes the shared prefix to the prompt cache first. */
+export function shardStaggerMs(): number {
+  const v = Number(Deno.env.get("SHARD_STAGGER_MS") ?? "");
+  return Number.isFinite(v) && v >= 0 ? Math.min(v, 10_000) : 3000;
 }
 // Eval rd-1112a (3 profiles × en/te/hi): both pass; "none" had fewer validator flags (58 vs 81) at similar speed.
 export const READING_EFFORT_DEFAULT: ReasoningEffort = "none";
@@ -46,9 +61,18 @@ export function planShards(f: V2Facts): ShardPlan[] {
   } else if (otherCh.length) {
     plans.push({ key: "B", scope: { chapters: otherCh }, maxTokens: 9000, note: "these life chapters" });
   }
-  const half = Math.ceil(restDays.length / 2);
-  plans.push({ key: "C", scope: { days: restDays.slice(0, half) }, maxTokens: 9000, note: "these days" });
-  plans.push({ key: "C2", scope: { days: restDays.slice(half), weekdays: f.weekdays.map((w) => w.weekday) }, maxTokens: 9000, note: "these days and the weekday cards" });
+  if (isV3(f)) {
+    const third = Math.ceil(restDays.length / 3);
+    const keys: ShardKey[] = ["C", "C2", "C3"];
+    keys.forEach((key, k) => {
+      const ids = restDays.slice(k * third, (k + 1) * third);
+      if (ids.length) plans.push({ key, scope: { days: ids }, maxTokens: 9000, note: "these days" });
+    });
+  } else {
+    const half = Math.ceil(restDays.length / 2);
+    plans.push({ key: "C", scope: { days: restDays.slice(0, half) }, maxTokens: 9000, note: "these days" });
+    plans.push({ key: "C2", scope: { days: restDays.slice(half), weekdays: f.weekdays.map((w) => w.weekday) }, maxTokens: 9000, note: "these days and the weekday cards" });
+  }
   plans.push({
     key: "D",
     scope: { weeks: f.weeks.map((w) => w.period_key), months: f.months.map((m) => m.period_key), extras: true },
@@ -66,8 +90,16 @@ export function shardInstruction(f: V2Facts, p: ShardPlan): string {
   if (p.scope.weeks?.length) ids.push("all weeks");
   if (p.scope.months?.length) ids.push("all months");
   const titles = p.key === "A" ? "" : ` Day titles must not repeat across the whole reading: vary the opening word by date.`;
+  const v3 = isV3(f);
+  const fill: string[] = [];
+  if (v3) {
+    if (p.scope.profile) fill.push("profile");
+    if (p.scope.areas?.length) fill.push("areas (every area)");
+    if (p.scope.extras) fill.push("ask_starters (4), remedies (3), push");
+  }
   return [
     `PART ${p.key}: write ONLY ${p.note} (${ids.join("; ") || "as listed in the schema"}).`,
+    ...(v3 ? [`Fill exactly: ${[...ids, ...fill].join("; ")}. Every other array stays empty ([]); profile and push stay null unless listed. Each listed id appears exactly once.`] : []),
     "Other parts of the same reading are written in parallel from the same FACTS; follow every rule exactly as for the full reading." + titles,
     `Language: ${f.locale}.`,
   ].join("\n");
@@ -85,10 +117,10 @@ export async function shardCall(
       system: buildSystemPrompt(f),
       prefix: buildUserPrompt(f),
       user: shardInstruction(f, p),
-      schemaName: `muhurta_reading_${p.key.toLowerCase()}`,
-      schema: buildReadingSchema(f, { withLengths, scope: p.scope }),
+      schemaName: isV3(f) ? "muhurta_reading" : `muhurta_reading_${p.key.toLowerCase()}`,
+      schema: isV3(f) ? buildUnionSchema(f, withLengths) : buildReadingSchema(f, { withLengths, scope: p.scope }),
       background: o.background,
-      reasoningEffort: o.effort ?? readingEffort(),
+      reasoningEffort: o.effort ?? shardEffort(p.key),
       maxOutputTokens: p.maxTokens,
       metadata: o.metadata,
       promptCacheKey: o.cacheKey,
@@ -106,6 +138,44 @@ export async function shardCall(
     }
   }
   return go(false);
+}
+
+/** Ids a part was asked for but did not return (union schema allows empty arrays). */
+export function shardMissing(p: ShardPlan, c: Partial<V2Content> | null): string[] {
+  if (!c) return ["all"];
+  const miss: string[] = [];
+  const have = (arr: unknown[] | undefined, key: string) => new Set((arr ?? []).map((x) => String((x as Record<string, unknown>)[key])));
+  const days = have(c.days, "date");
+  for (const d of p.scope.days ?? []) if (!days.has(d)) miss.push(d);
+  const ch = have(c.chapters, "chapter_id");
+  for (const id of p.scope.chapters ?? []) if (!ch.has(String(id))) miss.push(`ch${id}`);
+  const wk = have(c.weeks, "period_key");
+  for (const id of p.scope.weeks ?? []) if (!wk.has(id)) miss.push(`w${id}`);
+  const mo = have(c.months, "period_key");
+  for (const id of p.scope.months ?? []) if (!mo.has(id)) miss.push(`m${id}`);
+  const ar = have(c.areas, "area_id");
+  for (const id of p.scope.areas ?? []) if (!ar.has(id)) miss.push(`a:${id}`);
+  if (p.scope.profile && !c.profile) miss.push("profile");
+  if (p.scope.extras && (!c.push || !(c.remedies ?? []).length || !(c.ask_starters ?? []).length)) miss.push("extras");
+  return miss;
+}
+
+/** Keep only what a part was asked to write (a union-schema part may stray into other ids). */
+export function shardOnly(p: ShardPlan, c: Partial<V2Content>): Partial<V2Content> {
+  const inSet = <T>(arr: T[] | undefined, ids: (string | number)[] | undefined, key: string) =>
+    (arr ?? []).filter((x) => (ids ?? []).map(String).includes(String((x as Record<string, unknown>)[key])));
+  return {
+    profile: p.scope.profile ? c.profile : undefined,
+    areas: inSet(c.areas, p.scope.areas, "area_id"),
+    chapters: inSet(c.chapters, p.scope.chapters, "chapter_id"),
+    days: inSet(c.days, p.scope.days, "date"),
+    weekdays: inSet(c.weekdays, p.scope.weekdays, "weekday"),
+    weeks: inSet(c.weeks, p.scope.weeks, "period_key"),
+    months: inSet(c.months, p.scope.months, "period_key"),
+    ask_starters: p.scope.extras ? c.ask_starters : [],
+    remedies: p.scope.extras ? c.remedies : [],
+    push: p.scope.extras ? c.push : undefined,
+  } as Partial<V2Content>;
 }
 
 /** Combine shard outputs into one reading (missing sections stay empty; validation catches them). */

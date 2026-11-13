@@ -4,7 +4,10 @@ import { antardashaFallbackCopy, plainPeriodLabel } from "./copy.ts";
 import { resolveBirthPlace, resolveCoordinates } from "./geo_resolver.ts";
 import { attachNatalLuckToContent, buildNatalLuck } from "./natal_luck.ts";
 import { divideDaylight, goodAndCautionWindows, sunriseSunset } from "./solar.ts";
-import { evaluateDay, quickDayFacts } from "./panchanga.ts";
+import { evaluateDay, type QuickDayFacts, quickDayFacts } from "./panchanga.ts";
+import { AD_THEME, horaLord, horaTheme, nakGoodFor, nakMeaning, taraMeaning, tithiBase, tithiGoodFor, tithiMeaning, yogaMeaning } from "./meanings.ts";
+import { planDayAngles } from "./angles.ts";
+import { SCREEN_JOB, valueMeaning } from "./engine_copy.ts";
 import { scoreDay } from "./calendar.ts";
 import {
   BOND_ACTIONS,
@@ -19,6 +22,7 @@ import {
 } from "./bond.ts";
 import {
   ADULT_AREAS,
+  BANNED_PHRASES,
   buildReadingView,
   CHILD_AREAS,
   legacyPackToV2,
@@ -29,6 +33,7 @@ import {
   type V2ChapterFact,
   type V2DayFact,
   type V2Facts,
+  type V2Meanings,
   type V2PeriodFact,
   type V2WeekdayFact,
   type V2WindowFact,
@@ -3046,8 +3051,67 @@ async function birthHashFor(bi: BioRow, subjectName: string | null): Promise<str
   ].join("|"))).slice(0, 32);
 }
 
-const WEEKDAY_LORDS = ["sun", "moon", "mars", "mercury", "jupiter", "venus", "saturn"];
 const NOTABLE_TITHI = /(Ekadashi|Purnima|Amavasya|Chaturthi|Ashtami)/;
+
+export const READING_DAYS_V3 = 45;
+const toMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+function seedOf(id: string): number {
+  let h = 0;
+  for (const ch of id ?? "") h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h % 35;
+}
+
+/** Engine windows with hora lord + reason (v3). */
+export function v3Windows(d: QuickDayFacts): V2WindowFact[] {
+  const hora = (start: string, end: string) =>
+    d.sunrise && d.sunset ? horaLord(d.weekday, toMin(d.sunrise), toMin(d.sunset), (toMin(start) + toMin(end)) / 2) : undefined;
+  return [
+    ...d.good.slice(0, 3).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, part: partOfDay(w.start), hora: hora(w.start, w.end), why: "clean" as const })),
+    ...(d.rahu ? [{ id: "c1", kind: "caution" as const, part: partOfDay(d.rahu.start), hora: hora(d.rahu.start, d.rahu.end), why: "rahu" as const }] : []),
+  ];
+}
+
+/** v3 dated days: engine windows, calendar tags and the per-day angle ledger. */
+export function v3Days(list: QuickDayFacts[], isChild: boolean, seed: number): V2DayFact[] {
+  const base = list.map((d) => {
+    const c = scoreDay(d);
+    return {
+      date: d.date,
+      weekday: WEEKDAYS[d.weekday],
+      tithi: d.tithi,
+      nakshatra: d.nakshatra,
+      yoga: d.yoga,
+      moon_sign: d.moonRashi,
+      tara: d.tara,
+      day_tone: (d.rank >= 1 ? "supportive" : d.rank <= -1 ? "careful" : "mixed") as V2DayFact["day_tone"],
+      windows: v3Windows(d),
+      calendar: { favours: c.favours as string[], avoid: c.avoid as string | null, why: c.why },
+    };
+  });
+  const angles = planDayAngles(list.map((d, i) => ({
+    date: d.date, weekday: d.weekday, tithi: d.tithi, tithiIndex: d.tithiIndex, nakshatra: d.nakshatra, yoga: d.yoga,
+    tara: d.tara, rank: d.rank, favours: base[i].calendar.favours, windows: base[i].windows,
+  })), isChild, seed);
+  return base.map((d, i) => ({
+    ...d,
+    angle: angles[i],
+    windows: d.windows.map((w) => ({ ...w, writer: w.id === angles[i].slot ? "llm" as const : "engine" as const })),
+  }));
+}
+
+/** Meaning tables for just the stars/tithis/yogas/taras/horas these days use (English; the model localizes). */
+export function meaningsFor(days: V2DayFact[]): V2Meanings {
+  const m: V2Meanings = { stars: {}, tithis: {}, yogas: {}, taras: {}, horas: {} };
+  for (const d of days) {
+    m.stars[d.nakshatra] ??= `${nakMeaning(d.nakshatra, "en")}; good for ${nakGoodFor(d.nakshatra, "en")}`;
+    const tb = tithiBase(d.tithi);
+    if (tb) m.tithis[tb] ??= `${tithiMeaning(d.tithi, "en")}; good for ${tithiGoodFor(d.tithi, "en")}`;
+    if (yogaMeaning(d.yoga, "en")) m.yogas[d.yoga] ??= yogaMeaning(d.yoga, "en");
+    if (d.tara) m.taras[d.tara] ??= taraMeaning(d.tara, "en");
+    for (const w of d.windows) if (w.hora) m.horas[w.hora] ??= horaTheme(w.hora, "en");
+  }
+  return m;
+}
 
 function partOfDay(hhmm: string): string {
   const h = Number(hhmm.slice(0, 2));
@@ -3089,38 +3153,20 @@ export function buildReadingFacts(
     })
   ).filter((d): d is NonNullable<typeof d> => d != null);
 
-  const windowsOf = (d: (typeof quick)[number]): V2WindowFact[] => [
-    ...d.good.slice(0, 3).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, part: partOfDay(w.start) })),
-    ...(d.rahu ? [{ id: "c1", kind: "caution" as const, part: partOfDay(d.rahu.start) }] : []),
-  ];
-  const tone = (rank: number): V2DayFact["day_tone"] => rank >= 1 ? "supportive" : rank <= -1 ? "careful" : "mixed";
-  const days: V2DayFact[] = quick.slice(0, 30).map((d) => ({
-    date: d.date,
-    weekday: WEEKDAYS[d.weekday],
-    tithi: d.tithi,
-    nakshatra: d.nakshatra,
-    yoga: d.yoga,
-    moon_sign: d.moonRashi,
-    tara: d.tara,
-    day_tone: tone(d.rank),
-    windows: windowsOf(d),
-    calendar: (() => {
-      const c = scoreDay(d);
-      return { favours: c.favours, avoid: c.avoid, why: c.why };
-    })(),
-  }));
-  const weekdays: V2WeekdayFact[] = WEEKDAYS.map((wd, idx) => {
-    const d = quick.find((q) => q.weekday === idx)!;
-    return { weekday: wd, day_lord: WEEKDAY_LORDS[idx], windows: windowsOf(d) };
-  });
+  const days = v3Days(quick.slice(0, READING_DAYS_V3), isChild, seedOf(bi.id));
+  // v3: 45 real dated days replace the evergreen weekday cards (no weekday copies on screen).
+  const weekdays: V2WeekdayFact[] = [];
 
   const chapterAt = (iso: string): number | null => {
     const t = Date.parse(iso);
     const p = plans.find((pl) => pl.startIso && pl.endIso && Date.parse(pl.startIso) <= t && t < Date.parse(pl.endIso));
     return p ? p.id : null;
   };
+  const dayLabel = (d: (typeof quick)[number]) => `${DateTime.fromISO(d.date).toFormat("cccc")} (${d.nakshatra})`;
   const periodFrom = (key: string, label: string, list: typeof quick): V2PeriodFact => ({
     period_key: key,
+    best_days: [...list].sort((a, b) => b.rank - a.rank || a.date.localeCompare(b.date)).filter((d) => d.rank >= 1).slice(0, 2).map(dayLabel),
+    light_days: [...list].sort((a, b) => a.rank - b.rank || a.date.localeCompare(b.date)).filter((d) => d.rank <= -1).slice(0, 2).map(dayLabel),
     label,
     supportive_days: list.filter((d) => d.rank >= 1).length,
     careful_days: list.filter((d) => d.rank <= -1).length,
@@ -3139,6 +3185,26 @@ export function buildReadingFacts(
     const key = ms.toFormat("yyyy-MM");
     return periodFrom(key, ms.toFormat("LLLL yyyy"), quick.filter((d) => d.date.startsWith(key)));
   });
+  const natalStrings = new Set(
+    [...(kernel?.natal.signals ?? []), ...Object.values(kernel?.natal.archetype ?? {})]
+      .filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase()),
+  );
+  const banned = new Set(BANNED_PHRASES.en);
+  const themeList = (xs: string[], extra: string[]) => {
+    const out: string[] = [];
+    for (const x of [...extra, ...xs]) {
+      const k = x.toLowerCase();
+      if (natalStrings.has(k) || banned.has(k) || out.some((o) => o.toLowerCase() === k)) continue;
+      out.push(x);
+    }
+    return out.slice(0, 3);
+  };
+  const dedupeEvidence = (line: string) =>
+    line.replace(/(first in )(.+?)\.$/, (_m, pre: string, list: string) => {
+      const items = list.split(/,\s*|\s+and\s+/).map((x) => x.trim()).filter(Boolean);
+      const uniq = items.filter((x, i) => items.indexOf(x) === i);
+      return `${pre}${uniq.length > 1 ? `${uniq.slice(0, -1).join(", ")} and ${uniq[uniq.length - 1]}` : uniq[0] ?? list}.`;
+    });
   const chapters: V2ChapterFact[] = plans.map((p) => ({
     chapter_id: p.id,
     period: p.periodLabel,
@@ -3151,18 +3217,21 @@ export function buildReadingFacts(
     age_from: p.ageFrom ?? null,
     age_to: p.ageTo ?? null,
     tense: p.tense,
-    domains: p.activeDomains.slice(0, 4),
-    support: p.supportThemes.slice(0, 3),
-    pressure: p.pressureThemes.slice(0, 3),
+    domains: [...new Set(p.activeDomains)].slice(0, 4),
+    support: themeList(p.supportThemes, p.kind === "summary" ? [] : AD_THEME[p.antardashaLord?.toLowerCase()]?.support.slice(0, 1) ?? []),
+    pressure: themeList(p.pressureThemes, p.kind === "summary" ? [] : AD_THEME[p.antardashaLord?.toLowerCase()]?.pressure.slice(0, 1) ?? []),
     pulse: p.phasePulse,
     transition: p.transitionNote,
-    evidence: p.evidenceLine,
-    lenses: (p.domainLenses ?? []).slice(0, 3),
+    evidence: dedupeEvidence(p.evidenceLine ?? ""),
+    lenses: [...new Set(p.domainLenses ?? [])].slice(0, 3),
+    ...(p.kind === "summary" || !AD_THEME[p.antardashaLord?.toLowerCase()] ? {} : { ad_theme: AD_THEME[p.antardashaLord.toLowerCase()] }),
   }));
   const arch = kernel?.natal.archetype;
   const intent = profile.onboarding_intent ?? {};
   return {
     schema_version: 2,
+    facts_version: 3,
+    meanings: meaningsFor(days),
     locale: locale as V2Facts["locale"],
     generation_date: dateStr,
     timezone: tz,
@@ -3203,7 +3272,15 @@ export function buildReadingFacts(
 
 function readingToPack(r: ReadingRow, profile: ProfRow, dateStr: string): BirthPackRow {
   const tz = profile.current_timezone ?? "Asia/Kolkata";
-  const view = buildReadingView(r.content!, r.facts!, { dateStr, tz, locale: r.locale });
+  const natal = (r.facts?.natal ?? {}) as { nakshatra?: string | null; moon_sign?: string | null };
+  const engineDay = (date: string): V2DayFact | null => {
+    const q = quickDayFacts({
+      date, zone: tz, latitude: Number(profile.current_lat ?? DEFAULT_LAT), longitude: Number(profile.current_lng ?? DEFAULT_LNG),
+      natalNakshatra: natal.nakshatra ?? null, natalRashi: natal.moon_sign ?? null,
+    });
+    return q ? v3Days([q], Boolean(r.facts?.is_child), seedOf(date))[0] ?? null : null;
+  };
+  const view = buildReadingView(r.content!, r.facts!, { dateStr, tz, locale: r.locale, engineDay });
   return {
     id: r.id,
     content_version: `${r.id}:${r.updated_at ?? r.ready_at ?? ""}`,
@@ -7166,13 +7243,16 @@ async function explainTerm(admin: SupabaseClient, supabase: SupabaseClient, prof
   if (!base) throw new ActionError("unknown_term", "Unknown term", 400);
   const screen = normalizeScreen(body.screen);
   const value = safeString(body.value).slice(0, 80);
-  const out = { term, screen, title: base.title, simple: base.simple, traditional: base.traditional, practical: base.practical, source: "glossary" };
+  // Item-specific traditional layer: what THIS star / tithi / tara on screen means (engine table), not just the term.
+  const itemMeaning = valueMeaning(term, value, locale as "en" | "te" | "hi");
+  const traditional = itemMeaning ? `${itemMeaning} ${base.traditional}` : base.traditional;
+  const out = { term, screen, title: base.title, simple: base.simple, traditional, practical: base.practical, source: "glossary" };
   if (!askLlmEnabled()) return out;
   const tz = profile.current_timezone ?? "Asia/Kolkata";
   const date = todayInTimezone(tz);
   const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
   const bi = rawBi ? await ensureBirthPlacePrecision(supabase, rawBi) : null;
-  const key = "explain:" + (await sha256Hex([term, screen, value, bi?.id ?? "none", locale, date, LIVE_PROMPT_VERSION].join("|")));
+  const key = "explain:" + (await sha256Hex([term, screen, value, bi?.id ?? "none", locale, date, LIVE_PROMPT_VERSION, "ex2"].join("|")));
   const { data: hit } = await admin.from("ai_cache").select("value").eq("key", key).maybeSingle();
   if (hit) return { ...out, ...(hit as { value: Record<string, string> }).value, source: "llm_cached" };
   const scope = await resolveChatScope(supabase, profile.id, body);
@@ -7191,6 +7271,9 @@ async function explainTerm(admin: SupabaseClient, supabase: SupabaseClient, prof
       system: liveSystem(locale, [
         `TASK: explain "${base.title}" to this person on the ${screen} screen. Keep the traditional term; explain it plainly.`,
         `GLOSSARY ENTRY (truth, do not contradict): simple=${base.simple} | traditional=${base.traditional} | practical=${base.practical}`,
+        ...(itemMeaning ? [`VALUE MEANING (engine table for the value on screen): ${itemMeaning}`] : []),
+        SCREEN_JOB[screen] ?? "",
+        "'simple' and 'practical' must be about THIS value on THIS screen; do not restate the glossary sentence or the traditional layer.",
         bond
           ? "This is a compatibility (koota) factor: explain what it looks at and how to use it in a calm conversation. Never predict whether a relationship will succeed or fail; no verdicts, no 'good match'/'bad match'."
           : "Tie 'simple' to the value shown on screen and today's row in the CHART CARD when relevant; 'practical' is one small, real-world step.",

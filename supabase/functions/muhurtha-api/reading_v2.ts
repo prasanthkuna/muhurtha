@@ -9,9 +9,12 @@
 import { DATE_RULE, jargonHits, polishDeep, VOICE_BLOCK } from "./voice.ts";
 import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
+import { type DayAngle, OPENER_HOW } from "./angles.ts";
+import { alreadySaid, themeCheck, type ThemeStats } from "./theme_check.ts";
+import { engineDayCopy, engineSlotNote } from "./engine_copy.ts";
 
 export const READING_SCHEMA_VERSION = 2;
-export const READING_PROMPT_VERSION = "reading-v2.9";
+export const READING_PROMPT_VERSION = "reading-v3.0";
 
 export type ReadingLocale = "en" | "te" | "hi";
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
@@ -23,7 +26,17 @@ export const WINDOW_IDS = ["g1", "g2", "g3", "c1"] as const;
 
 // ---------------------------------------------------------------- facts (engine-owned)
 
-export type V2WindowFact = { id: string; kind: "good" | "caution"; part: string };
+export type V2WindowFact = {
+  id: string;
+  kind: "good" | "caution";
+  part: string;
+  /** Planetary-hour lord at the slot's midpoint (v3 facts). */
+  hora?: string;
+  /** Why the engine picked it: "clean" daylight run clear of Rahu/Yama/Gulika, or "rahu". */
+  why?: "clean" | "rahu";
+  /** v3: only the angle's slot is written by the model; the rest get engine notes. */
+  writer?: "llm" | "engine";
+};
 export type V2DayFact = {
   date: string;
   weekday: Weekday;
@@ -36,6 +49,8 @@ export type V2DayFact = {
   windows: V2WindowFact[];
   /** Calendar tab tags for the same date (deterministic scoring), so copy and Calendar agree. */
   calendar?: { favours: string[]; avoid: string | null; why?: string };
+  /** v3: engine-assigned angle (area, action, opener, tone, lead fact, trait day, slot). */
+  angle?: DayAngle;
 };
 export type V2WeekdayFact = { weekday: Weekday; day_lord: string; windows: V2WindowFact[] };
 export type V2PeriodFact = {
@@ -45,6 +60,9 @@ export type V2PeriodFact = {
   careful_days: number;
   notable: string[];
   chapter_id: number | null;
+  /** v3: the strongest and the lightest dates of the stretch ("Thu 19 Nov (Pushya)"). */
+  best_days?: string[];
+  light_days?: string[];
 };
 export type V2ChapterFact = {
   chapter_id: number;
@@ -70,9 +88,21 @@ export type V2ChapterFact = {
   transition: string;
   evidence: string;
   lenses: string[];
+  /** v3: what this sub-period lord brings (distinct per chapter). */
+  ad_theme?: { support: string[]; pressure: string[] };
+};
+export type V2Meanings = {
+  stars: Record<string, string>;
+  tithis: Record<string, string>;
+  yogas: Record<string, string>;
+  taras: Record<string, string>;
+  horas: Record<string, string>;
 };
 export type V2Facts = {
   schema_version: 2;
+  /** 3 = 45 engine-angled days, no weekday cards, engine slot notes, meaning tables. */
+  facts_version?: 3;
+  meanings?: V2Meanings;
   locale: ReadingLocale;
   generation_date: string;
   timezone: string;
@@ -172,7 +202,14 @@ const obj = (props: Record<string, Json>): Json => ({
   additionalProperties: false,
 });
 
-function windowNotesSchema(wl: boolean): Json {
+function windowNotesSchema(wl: boolean, one = false): Json {
+  if (one) {
+    return arr(obj({
+      window_id: { type: "string", enum: [...WINDOW_IDS] },
+      label: str(LIMITS.label, wl, "2-4 word purpose label for the day's slot, e.g. 'Calls & follow-ups'"),
+      note: str(LIMITS.note, wl, "what THIS slot suits for the day's angle.area; no clock times; do not start with 'Use this slot', 'A good slot', 'Good for' or 'This slot'"),
+    }), 1);
+  }
   return arr(
     obj({
       window_id: { type: "string", enum: [...WINDOW_IDS] },
@@ -183,14 +220,14 @@ function windowNotesSchema(wl: boolean): Json {
   );
 }
 
-function dayCopyProps(wl: boolean): Record<string, Json> {
+function dayCopyProps(wl: boolean, v3 = false): Record<string, Json> {
   return {
     title: str(LIMITS.title, wl, "headline for the day"),
     line: str(LIMITS.line, wl, "one-sentence takeaway"),
     body: str(LIMITS.dayBody, wl, "2-3 sentences"),
     do: arr(str(LIMITS.chip, wl, "short concrete action"), 2),
     avoid: arr(str(LIMITS.chip, wl, "short concrete thing to skip"), 2),
-    window_notes: windowNotesSchema(wl),
+    window_notes: windowNotesSchema(wl, v3),
   };
 }
 
@@ -215,10 +252,28 @@ export type SchemaScope = {
   extras?: boolean;
 };
 
+const nullable = (j: Json): Json => ({ anyOf: [j, { type: "null" }] });
+export const isV3 = (f: V2Facts) => f.facts_version === 3;
+
+/**
+ * One schema for every shard of a v3 reading (all sections, arrays may be empty, profile/push
+ * nullable). Identical bytes across shards keep the system + schema + FACTS prefix cacheable.
+ */
+export function buildUnionSchema(facts: V2Facts, withLengths: boolean): Json {
+  const full = buildReadingSchema(facts, { withLengths }) as { properties: Record<string, Json & { minItems?: number }> };
+  const props: Record<string, Json> = {};
+  for (const [k, v] of Object.entries(full.properties)) {
+    if (k === "profile" || k === "push") props[k] = nullable(v);
+    else props[k] = { ...(v as Record<string, unknown>), minItems: 0 } as Json;
+  }
+  return obj(props);
+}
+
 /** Full reading schema, or a repair schema restricted to `scope` ids. */
 export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean; scope?: SchemaScope }): Json {
   const wl = opts.withLengths;
   const scope = opts.scope;
+  const v3 = isV3(facts);
   const dayIds = scope ? scope.days ?? [] : facts.days.map((d) => d.date);
   const wdIds = scope ? scope.weekdays ?? [] : facts.weekdays.map((d) => d.weekday);
   const chIds = scope ? scope.chapters ?? [] : facts.chapters.map((c) => c.chapter_id);
@@ -254,7 +309,7 @@ export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean;
     }), chIds.length);
   }
   if (dayIds.length) {
-    props.days = arr(obj({ date: { type: "string", enum: dayIds }, ...dayCopyProps(wl) }), dayIds.length);
+    props.days = arr(obj({ date: { type: "string", enum: dayIds }, ...dayCopyProps(wl, v3) }), dayIds.length);
   }
   if (wdIds.length) {
     props.weekdays = arr(obj({ weekday: { type: "string", enum: wdIds }, ...dayCopyProps(wl) }), wdIds.length);
@@ -326,6 +381,23 @@ export const BANNED_PHRASES: Record<ReadingLocale, string[]> = {
   ],
 };
 
+const OPENERS_LINE = Object.entries(OPENER_HOW).map(([k, v]) => `${k} = ${v}`).join("; ");
+
+/** v3 day rules: the engine already gave every day its own angle (the "already used" ledger). */
+function dayRulesV3(facts: V2Facts): string[] {
+  const te = facts.locale === "te";
+  return [
+    "2. Day cards follow the engine's `angle` for that date; the angles are already spread so no two neighbouring days share an area, action or opener. Write the day ABOUT angle.area, suggest angle.action, write in angle.tone, and open the body the way angle.opener says (" + OPENERS_LINE + ").",
+    "2a. The reason comes from angle.lead: star -> MEANINGS.stars[nakshatra]; tithi -> MEANINGS.tithis[the tithi's last word]; tara -> MEANINGS.taras[tara] (how today's star sits with their birth star); yoga -> MEANINGS.yogas[yoga]. Say that meaning in fresh, everyday words tied to angle.area, and name the lead fact once (the star, tithi or yoga name; for tara, say 'your birth star' relation in plain words), mid-sentence. Never open a body with the star name. Never write '<star> is today's star', 'today's star is <star>'" + (te ? ", 'ఈరోజు నక్షత్రం <star>' / '<star> నక్షత్రం ఈరోజు'" : "") + " or the word 'hint'.",
+    "2b. One screen shows title, line, body, do/avoid chips and the slot note together, so each takes a DIFFERENT job: line = the one-sentence verdict; body = the why + one concrete example in angle.area; do/avoid = two other actions not named in the body; the slot note = what that slot suits. Never repeat a task across them. The calendar field holds the Calendar tab's tags; agree with them.",
+    "2c. Personality: mention the natal trait (natal.archetype / signals) ONLY on days whose angle.trait_ok is true, at most once. On every other day say nothing about their character (no 'your eye for detail', 'perfectionist', 'you like things just right').",
+    "2d. Titles: 2-5 words, each title fresh (different first word from the previous three days), concrete to angle.area/action. No '<Star>'s <Noun>' formula. If a title names a star or tithi, spell it exactly as in FACTS (e.g. Pushya, never 'Pushy').",
+    "2e. Word budget across all days: 'familiar', 'simple', 'gentle', 'quiet/quietly', 'steady', 'small step', 'one thing' each at most once per five days; prefer the specific noun or verb.",
+    "3. window_notes: exactly ONE note, for the window whose writer is \"llm\" (slot = angle.slot); the app writes the other slots from the engine's hora and Rahu Kalam tables. The note ties that slot's `suits` to angle.area; never start it with 'Use this slot', 'A good slot', 'Good for' or 'This slot'. Never write times; the app shows them.",
+    "4. There are no weekday cards in this reading; weeks/months use best_days and light_days (weekday + star) to say which days to use and which to keep light; never write dates.",
+  ];
+}
+
 export function buildSystemPrompt(facts: V2Facts): string {
   const lang = LANGUAGE_NAME[facts.locale];
   const child = facts.is_child;
@@ -337,10 +409,12 @@ export function buildSystemPrompt(facts: V2Facts): string {
     DATE_RULE,
     "Rules:",
     "1. The engine owns all facts. Never write clock times, durations in hours, years, dates, ages or planet/graha names in days, weekdays, weeks, months or push. Planet names are allowed only inside chapters and profile, and only when they help.",
+    ...(isV3(facts) ? dayRulesV3(facts) : [
     "2. Every day needs its OWN hook from that day's facts, never a mood bucket. Build body as: hook (today's star by name, or the tithi_hint, or the tara_hint in plain words) -> why it matters for THIS person (their natal signals or current period) -> one concrete action. At least two days in every three must give an explicit reason tied to that day's star or tithi: name it and link it to the advice with a plain causal word (because, so, which means; Telugu కాబట్టి, అందుకే, కావడంతో; Hindi क्योंकि, इसलिए), e.g. 'Pushya is a nourishing star, so it suits a slow family lunch' / 'పుష్యమి రోజు కావడంతో ఇంట్లో పనులు సాఫీగా సాగుతాయి'. Vary the sentence shape: open with the star's name on at most one day in three; on the others lead with the action, the person or the moment and name the star mid-sentence. Never use the formula '<star> combined with/alongside <tithi>', and never lean on one stock link phrase (Telugu 'నక్షత్రం వల్ల ఈరోజు', English 'thanks to <star>') more than twice in the whole month. Name the current period as 'your current period', never by planet names. Use tithi_hint on every day that has one (full moon, new moon, Ekadashi ...). day_tone is an internal label: never write 'mixed/careful/supportive tone', 'day tone' or 'energy' as an opener. No two day bodies may start with the same two words; no two lines may share an opener. Call a star 'your birth star' ONLY when is_birth_star is true; otherwise it is 'today's star' (use the exact nakshatra name from that day's facts, Telugu: nakshatra_te). Never reuse a title or chip across days. Never put a weekday name in a day title.",
-    "2b. One screen shows a day's title, line, body, do/avoid chips and window notes together, so each must take a DIFFERENT angle: line = the one-sentence verdict; body = the why + one concrete example; do/avoid = two other actions not named in the body; each window note = what that particular slot suits (no repeat of the body's example). Never reuse the same task (e.g. 'clear the inbox', 'wrap up pending work') in two of them. Each day's calendar field holds the Calendar tab's tags (favours/avoid areas); the day's angle must agree with them: lean into a favoured area, steer away from the avoid area, never contradict them.",
-    "3. window_notes: write one note for every window id listed for that day/weekday (and no others). Good windows (g*) say what to use them for; c1 is the traditional caution window: say what to keep routine. Never write times; the app shows them.",
-    "4. weekdays are evergreen cards used after the dated days run out: write for that weekday in general, no tithi/nakshatra references.",
+      "2b. One screen shows a day's title, line, body, do/avoid chips and window notes together, so each must take a DIFFERENT angle: line = the one-sentence verdict; body = the why + one concrete example; do/avoid = two other actions not named in the body; each window note = what that particular slot suits (no repeat of the body's example). Never reuse the same task (e.g. 'clear the inbox', 'wrap up pending work') in two of them. Each day's calendar field holds the Calendar tab's tags (favours/avoid areas); the day's angle must agree with them: lean into a favoured area, steer away from the avoid area, never contradict them.",
+      "3. window_notes: write one note for every window id listed for that day/weekday (and no others). Good windows (g*) say what to use them for; c1 is the traditional caution window: say what to keep routine. Never write times; the app shows them.",
+      "4. weekdays are evergreen cards used after the dated days run out: write for that weekday in general, no tithi/nakshatra references.",
+    ]),
     "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique and short: 2-4 words and at most 28 characters (Telugu: 2-3 words), concrete rather than generic (not 'New Beginnings', 'Growth Phase', 'A Time of Change'), never the same word twice in one title (no 'New Horizon Horizon'), and no two chapters may start with the same word or share their main noun (avoid 'Quiet Mental Rest' vs 'Quiet Leadership', 'Refining Details' vs 'Refined Work'; in Telugu avoid 'పెద్దల బాధ్యత' vs 'పెద్దల ఆశీస్సులు' or three titles opening with 'స్మార్ట్'). Before answering, read the first word of every chapter title in order and change any repeat. Name what is specific to that chapter's lords and domains.",
     "5b. Chapters with kind=\"summary\" are long overview rows (a whole mahadasha, or with early=true the childhood years up to age_from of the first detailed chapter): write ONLY title (2-3 words), highlight (one sentence giving that whole stretch's theme; for early=true, the childhood/teen years in a warm, general way: no events, no fear) and share_line; body MUST be an empty string. Summary titles follow the same uniqueness rules and must name the stretch's theme: never a generic label like 'Early Years', 'Childhood', 'Later Life' or the planet's name (the app already shows that label). Chapters with kind=\"detail\" get the full text as in rule 5.",
     "6. weeks/months: use the counts and notable days given; each period must differ. A week or month card must not restate the current chapter's theme or the day cards' tasks: talk about the stretch itself (which days to use, which to keep light).",
@@ -392,6 +466,22 @@ function tithiHint(tithi: string): string | null {
 /** Facts sent to the model, with per-day grounding hints so every day has its own real hook. */
 export function promptFacts(facts: V2Facts): V2Facts {
   const natal = (facts.natal as { nakshatra?: string } | undefined)?.nakshatra ?? "";
+  if (isV3(facts)) {
+    return {
+      ...facts,
+      weekdays: [],
+      days: facts.days.map((d) => {
+        const { windows, ...rest } = d;
+        const slot = windows.find((w) => w.writer === "llm") ?? windows[0];
+        return {
+          ...rest,
+          ...(facts.locale === "te" ? { nakshatra_te: NAKSHATRA_TE[d.nakshatra] ?? d.nakshatra } : {}),
+          is_birth_star: Boolean(natal) && d.nakshatra === natal,
+          windows: slot ? [{ id: slot.id, kind: slot.kind, part: slot.part, writer: "llm", suits: slot.hora ? facts.meanings?.horas[slot.hora] ?? "" : "" }] : [],
+        };
+      }),
+    } as unknown as V2Facts;
+  }
   return {
     ...facts,
     days: facts.days.map((d) => ({
@@ -405,7 +495,13 @@ export function promptFacts(facts: V2Facts): V2Facts {
 }
 
 export function buildUserPrompt(facts: V2Facts): string {
-  return "FACTS (JSON):\n" + JSON.stringify(promptFacts(facts));
+  const pf = promptFacts(facts) as V2Facts & { meanings?: V2Meanings };
+  if (isV3(facts)) {
+    const { meanings, ...rest } = pf;
+    return "MEANINGS (engine tables, English; say them in your own words in the target language):\n" + JSON.stringify(meanings ?? {}) +
+      "\n\nFACTS (JSON):\n" + JSON.stringify(rest);
+  }
+  return "FACTS (JSON):\n" + JSON.stringify(pf);
 }
 
 // ---------------------------------------------------------------- sanitize
@@ -451,7 +547,7 @@ export function sanitizeContent(c: V2Content, facts: V2Facts): V2Content {
 
 function sanitizeRaw(c: V2Content, facts: V2Facts): V2Content {
   const summaryIds = new Set(facts.chapters.filter((f) => f.kind === "summary").map((f) => f.chapter_id));
-  const dayWin = new Map(facts.days.map((d) => [d.date, new Set(d.windows.map((w) => w.id))]));
+  const dayWin = new Map(facts.days.map((d) => [d.date, new Set(d.windows.filter((w) => !w.writer || w.writer === "llm").map((w) => w.id))]));
   const wdWin = new Map(facts.weekdays.map((d) => [d.weekday, new Set(d.windows.map((w) => w.id))]));
   const period = (p: V2Content["weeks"][number]) => ({
     period_key: p.period_key,
@@ -502,7 +598,7 @@ export type Validation = {
   ok: boolean;
   fatal: string[];
   flags: Flag[];
-  stats: Record<string, number>;
+  stats: { [k: string]: number | ThemeStats | undefined; theme?: ThemeStats };
 };
 
 const SCRIPT_RE: Record<ReadingLocale, RegExp | null> = {
@@ -646,7 +742,9 @@ export function panchangReason(d: V2DayCopy, fx: V2DayFact | undefined, locale: 
   const star = fx.nakshatra ? text.toLowerCase().includes(fx.nakshatra.toLowerCase().split(" ").slice(-1)[0]) || (NAKSHATRA_TE[fx.nakshatra] ? text.includes(NAKSHATRA_TE[fx.nakshatra]) : false) : false;
   const tithiWord = (fx.tithi ?? "").split(" ").slice(-1)[0]?.toLowerCase() ?? "";
   const tithi = TITHI_WORD_RE[locale].test(text) || (tithiWord.length >= 4 && text.toLowerCase().includes(tithiWord));
-  return (star || tithi) && REASON_RE[locale].test(text);
+  const yoga = Boolean(fx.angle) && fx.yoga.length >= 4 && text.toLowerCase().includes(fx.yoga.toLowerCase());
+  const tara = fx.angle?.lead === "tara" && /birth star|జన్మ నక్షత్ర|जन्म नक्षत्र/i.test(text);
+  return (star || tithi || yoga || tara) && REASON_RE[locale].test(text);
 }
 
 /** Minimum share of dated days whose copy gives a panchang-tied reason. */
@@ -730,7 +828,7 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
     }
   };
 
-  const dayWin = new Map(facts.days.map((d) => [d.date, d.windows.map((w) => w.id)]));
+  const dayWin = new Map(facts.days.map((d) => [d.date, d.windows.filter((w) => !w.writer || w.writer === "llm").map((w) => w.id)]));
   const wdWin = new Map(facts.weekdays.map((d) => [d.weekday, d.windows.map((w) => w.id)]));
   const titleSeen = new Map<string, number>();
   const openSeen = new Map<string, number>();
@@ -793,6 +891,10 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
     prior.push({ id: String(id), sh });
   }
 
+  // Theme-level repetition across the whole run of days (the template feel a pairwise check misses).
+  const theme = themeCheck(c.days ?? [], facts);
+  for (const f of theme.flags) flag("days", f.id, f.reason);
+
   // Usefulness: at least 60% of dated days must say WHY, tied to that day's star or tithi.
   // Below the bar, flag just enough of the ungrounded days (earliest first, they show first) for the repair pass.
   const reasonless = (c.days ?? []).filter((d) => !panchangReason(d, dayFact.get(d.date), locale)).map((d) => d.date).sort();
@@ -837,11 +939,13 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
       flagged: flags.length,
       max_day_similarity: Math.round(maxSim * 100) / 100,
       panchang_reason_pct: Math.round(reasonShare * 100),
+      theme: theme.stats,
       profile_jargon: jargonHits([c.profile?.title, c.profile?.summary, ...(c.profile?.strengths ?? []), ...(c.profile?.watchouts ?? []), c.profile?.work_style, c.profile?.relationship_style].filter(Boolean).join(" "), locale).length,
     },
   };
 }
 
+export const REPAIR_MAX_DAYS = 18;
 /** Which flagged ids are worth one targeted repair call. */
 export function repairScope(v: Validation): SchemaScope | null {
   const scope: SchemaScope = {};
@@ -853,6 +957,8 @@ export function repairScope(v: Validation): SchemaScope | null {
     else if (f.section === "months") (scope.months ??= []).push(String(f.id));
     else if (f.section === "areas") (scope.areas ??= []).push(String(f.id));
   }
+  // Bound one repair call: the earliest flagged days first (they are on screen first).
+  if (scope.days && scope.days.length > REPAIR_MAX_DAYS) scope.days = [...new Set(scope.days)].sort().slice(0, REPAIR_MAX_DAYS);
   const n = Object.values(scope).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
   return n ? scope : null;
 }
@@ -879,9 +985,12 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
   return [
     "Rewrite ONLY these items. Fix every listed problem and keep everything else about the rules.",
     "Problems:",
-    ...v.flags.map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
+    ...v.flags.filter((f) => f.section !== "days" || scope.days?.includes(String(f.id))).map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
     "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters; title_too_long = 2-4 words, at most 28 characters; formula_phrase (stock link) = drop 'నక్షత్రం వల్ల ఈరోజు' / 'thanks to <star>' and give the reason in fresh words; jargon = replace corporate/tech-job words (backend, workflow, bottleneck, operational, stakeholders ...) with everyday words and do not assume a profession; reason_missing = in the line or body name that day's star (or tithi) and say plainly WHY it suits this action (because / so / which means; Telugu కాబట్టి / అందుకే / కావడంతో), without opening the body with the star's name.",
-    `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 40))}`,
+    "stock_star_line = drop '<star> is today's star' / 'today's star is'; give the reason from MEANINGS in fresh words; hint_word = never write 'hint'; slot_opener = start the slot note with what the slot suits, not 'Use this slot/A good slot/Good for'; trait_off_day = remove every mention of their personality trait (this day's angle.trait_ok is false); overused:<word> = do not use that word; ngram_repeat = do not use that phrase; title_formula = no '<Star>'s <Noun>' title; star_misspelled = spell the star/tithi exactly as in FACTS.",
+    `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 45))}`,
+    ...(v.stats.theme ? ["Already said elsewhere in this reading (do not echo):", ...alreadySaid(content.days ?? [], new Set(scope.days ?? []), v.stats.theme)] : []),
+    ...(isV3(facts) && facts.meanings ? ["MEANINGS (engine tables):", JSON.stringify(facts.meanings)] : []),
     "FACTS for these items:",
     JSON.stringify(factItems),
     "CURRENT (flawed) items:",
@@ -908,7 +1017,15 @@ export function mergeRepair(c: V2Content, patch: Partial<V2Content>): V2Content 
 
 // ---------------------------------------------------------------- view (legacy-compatible content)
 
-export type ViewOptions = { dateStr: string; tz: string; locale: ReadingLocale; daysBefore?: number; daysAfter?: number };
+export type ViewOptions = {
+  dateStr: string;
+  tz: string;
+  locale: ReadingLocale;
+  daysBefore?: number;
+  daysAfter?: number;
+  /** v3: engine facts for a date outside the written range (real panchang, not a weekday copy). */
+  engineDay?: (date: string) => V2DayFact | null;
+};
 
 function chapterTense(f: V2ChapterFact, now: number): "past" | "current" | "future" {
   const s = f.start_iso ? Date.parse(f.start_iso) : NaN;
@@ -930,7 +1047,21 @@ function windowNotesFor(d: V2DayCopy) {
   };
 }
 
-function dayCard(key: string, d: V2DayCopy, source: "day" | "weekday", tone?: string) {
+/** v3: the model's one slot note plus engine notes (hora / Rahu Kalam) for the other slots, in window order. */
+function windowNotesV3(d: V2DayCopy | null, fx: V2DayFact, locale: ReadingLocale) {
+  const byId = new Map((d?.window_notes ?? []).map((n) => [n.window_id, n]));
+  const noteFor = (w: V2WindowFact) => {
+    const llm = byId.get(w.id);
+    if (llm && llm.note) return { category: llm.label, why_it_works: llm.note };
+    return engineSlotNote(w.kind, w.hora, fx.angle?.area, locale);
+  };
+  return {
+    good_window_notes: fx.windows.filter((w) => w.kind === "good").map(noteFor),
+    caution_window_notes: fx.windows.filter((w) => w.kind === "caution").map(noteFor),
+  };
+}
+
+function dayCard(key: string, d: V2DayCopy, source: "day" | "weekday" | "engine", tone?: string, fx?: V2DayFact, locale?: ReadingLocale) {
   return {
     key,
     ...(tone ? { tone } : {}),
@@ -939,7 +1070,7 @@ function dayCard(key: string, d: V2DayCopy, source: "day" | "weekday", tone?: st
     body: d.body,
     better_for: d.do ?? [],
     be_careful: d.avoid ?? [],
-    ...windowNotesFor(d),
+    ...(fx?.windows?.some((w) => w.writer) && locale ? windowNotesV3(d, fx, locale) : windowNotesFor(d)),
     source,
   };
 }
@@ -959,14 +1090,22 @@ export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptio
   const byDate = new Map((c.days ?? []).map((d) => [d.date, d]));
   const byWeekday = new Map((c.weekdays ?? []).map((d) => [d.weekday, d]));
   const toneByDate = new Map((facts.days ?? []).map((d) => [d.date, d.day_tone]));
+  const factByDate = new Map((facts.days ?? []).map((d) => [d.date, d]));
   const start = DateTime.fromISO(opts.dateStr, { zone: opts.tz });
   const todayCards: Record<string, unknown>[] = [];
+  const v3 = isV3(facts);
   for (let i = -(opts.daysBefore ?? 7); i <= (opts.daysAfter ?? 45); i++) {
     const dt = start.plus({ days: i });
     const key = dt.toISODate()!;
     const day = byDate.get(key);
     if (day) {
-      todayCards.push(dayCard(key, day, "day", toneByDate.get(key)));
+      todayCards.push(dayCard(key, day, "day", toneByDate.get(key), factByDate.get(key), opts.locale));
+      continue;
+    }
+    if (v3) {
+      // Past the written range: a real card from that date's panchang, never a weekday copy.
+      const fx = opts.engineDay?.(key);
+      if (fx) todayCards.push(dayCard(key, { ...engineDayCopy(fx, opts.locale), window_notes: [] }, "engine", fx.day_tone, fx, opts.locale));
       continue;
     }
     const wd = byWeekday.get(WEEKDAYS[dt.weekday % 7]);
