@@ -199,9 +199,11 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
  * Sharded reading on a synthetic profile; `effort` applies to the chapter/day parts (A and D keep
  * the production effort). Reports shard times, cache hits, validator + theme-checker results.
  */
+/** Reading eval: v4 unless the request says v4:false (tests the new path before rollout). */
+let v4Eval = true;
 export async function runReadingCase(i: number, effort: ReasoningEffort, date: string): Promise<Record<string, unknown>> {
   const sp = syntheticProfiles(30)[i];
-  const facts = liveFacts(sp.prof, sp.bi, sp.locale, date, null)!;
+  const facts = liveFacts(sp.prof, sp.bi, sp.locale, date, null, { v4: v4Eval })!;
   if (isV4(facts)) return await runReadingCaseV4(i, facts, sp.locale);
   const plans = planShards(facts);
   const t0 = Date.now();
@@ -406,7 +408,7 @@ export function hastaPair(date: string): { a: { prof: ProfRow; bi: BioRow }; b: 
       bi: { ...base.bi, id: `00000000-0000-4000-9000-00000000000${k}`, profile_id: `00000000-0000-4000-9000-00000000000${k}`, date_of_birth: iso, exact_birth_time: t, birth_input_mode: "exact", time_bucket: null, birth_place: "Hyderabad", birth_lat: 17.385, birth_lng: 78.4867 },
     });
     const a = mk("05:30", "1"), b = mk("08:30", "2");
-    const fa = liveFacts(a.prof, a.bi, "en", date, null), fb = liveFacts(b.prof, b.bi, "en", date, null);
+    const fa = liveFacts(a.prof, a.bi, "en", date, null, { v4: true }), fb = liveFacts(b.prof, b.bi, "en", date, null, { v4: true });
     const cur = (f: typeof fa) => f?.chapters.find((c) => c.chapter_id === f.current_chapter_id);
     if (fa && fb && cur(fa)?.md === cur(fb)?.md && cur(fa)?.ad === cur(fb)?.ad) return { a, b };
   }
@@ -427,7 +429,7 @@ export async function runPersonalCase(date: string): Promise<Record<string, unkn
   const t0 = Date.now();
   const t = zeroT();
   const one = async (x: { prof: ProfRow; bi: BioRow }) => {
-    const f = liveFacts(x.prof, x.bi, "en", date, null)!;
+    const f = liveFacts(x.prof, x.bi, "en", date, null, { v4: true })!;
     const A = planShards(f).find((p) => p.key === "A")!;
     const r = await shardCall(f, A, { background: false, timeoutMs: 120_000 });
     addT(t, r.model, r.usage);
@@ -478,6 +480,7 @@ export async function runLunaEval(admin: SupabaseClient, body: Record<string, un
     results.push(await runPersonalCase(date));
   } else {
     const effort = (body.effort === "none" ? "none" : "low") as ReasoningEffort;
+    v4Eval = body.v4 !== false;
     const ids = (Array.isArray(body.profiles) ? body.profiles : [0, 1, 2]).map(Number);
     results.push(...await pool(ids, 3, (i) => runReadingCase(i, effort, date)));
   }

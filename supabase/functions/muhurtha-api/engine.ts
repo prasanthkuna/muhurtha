@@ -7084,13 +7084,13 @@ export async function pushChartMoments(
 const liveFactsCache = new Map<string, { at: number; facts: V2Facts }>();
 
 /** Engine facts for live calls (pure, ~20 ms warm); cached per isolate for 6 h. */
-export function liveFacts(profile: ProfRow, bi: BioRow | null, locale: AppLocale, date: string, subject: string | null): V2Facts | null {
+export function liveFacts(profile: ProfRow, bi: BioRow | null, locale: AppLocale, date: string, subject: string | null, opts: { v4?: boolean } = {}): V2Facts | null {
   if (!bi) return null;
-  const key = [bi.id, bi.date_of_birth, bi.exact_birth_time, bi.time_bucket, bi.birth_lat, bi.birth_lng, locale, date, profile.current_timezone, subject ?? ""].join("|");
+  const key = [opts.v4 ?? "", bi.id, bi.date_of_birth, bi.exact_birth_time, bi.time_bucket, bi.birth_lat, bi.birth_lng, locale, date, profile.current_timezone, subject ?? ""].join("|");
   const hit = liveFactsCache.get(key);
   if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.facts;
   try {
-    const facts = buildReadingFacts(profile, bi, locale, date, subject);
+    const facts = buildReadingFacts(profile, bi, locale, date, subject, opts);
     if (liveFactsCache.size > 300) liveFactsCache.clear();
     liveFactsCache.set(key, { at: Date.now(), facts });
     return facts;

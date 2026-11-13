@@ -48,7 +48,7 @@ export const SUPPLEMENT: Record<"te" | "hi", Record<string, string>> = {
     "timing.compareResults": "బెస్ట్ తేదీలు",
     "timing.preliminary": "ప్రాథమిక అంచనా",
     "timing.preliminaryNote": "ఇది పంచాంగం (తిథి, నక్షత్రం, యోగం, తారాబలం), మీ దశ ఆధారంగా చూసింది. పూర్తి ముహూర్తంలో ఆ సమయపు లగ్నం లాంటి ఇంకొన్ని నియమాలు కూడా చూస్తారు; పెద్ద కార్యక్రమాలకు పండితుల్ని ఒకసారి అడగండి.",
-    "life.writingChapter": "మీ చార్ట్ కోసం ఈ అధ్యాయం రాస్తున్నాం…",
+    "life.writingChapter": "మీ చార్ట్ కోసం ఈ చాప్టర్ రాస్తున్నాం…",
     "life.chartBasis": "మీ జాతకం నుంచి",
     "timing.savePlan": "నా ప్లాన్స్‌లో సేవ్ చేయండి",
     "timing.viewPlans": "ప్లాన్స్ చూడండి",
