@@ -245,3 +245,20 @@ Deno.test("v5: fixLordPairs corrects a wrong first lord to the engine's period",
   const hi = fixLordPairs("शनि–केतु दौर", v, "hi");
   if (hi !== "शनि–केतु दौर") throw new Error(hi);
 });
+
+Deno.test("v5: rollout is per locale (default en+hi, env overrides)", async () => {
+  const { readingV5Enabled } = await import("./reading_v5.ts");
+  const prev = Deno.env.get("READING_V5");
+  try {
+    Deno.env.delete("READING_V5");
+    if (!readingV5Enabled("en") || !readingV5Enabled("hi") || readingV5Enabled("te")) throw new Error("default");
+    Deno.env.set("READING_V5", "0");
+    if (readingV5Enabled("en")) throw new Error("off");
+    Deno.env.set("READING_V5", "1");
+    if (!readingV5Enabled("te")) throw new Error("all");
+    Deno.env.set("READING_V5", "en");
+    if (readingV5Enabled("hi")) throw new Error("list");
+  } finally {
+    if (prev == null) Deno.env.delete("READING_V5"); else Deno.env.set("READING_V5", prev);
+  }
+});

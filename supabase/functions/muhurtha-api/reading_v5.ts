@@ -14,11 +14,16 @@
 import type { ChartFacts } from "./reading_v4.ts";
 import type { ReadingLocale, V2ChapterFact, V2Content, V2Facts } from "./reading_v2.ts";
 
-/** Rollout switch: env READING_V5 ("1"/"0") wins; otherwise this default. */
-export const READING_V5_DEFAULT = false;
-export function readingV5Enabled(): boolean {
-  const env = (Deno.env.get("READING_V5") ?? "").trim();
-  return env ? env !== "0" : READING_V5_DEFAULT;
+/** Rollout switch, per locale. env READING_V5 wins: "0" off, "1" all locales, or a list
+ * ("en,hi"). Otherwise the default: on for en and hi (both passed the eval gate); Telugu stays
+ * on v4 until its script-drift rate passes the gate. */
+export const READING_V5_DEFAULT_LOCALES: readonly string[] = ["en", "hi"];
+export function readingV5Enabled(locale?: string): boolean {
+  const env = (Deno.env.get("READING_V5") ?? "").trim().toLowerCase();
+  if (env === "0" || env === "false") return false;
+  if (env === "1" || env === "true" || env === "all") return true;
+  const list = env ? env.split(",").map((x) => x.trim()) : [...READING_V5_DEFAULT_LOCALES];
+  return locale ? list.includes(locale) : list.length > 0;
 }
 export const isV5 = (f: Pick<V2Facts, "facts_version" | "chart">) => f.facts_version === 5 && Boolean(f.chart);
 
@@ -198,7 +203,7 @@ export function v5Rules(f: V2Facts, openersLine: string, banned: string[]): stri
 /** Per-part language line (stronger than the global one: parts are written separately). */
 export const V5_LANGUAGE_LINE: Record<ReadingLocale, string> = {
   en: "Language: English, plain and warm.",
-  te: "Language: Telugu (తెలుగు script) in every text field: casual but respectful, the way a caring elder talks (మీరు, not నువ్వు); everyday words, English only where Telugu speech uses it (career, office, plan), never whole English sentences. Only Telugu letters: never Tamil, Kannada or Malayalam letters or words. Graha names exactly: Venus = శుక్రుడు (శుక్ర), Jupiter = గురువు (గురు), Saturn = శని, Mercury = బుధుడు; never call Venus గురు.",
+  te: "Language: Telugu (తెలుగు script) in every text field: casual but respectful, the way a caring elder talks (మీరు, not నువ్వు); everyday words, English only where Telugu speech uses it (career, office, plan), never whole English sentences. Only Telugu letters: never Tamil, Kannada or Malayalam letters or words.",
   hi: "Language: natural Hindi (देवनागरी) in every text field: warm and respectful (आप), everyday spoken Hindi rather than Sanskrit-heavy words; English only where Hindi speech uses it, never whole English sentences.",
 };
 

@@ -7,7 +7,7 @@ import { chapterPlanV4, fillPlansV4, requiredIdsV4 } from "./reading_v4.ts";
 
 Deno.test("v4 parts: initial + background days + on-demand chapters cover every id exactly once", () => {
   for (const sp of syntheticProfiles(12)) {
-    const f = liveFacts(sp.prof, sp.bi, sp.locale, "2026-11-12", null, { v4: true })!;
+    const f = liveFacts(sp.prof, sp.bi, sp.locale, "2026-11-12", null, { v4: true, v5: false })!;
     assertEquals(f.facts_version, 4);
     const plans = planShards(f);
     assertEquals(plans.map((p) => p.key), ["A", "B", "C", "D"]);
@@ -29,7 +29,7 @@ Deno.test("v4 parts: initial + background days + on-demand chapters cover every 
 
 Deno.test("v3 shards cover every engine id exactly once, A carries Decode + current chapter", () => {
   for (const sp of syntheticProfiles(12)) {
-    const f = liveFacts(sp.prof, sp.bi, sp.locale, "2026-11-12", null, { v4: false })!;
+    const f = liveFacts(sp.prof, sp.bi, sp.locale, "2026-11-12", null, { v4: false, v5: false })!;
     assertEquals(f.facts_version, 3);
     const plans = planShards(f);
     const days = plans.flatMap((p) => p.scope.days ?? []);

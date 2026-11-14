@@ -3310,7 +3310,7 @@ export function buildReadingFacts(
   }));
   const arch = kernel?.natal.archetype;
   const intent = profile.onboarding_intent ?? {};
-  const v5 = opts.v5 ?? readingV5Enabled();
+  const v5 = opts.v5 ?? readingV5Enabled(locale);
   const v4 = opts.v4 ?? (v5 || readingV4Enabled());
   const areaIds = isChild ? [...CHILD_AREAS] : [...ADULT_AREAS];
   let chart: V2Facts["chart"];

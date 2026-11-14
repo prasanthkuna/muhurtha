@@ -16,7 +16,7 @@ const BI = {
   birth_lat: 15.8492886, birth_lng: 80.3546764, birth_timezone: "Asia/Kolkata", birth_place: "Chirala",
 };
 // deno-lint-ignore no-explicit-any
-const facts = (bi: any = BI, loc: "en" | "te" | "hi" = "en") => buildReadingFacts(PROF as any, bi, loc, "2026-11-12", null, { v4: true });
+const facts = (bi: any = BI, loc: "en" | "te" | "hi" = "en") => buildReadingFacts(PROF as any, bi, loc, "2026-11-12", null, { v4: true, v5: false });
 const tok = (s: string) => Math.ceil(s.length / 4);
 
 Deno.test("v4 facts: evidence pack, story, progressive plan", () => {
