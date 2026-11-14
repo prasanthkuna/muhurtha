@@ -1138,7 +1138,28 @@ async function repairNew(
     totals.reasoning_tokens += r.usage?.reasoning_tokens ?? 0;
     const patch = parseContent(r.output_text);
     if (!patch) return { add, totals, flagged: v.flags.length };
-    const fixed = sanitizeContent(mergeRepair(tmp, patch), facts);
+    let fixed = sanitizeContent(mergeRepair(tmp, patch), facts);
+    // A duplicate chapter title is a duplicate Life map label: give it one more titles-only try.
+    const still = validateContent(fixed, facts).flags
+      .filter((f) => f.section === "chapters" && f.reasons.includes("title_repeat") && (add.chapters ?? []).some((c) => Number(c.chapter_id) === Number(f.id)))
+      .map((f) => Number(f.id));
+    if (still.length) {
+      const v2 = validateContent(fixed, facts);
+      const scope2 = { chapters: [...new Set(still)] };
+      const t1 = Date.now();
+      const r2 = await createWithSchema(facts, {
+        system: buildSystemPrompt(facts), user: repairPrompt(facts, fixed, v2, scope2), scope: scope2, background: false, chainDepth: 2,
+        metadata: { reading_id: reading.id, purpose: "repair" },
+      }).catch(() => null);
+      if (r2) {
+        totals.cost_usd += await logCall(admin, {
+          job_id: jobId, profile_id: reading.profile_id, purpose: "repair", model: r2.model ?? readingModel(), response_id: r2.id,
+          locale: reading.locale, status: r2.status, usage: r2.usage, latency_ms: Date.now() - t1, meta: { flagged: still.length, scope: "title_repeat" },
+        });
+        const p2 = parseContent(r2.output_text);
+        if (p2) fixed = sanitizeContent(mergeRepair(fixed, p2), facts);
+      }
+    }
     const pickD = new Set((add.days ?? []).map((d) => d.date)), pickC = new Set((add.chapters ?? []).map((c) => Number(c.chapter_id)));
     return {
       add: {

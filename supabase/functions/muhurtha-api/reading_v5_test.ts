@@ -369,6 +369,6 @@ Deno.test("Life map: a chapter repair sees the other chapters' titles", async ()
     // minimal facts may not satisfy promptFacts; the title list is built before it
   }
   assert(p, "repairPrompt built");
-  const line = p.split("\n").find((l) => l.startsWith("Chapter titles already used")) ?? "";
+  const line = p.split("\n").find((l) => l.startsWith("Chapter titles in this reading")) ?? "";
   assert(line.includes("Close Ties") && line.includes("Daily Effort"), line);
 });

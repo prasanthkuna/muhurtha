@@ -1136,8 +1136,9 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
   const keepTitles = (content.days ?? []).filter((d) => !scope.days?.includes(d.date)).map((d) => d.title);
   // Chapter titles are the Life map's labels: a repaired chapter must see every other chapter's title,
   // or it happily rewrites "Close Ties" as "Close Ties" again (title_repeat survived the repair).
+  // Scoped chapters are listed too: two flagged chapters can otherwise both keep "Creative Rewards".
   const keepChapterTitles = scope.chapters?.length
-    ? (content.chapters ?? []).filter((c) => !scope.chapters!.includes(Number(c.chapter_id))).map((c) => c.title).filter(Boolean)
+    ? [...new Set((content.chapters ?? []).map((c) => c.title).filter(Boolean))]
     : [];
   return [
     "Rewrite ONLY these items. Fix every listed problem and keep everything else about the rules.",
@@ -1148,7 +1149,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     ...(isV5(facts) ? ["lord_chain = drop 'X lord in Y links/connects A with B' and say what it means for the person in plain words; truncated = end on a complete sentence and stay inside the length; opener_repeat = open this chapter differently from the others; stage_missing = frame the chapter by its life_stage and ages first; past_asserted = describe what the chart suggests for that age, never state an event as fact; past_hedge = no 'may have/perhaps you': say what the stretch favoured; action_missing = add ONE concrete thing to do (verb first); why_missing = add the one-sentence plain why; verdict_mismatch = this day's verdict is not for big starts: make the line and do chips fit verdict.tone (finish, review, keep light)."] : []),
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 45))}`,
     ...(keepChapterTitles.length
-      ? [`Chapter titles already used by other chapters (do not reuse any of them, and do not start with the same first word): ${JSON.stringify(keepChapterTitles)}`]
+      ? [`Chapter titles in this reading (each rewritten chapter needs a title that is none of these and differs from the other rewritten chapters, with a different first word): ${JSON.stringify(keepChapterTitles)}`]
       : []),
     ...(v.stats.theme ? ["Already said elsewhere in this reading (do not echo):", ...alreadySaid(content.days ?? [], new Set(scope.days ?? []), v.stats.theme)] : []),
     ...(isV3(facts) && facts.meanings ? ["MEANINGS (engine tables):", JSON.stringify(facts.meanings)] : []),
