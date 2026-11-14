@@ -219,6 +219,7 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
  */
 /** Reading eval: v4 unless the request says v4:false (tests the new path before rollout). */
 let v4Eval = true;
+let keepContent = false;
 let v5Eval = false;
 export async function runReadingCase(i: number, effort: ReasoningEffort, date: string): Promise<Record<string, unknown>> {
   const sp = syntheticProfiles(30)[i];
@@ -426,6 +427,8 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
     checks: { valid: v.ok, valid_after_fill: vf.ok, fatal: vf.fatal, flags: vf.flags.length, theme_ok: theme.ok, theme_fails: theme.fails, all_days: allDays, unsupported_pct: unsupportedPct, v5_gate: v5Gate, all_chapters: full.chapters.length === facts.chapters.length },
     latency_ms: readyMs, first_token_ms: firstToken, first_shown_ms: firstInsight,
     output: {
+      // Synthetic profile only: the full content, for local screenshots of the new screens.
+      ...(keepContent ? { content: full } : {}),
       v: 4, shard_ms: times, errors: errs, off_script_retries: retried, ready_ms: readyMs, fill_ms: fillMs, lazy_ms: lazyMs, lazy_chapters: lazyN,
       initial: { ...init, cost: round6(init.cost) }, fill: { ...fill, cost: round6(fill.cost) }, lazy: { ...lazy, cost: round6(lazy.cost) },
       cost_usd: round6(init.cost + fill.cost), cost_with_lazy: round6(init.cost + fill.cost + lazy.cost),
@@ -538,6 +541,7 @@ export async function runLunaEval(admin: SupabaseClient, body: Record<string, un
   const date = DateTime.now().setZone("Asia/Kolkata").toISODate()!;
   const kind = body.kind === "reading" ? "reading" : body.kind === "personal" ? "personal" : "ask";
   v5Eval = body.v5 === true;
+  keepContent = body.keep_content === true;
   const results: Record<string, unknown>[] = [];
   if (kind === "ask") {
     const all = evalCases(Number(body.profiles ?? 30), Number(body.per_profile ?? 5));
