@@ -23,6 +23,9 @@ import { fill } from "@/lib/messages-bond";
 import { formatMonthYear } from "@/lib/format-date";
 import { grahaName } from "@/design-system/graha";
 
+/** An early-years row ending after this age covers adult years too ("Earlier years"). */
+const EARLY_MAX_AGE = 18;
+
 /** How many past chapters stay visible before "Show earlier chapters". */
 const RECENT_PAST = 2;
 
@@ -39,20 +42,28 @@ function SummaryRow({
   locale,
   t,
   onLocked,
+  inArc = false,
 }: {
   c: ChapterView;
   isPro: boolean;
   locale: AppLocale;
   t: (key: string) => string;
   onLocked: (c: ChapterView) => void;
+  /** Inside an arc whose header already says "Early years · Ages 0–12": don't repeat it. */
+  inArc?: boolean;
 }) {
   const locked = c.proLocked && !isPro;
-  const period = formatPeriod(c.periodLabel, c.periodStart, c.periodEnd, locale);
+  // A row cut at age 80 keeps going: never show the cut as the period's end.
+  const period = c.openEnded && c.periodStart
+    ? fill(t("life.fromDate"), { date: formatMonthYear(c.periodStart, locale) })
+    : formatPeriod(c.periodLabel, c.periodStart, c.periodEnd, locale);
   const lords = (c.mdLords.length ? c.mdLords : [c.mahadashaLord]).filter(Boolean);
-  const eyebrow = [c.early ? t("life.earlyYears") : t("life.bigChapter"), agesLabel(c, t)]
+  // "Early years" is childhood; an early row that runs into adulthood (older charts) is "Earlier years".
+  const earlyLabel = (c.ageTo ?? 0) > EARLY_MAX_AGE ? t("life.earlierYears") : t("life.earlyYears");
+  const eyebrow = [c.early ? earlyLabel : t("life.bigChapter"), agesLabel(c, t)]
     .filter(Boolean)
     .join(" · ");
-  const label = c.early ? t("life.earlyYears") : t("life.bigChapter");
+  const label = c.early ? earlyLabel : t("life.bigChapter");
   // Older readings may title the row with the same generic label the eyebrow already shows.
   const showTitle = Boolean(c.title) && c.title.trim().toLowerCase() !== label.toLowerCase();
   const glyphs = (
@@ -82,7 +93,7 @@ function SummaryRow({
         <div className="flex items-start gap-3 rounded-lg border border-dashed border-line bg-canvas px-3 py-2">
           <span className="pt-0.5">{glyphs}</span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-tertiary">{eyebrow}</p>
+            {inArc ? null : <p className="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-tertiary">{eyebrow}</p>}
             {showTitle ? <p className="text-sm font-medium text-ink">{c.title}</p> : null}
             <p className="text-xs text-ink-tertiary">{period}</p>
             {c.highlight ? <p className="mt-1 line-clamp-2 text-xs text-ink-secondary">{c.highlight}</p> : null}
@@ -327,7 +338,7 @@ function ArcTimeline({
   const hiddenCount = groups.slice(0, firstShown).reduce((n, g) => n + g.items.length, 0);
   const row = (c: ChapterView) =>
     c.kind === "summary" ? (
-      <SummaryRow key={c.id} c={c} isPro={isPro} locale={locale} t={t} onLocked={onLocked} />
+      <SummaryRow key={c.id} c={c} isPro={isPro} locale={locale} t={t} onLocked={onLocked} inArc />
     ) : (
       <ChapterRow key={c.id} c={c} isPro={isPro} locale={locale} t={t} onLocked={onLocked} hideAnchor />
     );
@@ -340,7 +351,9 @@ function ArcTimeline({
       ) : null}
       {groups.slice(firstShown).map(({ arc, items }) => {
         const early = arc.md === "early";
-        const label = early ? t("life5.arcEarly") : fill(t("life5.arcMd"), { lord: grahaName(arc.md, locale) });
+        const label = early
+          ? t((arc.ageTo ?? 0) > EARLY_MAX_AGE ? "life5.arcEarlier" : "life5.arcEarly")
+          : fill(t("life5.arcMd"), { lord: grahaName(arc.md, locale) });
         const ages = arc.ageFrom != null && arc.ageTo != null ? fill(t("life5.ages"), { from: arc.ageFrom, to: arc.ageTo }) : "";
         return (
           <section key={`${arc.md}-${arc.chapterIds[0]}`} className="space-y-2" data-testid="life-arc">

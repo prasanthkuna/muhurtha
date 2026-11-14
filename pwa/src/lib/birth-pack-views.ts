@@ -185,6 +185,7 @@ export class BirthPackViews {
           kind: (p.kind ?? fact?.kind) === "summary" ? "summary" : "detail",
           mdLords: strList(p.mdLords).length ? strList(p.mdLords) : [p.mahadashaLord?.toString() ?? ""].filter(Boolean),
           early: p.early === true,
+          openEnded: p.openEnded === true,
           ageFrom: numOrUndef(p.ageFrom ?? fact?.ageFrom),
           ageTo: numOrUndef(p.ageTo ?? fact?.ageTo),
           why: p.why?.toString() ?? "",

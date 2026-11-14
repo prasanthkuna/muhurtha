@@ -48,6 +48,8 @@ export type ChapterView = {
   kind: "detail" | "summary";
   /** Summary rows: every mahadasha lord in the span. */
   mdLords: string[];
+  /** Last summary row cut at age 80: show "From <start>", not a false end. */
+  openEnded?: boolean;
   early: boolean;
   ageFrom?: number;
   ageTo?: number;

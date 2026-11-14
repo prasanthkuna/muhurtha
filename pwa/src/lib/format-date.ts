@@ -28,7 +28,9 @@ export function formatDisplayDate(
 /** "Mon YYYY" for life chapter boundaries. */
 export function formatMonthYear(value: string | null | undefined, locale: AppLocale = "en"): string {
   if (!value) return "";
-  const dt = DateTime.fromISO(value.slice(0, 10));
+  // Full ISO instants (chapter boundaries) are read in IST, the same months the engine labels use;
+  // slicing the UTC date made e.g. 31 Mar 20:00Z (1 Apr IST) read "Mar".
+  const dt = value.length > 10 ? DateTime.fromISO(value).setZone("Asia/Kolkata") : DateTime.fromISO(value);
   if (!dt.isValid) return value;
   return fixSept(dt.setLocale(INTL_LOCALE[locale] ?? "en-IN").toLocaleString({
     month: "short",
