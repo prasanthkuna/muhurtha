@@ -234,3 +234,14 @@ Deno.test("v5: stripAlien drops drifted Tamil sentences from Telugu, keeps clean
   if (hasAlien(out, "te") || !out.includes("బంధాలను") || !out.includes("నెమ్మదిగా")) throw new Error(out);
   if (stripAlien("Plain English.", "en") !== "Plain English.") throw new Error("en changed");
 });
+
+Deno.test("v5: fixLordPairs corrects a wrong first lord to the engine's period", async () => {
+  const { fixLordPairs } = await import("./reading_v5.ts");
+  const v: [string, string][] = [["Venus", "Saturn"], ["Venus", "Mercury"]];
+  const te = fixLordPairs("ఇప్పటి గురు–శని దశలో. ఆగస్టు 2028 నుంచి గురు–బుధ దశ.", v, "te");
+  if (te.includes("గురు") || !te.includes("శుక్ర–శని") || !te.includes("శుక్ర–బుధ")) throw new Error(te);
+  const en = fixLordPairs("the Jupiter–Saturn period and the Venus–Mercury one", v, "en");
+  if (!en.startsWith("the Venus–Saturn")) throw new Error(en);
+  const hi = fixLordPairs("शनि–केतु दौर", v, "hi");
+  if (hi !== "शनि–केतु दौर") throw new Error(hi);
+});

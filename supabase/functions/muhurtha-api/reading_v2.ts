@@ -7,7 +7,7 @@
  * zero-call adapter for readings written by the old 6-phase pack pipeline.
  */
 import { DATE_RULE, jargonHits, polishDeep, VOICE_BLOCK } from "./voice.ts";
-import { arcsOf, clipSentences, hasAlien, isV5, stripAlien, stageKey, V5_LIMITS, v5Flags, v5Rules } from "./reading_v5.ts";
+import { arcsOf, clipSentences, fixLordPairs, hasAlien, isV5, stripAlien, stageKey, V5_LIMITS, v5Flags, v5Rules } from "./reading_v5.ts";
 import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 import { type DayAngle, OPENER_HOW } from "./angles.ts";
@@ -622,16 +622,21 @@ function sanitizeRaw(c: V2Content, facts: V2Facts): V2Content {
   const summaryIds = new Set(facts.chapters.filter((f) => f.kind === "summary").map((f) => f.chapter_id));
   const v5 = isV5(facts);
   const tenseOf = new Map(facts.chapters.map((f) => [f.chapter_id, f.tense]));
+  const chIdx = new Map(facts.chapters.map((f, i) => [f.chapter_id, i]));
   const v5Chapter = (ch: V2Content["chapters"][number]) => {
     const id = Number(ch.chapter_id);
     const summary = summaryIds.has(id);
     const tense = tenseOf.get(id) ?? "future";
+    const i = chIdx.get(id) ?? -1;
+    const pairs = [facts.chapters[i - 1], facts.chapters[i], facts.chapters[i + 1]]
+      .filter((f) => f && f.md && f.ad).map((f) => [f.md, f.ad] as [string, string]);
+    const lp = (x: string | undefined) => fixLordPairs(x ?? "", pairs, facts.locale);
     return {
       chapter_id: id,
       title: clip(ch.title, V5_LIMITS.chapterTitle),
-      highlight: clipSentences(ch.highlight, V5_LIMITS.beat),
-      body: summary ? "" : clipSentences(ch.body, V5_LIMITS.body[tense]),
-      why: summary ? "" : clipSentences(ch.why, V5_LIMITS.why),
+      highlight: clipSentences(lp(ch.highlight), V5_LIMITS.beat),
+      body: summary ? "" : clipSentences(lp(ch.body), V5_LIMITS.body[tense]),
+      why: summary ? "" : clipSentences(lp(ch.why), V5_LIMITS.why),
       action: summary || tense === "past" ? "" : clipSentences(ch.action, V5_LIMITS.action),
       share_line: clip(ch.share_line, LIMITS.share),
       ...ev(ch.evidence_ids),
@@ -1259,9 +1264,24 @@ export function scriptGuard(c: V2Content, facts: V2Facts): V2Content {
   return out;
 }
 
+/** Stored v5 chapters get the same period-lord correction as new ones (see fixLordPairs). */
+function lordGuard(c: V2Content, facts: V2Facts): V2Content {
+  if (!isV5(facts) || !c.chapters?.length) return c;
+  const idx = new Map(facts.chapters.map((f, i) => [f.chapter_id, i]));
+  return {
+    ...c,
+    chapters: c.chapters.map((ch) => {
+      const i = idx.get(Number(ch.chapter_id)) ?? -1;
+      const pairs = [facts.chapters[i - 1], facts.chapters[i], facts.chapters[i + 1]].filter((f) => f && f.md && f.ad).map((f) => [f.md, f.ad] as [string, string]);
+      const lp = (x: string | undefined) => (x ? fixLordPairs(x, pairs, facts.locale) : x);
+      return { ...ch, highlight: lp(ch.highlight) ?? ch.highlight, body: lp(ch.body) ?? ch.body, why: lp(ch.why) };
+    }),
+  };
+}
+
 export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptions): Record<string, unknown> {
   // Older stored readings (v2.2 and legacy) get the same last-mile voice fixes (human dates, no "window").
-  const c = scriptGuard(polishDeep(raw, opts.locale, POLISH_SKIP), facts);
+  const c = lordGuard(scriptGuard(polishDeep(raw, opts.locale, POLISH_SKIP), facts), facts);
   const now = DateTime.fromISO(opts.dateStr, { zone: opts.tz }).set({ hour: 12 }).toMillis();
   const byDate = new Map((c.days ?? []).map((d) => [d.date, d]));
   const byWeekday = new Map((c.weekdays ?? []).map((d) => [d.weekday, d]));

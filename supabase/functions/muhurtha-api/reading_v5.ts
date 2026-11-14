@@ -198,7 +198,7 @@ export function v5Rules(f: V2Facts, openersLine: string, banned: string[]): stri
 /** Per-part language line (stronger than the global one: parts are written separately). */
 export const V5_LANGUAGE_LINE: Record<ReadingLocale, string> = {
   en: "Language: English, plain and warm.",
-  te: "Language: Telugu (తెలుగు script) in every text field: casual but respectful, the way a caring elder talks (మీరు, not నువ్వు); everyday words, English only where Telugu speech uses it (career, office, plan), never whole English sentences. Only Telugu letters: never Tamil, Kannada or Malayalam letters or words.",
+  te: "Language: Telugu (తెలుగు script) in every text field: casual but respectful, the way a caring elder talks (మీరు, not నువ్వు); everyday words, English only where Telugu speech uses it (career, office, plan), never whole English sentences. Only Telugu letters: never Tamil, Kannada or Malayalam letters or words. Graha names exactly: Venus = శుక్రుడు (శుక్ర), Jupiter = గురువు (గురు), Saturn = శని, Mercury = బుధుడు; never call Venus గురు.",
   hi: "Language: natural Hindi (देवनागरी) in every text field: warm and respectful (आप), everyday spoken Hindi rather than Sanskrit-heavy words; English only where Hindi speech uses it, never whole English sentences.",
 };
 
@@ -236,6 +236,32 @@ const NEGATION: Record<ReadingLocale, RegExp> = {
 };
 const SCRIPT_RE: Record<"te" | "hi", RegExp> = { te: /[\u0C00-\u0C7F]/g, hi: /[\u0900-\u097F]/g };
 const ALIEN_RE: Record<"te" | "hi", RegExp> = { te: /[\u0B80-\u0BFF\u0C80-\u0CFF\u0D00-\u0D7F]/, hi: /[\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF]/ };
+
+const PAIR_STEM: Record<ReadingLocale, Record<string, string>> = {
+  en: { Sun: "Sun", Moon: "Moon", Mars: "Mars", Mercury: "Mercury", Jupiter: "Jupiter", Venus: "Venus", Saturn: "Saturn", Rahu: "Rahu", Ketu: "Ketu" },
+  te: { Sun: "సూర్య", Moon: "చంద్ర", Mars: "కుజ", Mercury: "బుధ", Jupiter: "గురు", Venus: "శుక్ర", Saturn: "శని", Rahu: "రాహు", Ketu: "కేతు" },
+  hi: { Sun: "सूर्य", Moon: "चंद्र", Mars: "मंगल", Mercury: "बुध", Jupiter: "गुरु", Venus: "शुक्र", Saturn: "शनि", Rahu: "राहु", Ketu: "केतु" },
+};
+const PAIR_ALT: Record<string, string> = {
+  Sun: "Sun|surya|సూర్య(?:ుడు)?|सूर्य", Moon: "Moon|chandra|చంద్ర(?:ుడు)?|चंद्र|चन्द्र", Mars: "Mars|mangal|kuja|కుజ(?:ుడు)?|మంగళ|मंगल",
+  Mercury: "Mercury|budha|బుధ(?:ుడు)?|बुध", Jupiter: "Jupiter|guru|బృహస్పతి|గురు(?:వు)?|बृहस्पति|गुरु", Venus: "Venus|shukra|శుక్ర(?:ుడు)?|शुक्र",
+  Saturn: "Saturn|shani|శని|शनि", Rahu: "Rahu|రాహు(?:వు)?|राहु", Ketu: "Ketu|కేతు(?:వు)?|केतु",
+};
+const PAIR_ANY = Object.values(PAIR_ALT).join("|");
+const PAIR_RE = new RegExp(`(${PAIR_ANY})(\\s*[–—-]\\s*)(${PAIR_ANY})`, "gi");
+const grahaOf = (w: string) => Object.entries(PAIR_ALT).find(([, alt]) => new RegExp(`^(?:${alt})$`, "i").test(w))?.[0] ?? null;
+/** A chapter that names its own or a neighbouring period as "X–Y" must use the engine's lords:
+ * when only the first lord is wrong (seen: "Jupiter–Saturn" for a Venus–Saturn period), it is
+ * corrected to the period whose sub-lord matches; anything else is left for the validator. */
+export function fixLordPairs(text: string, valid: [string, string][], locale: ReadingLocale): string {
+  if (!text || !valid.length) return text;
+  return text.replace(PAIR_RE, (m, a: string, dash: string, b: string) => {
+    const ga = grahaOf(a), gb = grahaOf(b);
+    if (!ga || !gb || valid.some(([x, y]) => x === ga && y === gb)) return m;
+    const fix = valid.find(([, y]) => y === gb);
+    return fix ? `${PAIR_STEM[locale][fix[0]] ?? a}${dash}${b}` : m;
+  });
+}
 
 /** Telugu/Hindi copy with stray Tamil/Kannada/Malayalam/Bengali letters (model script drift):
  * drop the drifted sentences so a user never sees another script. "" when nothing clean is left. */
