@@ -351,3 +351,24 @@ Deno.test("Life map: a reading pack keeps its own chapters (no legacy re-map), a
     }
   }
 });
+
+Deno.test("Life map: a chapter repair sees the other chapters' titles", async () => {
+  const { repairPrompt } = await import("./reading_v2.ts");
+  const facts = { chapters: [], weekdays: [], weeks: [], months: [], days: [] } as never;
+  const content = {
+    days: [], chapters: [
+      { chapter_id: 8, title: "Close Ties" }, { chapter_id: 9, title: "Daily Effort" },
+      { chapter_id: 16, title: "Close Ties" }, { chapter_id: 17, title: "Daily Effort" },
+    ],
+  } as never;
+  const v = { ok: true, fatal: [], flags: [{ section: "chapters", id: 16, reasons: ["title_repeat"] }], stats: {} } as never;
+  let p = "";
+  try {
+    p = repairPrompt(facts, content, v, { chapters: [16, 17] });
+  } catch (_) {
+    // minimal facts may not satisfy promptFacts; the title list is built before it
+  }
+  assert(p, "repairPrompt built");
+  const line = p.split("\n").find((l) => l.startsWith("Chapter titles already used")) ?? "";
+  assert(line.includes("Close Ties") && line.includes("Daily Effort"), line);
+});

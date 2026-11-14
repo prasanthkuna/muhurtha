@@ -1134,6 +1134,11 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     ...(isV4(facts) ? { evidence: facts.chart!.evidence.map((e) => ({ id: e.id, ref: e.ref, meaning: e.meaning })) } : {}),
   };
   const keepTitles = (content.days ?? []).filter((d) => !scope.days?.includes(d.date)).map((d) => d.title);
+  // Chapter titles are the Life map's labels: a repaired chapter must see every other chapter's title,
+  // or it happily rewrites "Close Ties" as "Close Ties" again (title_repeat survived the repair).
+  const keepChapterTitles = scope.chapters?.length
+    ? (content.chapters ?? []).filter((c) => !scope.chapters!.includes(Number(c.chapter_id))).map((c) => c.title).filter(Boolean)
+    : [];
   return [
     "Rewrite ONLY these items. Fix every listed problem and keep everything else about the rules.",
     "Problems:",
@@ -1142,6 +1147,9 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     "stock_star_line = drop '<star> is today's star' / 'today's star is'; give the reason from MEANINGS in fresh words; hint_word = never write 'hint'; slot_opener = start the slot note with what the slot suits, not 'Use this slot/A good slot/Good for'; trait_off_day = remove every mention of their personality trait (this day's angle.trait_ok is false); overused:<word> = do not use that word; ngram_repeat = do not use that phrase; title_formula = no '<Star>'s <Noun>' title; star_misspelled = spell the star/tithi exactly as in FACTS; unsupported_claim:<x> = either cite the EVIDENCE id that states <x> in evidence_ids or remove <x> (never invent a chart fact).",
     ...(isV5(facts) ? ["lord_chain = drop 'X lord in Y links/connects A with B' and say what it means for the person in plain words; truncated = end on a complete sentence and stay inside the length; opener_repeat = open this chapter differently from the others; stage_missing = frame the chapter by its life_stage and ages first; past_asserted = describe what the chart suggests for that age, never state an event as fact; past_hedge = no 'may have/perhaps you': say what the stretch favoured; action_missing = add ONE concrete thing to do (verb first); why_missing = add the one-sentence plain why; verdict_mismatch = this day's verdict is not for big starts: make the line and do chips fit verdict.tone (finish, review, keep light)."] : []),
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 45))}`,
+    ...(keepChapterTitles.length
+      ? [`Chapter titles already used by other chapters (do not reuse any of them, and do not start with the same first word): ${JSON.stringify(keepChapterTitles)}`]
+      : []),
     ...(v.stats.theme ? ["Already said elsewhere in this reading (do not echo):", ...alreadySaid(content.days ?? [], new Set(scope.days ?? []), v.stats.theme)] : []),
     ...(isV3(facts) && facts.meanings ? ["MEANINGS (engine tables):", JSON.stringify(facts.meanings)] : []),
     "FACTS for these items:",
