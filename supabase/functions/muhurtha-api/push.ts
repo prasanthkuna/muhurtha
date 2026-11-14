@@ -56,7 +56,17 @@ export type BriefLineFn = (
   profileId: string,
   locale: PushLocale,
   dateStr: string,
-) => Promise<{ title?: string; line: string } | null>;
+) => Promise<{ title?: string; line?: string; verdict?: PushVerdict | null } | null>;
+
+/** The engine's one day verdict (calendar.ts scoreDay), shared by Today, Calendar, Ask and push. */
+export type PushVerdict = {
+  tone: "supportive" | "mixed" | "rest";
+  best: { start: string; end: string } | null;
+  best_kind?: "go" | "calm";
+};
+
+/** The day verdict for a profile's own chart (no LLM). */
+export type VerdictFn = (admin: SupabaseClient, profileId: string, dateStr: string) => Promise<PushVerdict | null>;
 
 /** Events the user saved for `dateStr` (tomorrow), for the 19:00 day-before reminder. */
 export type SavedEventsFn = (
@@ -98,7 +108,7 @@ const NEW_SUBSCRIPTION_GRACE_MS = 60 * 60 * 1000;
 const QUIET_START = "21:30";
 const QUIET_END = "06:30";
 /** Never more than this many scheduled alerts per local day per device. */
-const DAILY_CAP = 4;
+const DAILY_CAP = 3;
 /** A good-window alert this soon after the brief repeats it; skip. */
 const BRIEF_OVERLAP_MS = 45 * 60 * 1000;
 const CHART_MOMENT_LOCAL = "09:00";
@@ -294,15 +304,19 @@ function loc(raw: string | null | undefined): PushLocale {
   return raw === "te" || raw === "hi" ? raw : "en";
 }
 
+type Tone = PushVerdict["tone"] | null;
 const COPY = {
   en: {
     testTitle: "Test notification ✅",
     testBody: "Muhūrta alerts work on this phone. Your daily brief lands at 6:45 AM.",
-    dailyTitle: "Here's your day",
-    dailyBody: (good: string, rahu: string) =>
-      `Good time ${good}. Rahu Kalam ${rahu}.`,
-    goodTitle: (t: string) => `Good time from ${t}`,
-    goodBody: (range: string) => `${range}. Put your important thing here.`,
+    dailyTitle: (tone: Tone) =>
+      tone === "supportive" ? "Good day: go for it" : tone === "rest" ? "Keep today light" : tone === "mixed" ? "Mixed day: push on what's started" : "Here's your day",
+    dailyBody: (tone: Tone, best: string, rahu: string) =>
+      tone === "rest" ? `Calmest time ${best}. Skip big starts. Rahu Kalam ${rahu}.`
+      : tone === "mixed" ? `Best time ${best}. Not for big starts. Rahu Kalam ${rahu}.`
+      : `Best time ${best}. Rahu Kalam ${rahu}.`,
+    goodTitle: (t: string) => `Your best window opens ${t}`,
+    goodBody: (range: string) => `${range}. Put today's one important thing here.`,
     rahuTitle: (t: string) => `Rahu Kalam from ${t}`,
     rahuBody: (range: string) => `${range}. Skip new starts; routine stuff is fine.`,
     weeklyTitle: "Your week ahead",
@@ -313,11 +327,14 @@ const COPY = {
   te: {
     testTitle: "టెస్ట్ నోటిఫికేషన్ ✅",
     testBody: "ఈ ఫోన్‌లో Muhūrta అలర్ట్స్ పని చేస్తున్నాయి. ఈరోజు సమ్మరీ ఉదయం 6:45కి వస్తుంది.",
-    dailyTitle: "ఈరోజు మీ రోజు ఇలా ఉంది",
-    dailyBody: (good: string, rahu: string) =>
-      `మంచి సమయం ${good}. రాహుకాలం ${rahu}.`,
-    goodTitle: (t: string) => `${t} నుంచి మంచి టైమ్`,
-    goodBody: (range: string) => `${range} — ముఖ్యమైన పని ఈ టైమ్‌లో పెట్టుకోండి.`,
+    dailyTitle: (tone: Tone) =>
+      tone === "supportive" ? "మంచి రోజు: ముందుకెళ్లండి" : tone === "rest" ? "ఈరోజు తేలిగ్గా ఉంచండి" : tone === "mixed" ? "మిక్స్‌డ్ డే: మొదలుపెట్టిన పని పూర్తి చేయండి" : "ఈరోజు మీ రోజు ఇలా ఉంది",
+    dailyBody: (tone: Tone, best: string, rahu: string) =>
+      tone === "rest" ? `ప్రశాంతమైన టైమ్ ${best}. పెద్ద కొత్త పనులు వద్దు. రాహుకాలం ${rahu}.`
+      : tone === "mixed" ? `బెస్ట్ టైమ్ ${best}. కొత్త పెద్ద పనులు ఈరోజు వద్దు. రాహుకాలం ${rahu}.`
+      : `బెస్ట్ టైమ్ ${best}. రాహుకాలం ${rahu}.`,
+    goodTitle: (t: string) => `${t}కి మీ బెస్ట్ టైమ్ మొదలవుతుంది`,
+    goodBody: (range: string) => `${range} — ఈరోజు ముఖ్యమైన పని ఈ టైమ్‌లో పెట్టుకోండి.`,
     rahuTitle: (t: string) => `${t} నుంచి రాహుకాలం`,
     rahuBody: (range: string) => `${range}. కొత్తవి స్టార్ట్ చేయకండి, రొటీన్ పనులు ఓకే.`,
     weeklyTitle: "వచ్చే వారం మీకు ఇలా ఉంది",
@@ -328,11 +345,14 @@ const COPY = {
   hi: {
     testTitle: "आपकी माँगी हुई टेस्ट सूचना",
     testBody: "इस फ़ोन पर मुहूर्त अलर्ट काम कर रहे हैं। रोज़ का सार सुबह 6:45 बजे आएगा।",
-    dailyTitle: "मुहूर्त में आपका दिन",
-    dailyBody: (good: string, rahu: string) =>
-      `शुभ समय ${good}। राहुकाल ${rahu}।`,
-    goodTitle: (t: string) => `${t} से शुभ समय`,
-    goodBody: (range: string) => `${range} आज का अनुकूल समय है।`,
+    dailyTitle: (tone: Tone) =>
+      tone === "supportive" ? "अच्छा दिन: आगे बढ़िए" : tone === "rest" ? "आज दिन हल्का रखें" : tone === "mixed" ? "मिला-जुला दिन: शुरू किया काम पूरा करें" : "मुहूर्त में आपका दिन",
+    dailyBody: (tone: Tone, best: string, rahu: string) =>
+      tone === "rest" ? `सबसे शांत समय ${best}। बड़ी शुरुआत आज नहीं। राहुकाल ${rahu}।`
+      : tone === "mixed" ? `सबसे अच्छा समय ${best}। बड़ी शुरुआत आज नहीं। राहुकाल ${rahu}।`
+      : `सबसे अच्छा समय ${best}। राहुकाल ${rahu}।`,
+    goodTitle: (t: string) => `${t} से आपका सबसे अच्छा समय`,
+    goodBody: (range: string) => `${range}। आज का एक ज़रूरी काम इसी समय रखें।`,
     rahuTitle: (t: string) => `${t} से राहुकाल`,
     rahuBody: (range: string) => `${range}। रोज़मर्रा के कामों के लिए हल्का समय।`,
     weeklyTitle: "आपका आने वाला हफ़्ता",
@@ -392,6 +412,7 @@ export function eventsForDay(
   lng: number,
   localeRaw: string | null | undefined,
   prefs: PushPrefs,
+  verdict: PushVerdict | null = null,
 ): DueEvent[] {
   const l = loc(localeRaw);
   const c = COPY[l];
@@ -404,8 +425,12 @@ export function eventsForDay(
   const at = (hhmm: string) => DateTime.fromISO(`${dateStr}T${hhmm}`, { zone: tz }).toMillis();
   const out: DueEvent[] = [];
 
-  if (prefs.daily && good[0]) {
-    const goodTxt = good.slice(0, 2).map((w) => fmtRange(w.start, w.end)).join(", ");
+  // The verdict decides the one window we call "best" (same as Today/Calendar). Without a chart
+  // (no birth details yet) the first clean window stands in.
+  const best = verdict ? verdict.best : good[0] ?? null;
+  const tone = verdict?.tone ?? null;
+  if (prefs.daily && (best || good[0])) {
+    const bestTxt = best ? fmtRange(best.start, best.end) : "—";
     const rahuTxt = rahu ? fmtRange(rahu.start, rahu.end) : "—";
     out.push({
       key: `daily:${dateStr}`,
@@ -414,8 +439,8 @@ export function eventsForDay(
       ttl: 3 * 60 * 60,
       payload: {
         ...basePayload("daily_brief", l, `muh-daily-${dateStr}`),
-        title: c.dailyTitle,
-        body: c.dailyBody(goodTxt, rahuTxt),
+        title: c.dailyTitle(tone),
+        body: c.dailyBody(tone, bestTxt, rahuTxt),
         image: "/notifications/daily.png",
         url: "/today?src=push_daily",
         actions: [
@@ -425,26 +450,25 @@ export function eventsForDay(
       },
     });
   }
-  if (prefs.good) {
-    for (const w of good.slice(0, 2)) {
-      out.push({
-        key: `good:${dateStr}:${w.start}`,
-        at: at(w.start) - LEAD_MINUTES * 60_000,
-        urgency: "high",
-        ttl: LEAD_MINUTES * 60 + 300,
-        payload: {
-          ...basePayload("good_window", l, `muh-good-${dateStr}`),
-          title: c.goodTitle(clock12(w.start)),
-          body: c.goodBody(fmtRange(w.start, w.end)),
-          image: "/notifications/good.png",
-          url: "/timing?src=push_good",
-          actions: [
-            { action: "timing", title: c.openTiming, url: "/timing?src=push_good" },
-            { action: "today", title: c.openToday, url: "/today?src=push_good" },
-          ],
-        },
-      });
-    }
+  // One good-time alert, for the best window only, and none on keep-light days.
+  if (prefs.good && best && tone !== "rest" && verdict?.best_kind !== "calm") {
+    out.push({
+      key: `good:${dateStr}:${best.start}`,
+      at: at(best.start) - LEAD_MINUTES * 60_000,
+      urgency: "high",
+      ttl: LEAD_MINUTES * 60 + 300,
+      payload: {
+        ...basePayload("good_window", l, `muh-good-${dateStr}`),
+        title: c.goodTitle(clock12(best.start)),
+        body: c.goodBody(fmtRange(best.start, best.end)),
+        image: "/notifications/good.png",
+        url: "/today?src=push_good",
+        actions: [
+          { action: "today", title: c.openToday, url: "/today?src=push_good" },
+          { action: "timing", title: c.openTiming, url: "/timing?src=push_good" },
+        ],
+      },
+    });
   }
   if (prefs.rahu && rahu) {
     out.push({
@@ -717,7 +741,7 @@ export async function dispatchDuePush(
   nowMs = Date.now(),
   chartMoments?: ChartMomentsFn,
   bondMoments?: BondMomentsFn,
-  extras: { briefLine?: BriefLineFn; savedEvents?: SavedEventsFn } = {},
+  extras: { briefLine?: BriefLineFn; savedEvents?: SavedEventsFn; verdict?: VerdictFn } = {},
 ) {
   const { data, error } = await admin
     .from("push_subscriptions")
@@ -736,6 +760,7 @@ export async function dispatchDuePush(
   let failed = 0;
   let suppressed = 0;
   const momentsCache = new Map<string, Awaited<ReturnType<ChartMomentsFn>>>();
+  const verdictCache = new Map<string, PushVerdict | null>();
   const isDue = (at: number) => at <= nowMs && nowMs - at <= DUE_LOOKBACK_MS;
 
   for (const sub of rows) {
@@ -747,7 +772,9 @@ export async function dispatchDuePush(
     if (!dateStr) continue;
     const prefs = normalizePrefs(sub.prefs);
     const l = loc(sub.locale);
-    const all = eventsForDay(dateStr, tz, lat, lng, sub.locale, prefs);
+    const vKey = `${sub.profile_id}:${dateStr}`;
+    if (extras.verdict && !verdictCache.has(vKey)) verdictCache.set(vKey, await extras.verdict(admin, sub.profile_id, dateStr).catch(() => null));
+    const all = eventsForDay(dateStr, tz, lat, lng, sub.locale, prefs, verdictCache.get(vKey) ?? null);
     const brief = all.find((e) => e.payload.kind === "daily_brief");
     let due = all.filter((e) => isDue(e.at));
     // The brief already lists the first good window; don't repeat it within 45 min.
@@ -766,7 +793,7 @@ export async function dispatchDuePush(
       if (ai?.line) {
         dueBrief.payload = {
           ...dueBrief.payload,
-          title: (ai.title || dueBrief.payload.title).slice(0, 60),
+          title: dueBrief.payload.title.slice(0, 60),
           body: `${ai.line.slice(0, 140)}\n${dueBrief.payload.body}`,
         };
       }

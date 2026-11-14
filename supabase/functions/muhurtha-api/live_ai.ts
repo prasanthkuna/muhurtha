@@ -129,7 +129,7 @@ export function followupChips(intent: Intent, screen: Screen, locale: LiveLocale
 
 // ---------------------------------------------------------------- context
 
-export type LiveWindow = { id: string; kind: "good" | "caution"; start: string; end: string; label?: string };
+export type LiveWindow = { id: string; kind: "good" | "caution"; start: string; end: string; label?: string; best?: boolean };
 
 export type LiveContextInput = {
   locale: LiveLocale;
@@ -137,7 +137,7 @@ export type LiveContextInput = {
   /** Reading copy (profile/chapter/today) when a reading exists. */
   reading: {
     profileTitle?: string; profileSummary?: string; strengths?: string[]; watchouts?: string[];
-    chapterTitle?: string; chapterHighlight?: string; todayTitle?: string; todayLine?: string;
+    chapterTitle?: string; chapterHighlight?: string; chapterWhy?: string; chapterAction?: string; todayTitle?: string; todayLine?: string;
   } | null;
   subject: { name: string | null; isOwner: boolean; isChild: boolean };
   date: string;
@@ -149,6 +149,8 @@ export type LiveContextInput = {
   history: { role: string; content: string }[];
   /** Days the model may pick for suggested_date (engine list). */
   upcomingDates: string[];
+  /** Engine day verdict, the week's/month's best and light dates, the chapter's areas (ask_grounded.ts). */
+  grounding?: Record<string, unknown> | null;
 };
 
 function monthYear(iso: string | null | undefined): string {
@@ -173,8 +175,9 @@ export function chartCard(c: LiveContextInput): string {
   const idx = cur && f ? f.chapters.indexOf(cur) : -1;
   const next = idx >= 0 && f ? f.chapters.slice(idx + 1).find((x) => x.kind !== "summary") ?? f.chapters[idx + 1] ?? null : null;
   const days = (f?.days ?? []).filter((d) => d.date >= c.date).slice(0, 8).map((d) => ({
-    date: d.date, weekday: d.weekday, tithi: d.tithi, nakshatra: d.nakshatra, tara: d.tara, day_tone: d.day_tone,
-    favours: d.calendar?.favours ?? [], avoid: d.calendar?.avoid ?? null,
+    date: d.date, weekday: d.weekday, tithi: d.tithi, nakshatra: d.nakshatra, tara: d.tara,
+    verdict: d.verdict?.tone ?? (d.day_tone === "careful" ? "rest" : d.day_tone),
+    favours: d.verdict?.favours ?? d.calendar?.favours ?? [], avoid: d.verdict?.avoid ?? d.calendar?.avoid ?? null,
   }));
   const card = {
     subject: c.subject,
@@ -188,6 +191,7 @@ export function chartCard(c: LiveContextInput): string {
     next_chapter: next ? { md: next.md, ad: next.ad || null, from: monthYear(next.start_iso) } : null,
     profile: c.reading ? { title: c.reading.profileTitle, summary: c.reading.profileSummary, strengths: c.reading.strengths, watchouts: c.reading.watchouts } : null,
     days,
+    ...(c.grounding ? { verdicts: c.grounding } : {}),
   };
   return "CHART CARD (engine-verified facts; the only source for dates, dashas and stars):\n" + JSON.stringify(card);
 }
@@ -206,7 +210,8 @@ export function liveSystem(locale: LiveLocale, extra: string[] = []): string {
     "Lead with the answer itself (yes / not yet / better on <day>), then the plain why, then one concrete step. 2-4 short sentences. No 'Based on your chart' openers.",
     "Traditional terms stay (Rahu Kalam, Mahadasha, Tara Bala, nakshatra names) with a short plain gloss the first time; never replace them with English-only labels.",
     `Glossary (ground explanations in it): ${glossary}`,
-    "Facts: use ONLY the CHART CARD and CONTEXT. Never invent planets, dashas, stars, dates, months, years or times. Never write clock times (the app shows them). Do not write calendar dates in the answer text; pick suggested_date from its list and the app prints it. You may say 'today', 'tomorrow', a weekday from the card, or the chapter's month-year from the card.",
+    "Facts: use ONLY the CHART CARD and CONTEXT. Never invent planets, dashas, stars, dates, months, years or times. Never write clock times (the app shows them). Name a date only if the card lists it (days, verdicts.this_week, verdicts.rest_of_month), written like '19 Nov'; otherwise say 'today', 'tomorrow', a weekday, or the chapter's month-year. Pick suggested_date from its list.",
+    "The day verdict is the engine's (card days[].verdict / verdicts.today_verdict: supportive, mixed or rest). Never call a mixed or rest day good for big starts, and never contradict it. For 'which day / this week / this month' questions, answer with verdicts.this_week or verdicts.rest_of_month best_days and say which to keep light. Tie the answer to the current chapter (title, chapter_areas, chapter_action) when the question is about life, work, money or plans.",
     "Traditional timing is one perspective, never a verdict. No fear, no doom, no curses, no guarantees. Never tell anyone to quit a job, start/stop/change medical treatment, try for or end a pregnancy, gamble, file or settle legal matters, or make a major financial decision. For those, give a timing-only view and suggest real-world checks (doctor, lawyer, adviser, savings plan).",
     "Remedies are free and simple (a habit, a prayer, kindness); never gemstones, paid pujas or purchases.",
     "remember: up to 2 short facts the USER explicitly said about themselves in this message (job, goal, family, upcoming event), written in the user's language; empty when none. Never guess.",
@@ -215,7 +220,7 @@ export function liveSystem(locale: LiveLocale, extra: string[] = []): string {
 }
 
 export function liveUserMessage(c: LiveContextInput, question: string, cls: { intent: Intent; sensitive: SensitiveCat | null }): string {
-  const w = c.windows.map((x) => ({ id: x.id, kind: x.kind }));
+  const w = c.windows.map((x) => ({ id: x.id, kind: x.kind, ...(x.best ? { best: true } : {}) }));
   return [
     "CONTEXT:",
     JSON.stringify({

@@ -7,6 +7,7 @@
  * zero-call adapter for readings written by the old 6-phase pack pipeline.
  */
 import { DATE_RULE, jargonHits, polishDeep, VOICE_BLOCK } from "./voice.ts";
+import { arcsOf, clipSentences, isV5, stageKey, V5_LIMITS, v5Flags, v5Rules } from "./reading_v5.ts";
 import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 import { type DayAngle, OPENER_HOW } from "./angles.ts";
@@ -18,6 +19,7 @@ import { checkClaims, engineChapterCopy, requiredIdsV4, v4SystemRules } from "./
 export const READING_SCHEMA_VERSION = 2;
 export const READING_PROMPT_VERSION = "reading-v3.0";
 export const READING_PROMPT_VERSION_V4 = "reading-v4.0";
+export const READING_PROMPT_VERSION_V5 = "reading-v5.0";
 
 export type ReadingLocale = "en" | "te" | "hi";
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
@@ -39,6 +41,8 @@ export type V2WindowFact = {
   why?: "clean" | "rahu";
   /** v3: only the angle's slot is written by the model; the rest get engine notes. */
   writer?: "llm" | "engine";
+  /** The verdict's best window (calendar.ts pickBest): the one Today, Calendar and push call best. */
+  best?: boolean;
 };
 export type V2DayFact = {
   date: string;
@@ -54,6 +58,8 @@ export type V2DayFact = {
   calendar?: { favours: string[]; avoid: string | null; why?: string };
   /** v3: engine-assigned angle (area, action, opener, tone, lead fact, trait day, slot). */
   angle?: DayAngle;
+  /** The one engine day verdict (calendar.ts scoreDay) every screen and push uses. */
+  verdict?: { tone: "supportive" | "mixed" | "rest"; best: { start: string; end: string } | null; best_kind: "go" | "calm"; favours: string[]; avoid: string | null };
 };
 export type V2WeekdayFact = { weekday: Weekday; day_lord: string; windows: V2WindowFact[] };
 export type V2PeriodFact = {
@@ -93,6 +99,12 @@ export type V2ChapterFact = {
   lenses: string[];
   /** v3: what this sub-period lord brings (distinct per chapter). */
   ad_theme?: { support: string[]; pressure: string[] };
+  /** v5: the life stage for these ages ("early career", "school years"), engine-owned. */
+  life_stage?: string;
+  /** v5: plain-language life areas this sub-period's lords rule or sit in (per chapter, not per person). */
+  chapter_domains?: string[];
+  /** v5: the mahadasha arc this chapter belongs to. */
+  arc_md?: string;
 };
 export type V2Meanings = {
   stars: Record<string, string>;
@@ -104,7 +116,7 @@ export type V2Meanings = {
 export type V2Facts = {
   schema_version: 2;
   /** 3 = 45 engine-angled days, no weekday cards, engine slot notes, meaning tables. */
-  facts_version?: 3 | 4;
+  facts_version?: 3 | 4 | 5;
   meanings?: V2Meanings;
   /** v4: the rule engine's evidence pack (ids the model must cite for any chart claim). */
   chart?: ChartFacts;
@@ -148,9 +160,15 @@ export type V2Content = {
     relationship_style: string;
     share_line: string;
     evidence_ids?: string[];
+    /** v5: the one chart fact behind the summary, in plain words. */
+    why?: string;
   };
-  areas: { area_id: string; headline: string; summary: string; evidence_ids?: string[] }[];
-  chapters: { chapter_id: number; title: string; highlight: string; body: string; share_line: string; evidence_ids?: string[] }[];
+  areas: { area_id: string; headline: string; summary: string; evidence_ids?: string[]; why?: string }[];
+  chapters: { chapter_id: number; title: string; highlight: string; body: string; share_line: string; evidence_ids?: string[]; why?: string; action?: string }[];
+  /** v5: one line per mahadasha arc (md lord or "early"). */
+  arcs?: { md: string; line: string }[];
+  /** v5: two sentences on the whole story so far and where it is heading. */
+  life_story?: string;
   days: (V2DayCopy & { date: string })[];
   weekdays: (V2DayCopy & { weekday: Weekday })[];
   weeks: { period_key: string; headline: string; body: string; caution: string }[];
@@ -258,11 +276,14 @@ export type SchemaScope = {
   /** Sharded generation: include the profile block / ask_starters + remedies + push. */
   profile?: boolean;
   extras?: boolean;
+  /** v5: the arc lines and the life story (written with the first chapters). */
+  arcs?: boolean;
 };
 
 const nullable = (j: Json): Json => ({ anyOf: [j, { type: "null" }] });
 export const isV3 = (f: V2Facts) => (f.facts_version ?? 0) >= 3;
-export const isV4 = (f: V2Facts) => f.facts_version === 4 && Boolean(f.chart);
+/** v4 pipeline (evidence pack, parts, claims). v5 rides on it. */
+export const isV4 = (f: V2Facts) => (f.facts_version === 4 || f.facts_version === 5) && Boolean(f.chart);
 
 /**
  * One schema for every shard of a v3 reading (all sections, arrays may be empty, profile/push
@@ -305,17 +326,30 @@ export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean;
       work_style: str(LIMITS.style, wl),
       relationship_style: str(LIMITS.style, wl),
       share_line: str(LIMITS.share, wl, "a warm line someone would share"),
+      ...(isV5(facts) ? { why: str(V5_LIMITS.why, wl, "one plain sentence: the single chart fact behind the summary") } : {}),
     });
   }
   if (arIds.length) {
     props.areas = arr(obj({
       area_id: { type: "string", enum: arIds },
       headline: str(LIMITS.areaHeadline, wl),
-      summary: str(LIMITS.areaSummary, wl, "2-3 sentences for the current chapter"),
+      summary: str(LIMITS.areaSummary, wl, isV5(facts) ? "2 sentences for the current chapter, with one concrete thing to do" : "2-3 sentences for the current chapter"),
+      ...(isV5(facts) ? { why: str(V5_LIMITS.why, wl, "one plain sentence: the chart fact behind this, in everyday words") } : {}),
       ...cite([1, 3]),
     }), arIds.length);
   }
-  if (chIds.length) {
+  if (chIds.length && isV5(facts)) {
+    props.chapters = arr(obj({
+      chapter_id: { type: "integer", enum: chIds },
+      title: str(V5_LIMITS.chapterTitle, wl, "2-4 words, concrete, no planet names, unique first word"),
+      highlight: str(V5_LIMITS.beat, wl, "the beat: one short sentence, max 14 words"),
+      body: str(V5_LIMITS.body.current, wl, "detail: framed by life_stage; past 2-3 sentences (what the chart suggests, no events), current 4-6, future 2-3; summary: \"\""),
+      why: str(V5_LIMITS.why, wl, "one plain sentence: the sub-period lord's role for this person; summary: \"\""),
+      action: str(V5_LIMITS.action, wl, "current/future detail: one concrete thing to do, verb first; past and summary: \"\""),
+      share_line: str(LIMITS.share, wl),
+      ...cite([1, 4]),
+    }), chIds.length);
+  } else if (chIds.length) {
     props.chapters = arr(obj({
       chapter_id: { type: "integer", enum: chIds },
       title: str(LIMITS.chapterTitle, wl, "chapter title, 2-4 words, no planet names, first word different from every other chapter title"),
@@ -324,6 +358,11 @@ export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean;
       share_line: str(LIMITS.share, wl),
       ...cite([1, 4]),
     }), chIds.length);
+  }
+  if (isV5(facts) && (scope ? scope.arcs : true)) {
+    const keys = [...new Set(arcsOf(facts.chapters).map((a) => a.md))];
+    props.arcs = arr(obj({ md: { type: "string", enum: keys }, line: str(V5_LIMITS.arcLine, wl, "that whole stretch's theme for that time of life, one sentence") }), keys.length);
+    props.life_story = str(V5_LIMITS.lifeStory, wl, "two short sentences: where the story has been and what this stretch builds toward");
   }
   if (dayIds.length) {
     props.days = arr(obj({ date: { type: "string", enum: dayIds }, ...dayCopyProps(wl, v3) }), dayIds.length);
@@ -416,6 +455,7 @@ function dayRulesV3(facts: V2Facts): string[] {
 }
 
 export function buildSystemPrompt(facts: V2Facts): string {
+  if (isV5(facts)) return buildSystemPromptV5(facts);
   const lang = LANGUAGE_NAME[facts.locale];
   const child = facts.is_child;
   return [
@@ -443,6 +483,21 @@ export function buildSystemPrompt(facts: V2Facts): string {
     "9. Respect every max length. Be concrete; no filler. Do not copy the engine's English phrases from FACTS word for word: say the same idea in your own natural words.",
     "10. Emoji: at most one, and only in push titles/bodies or share_line. None elsewhere.",
     ...(isV4(facts) ? v4SystemRules(facts) : []),
+  ].join("\n");
+}
+
+/** v5: one clean prompt (the shared, cached prefix for every part). */
+function buildSystemPromptV5(facts: V2Facts): string {
+  const lang = LANGUAGE_NAME[facts.locale];
+  const banned = BANNED_PHRASES[facts.locale].concat(facts.locale === "en" ? [] : BANNED_PHRASES.en.slice(0, 4));
+  return [
+    `You write a personal Vedic-astrology reading for the Muhurta app, in ${lang}.` +
+    (facts.locale === "en" ? "" : ` Write natively in ${lang}, not as a translation: everyday spoken words, not Sanskrit-heavy.`),
+    "You explain; the rule engine decides. FACTS and EVIDENCE are computed; your job is to say what they mean for this one person, in words they would use.",
+    "Voice: warm, specific, everyday. Short sentences. 'You' for the account owner; for another person use their name.",
+    VOICE_BLOCK[facts.locale],
+    DATE_RULE,
+    ...v5Rules(facts, OPENERS_LINE, banned),
   ].join("\n");
 }
 
@@ -565,6 +620,23 @@ export function sanitizeContent(c: V2Content, facts: V2Facts): V2Content {
 
 function sanitizeRaw(c: V2Content, facts: V2Facts): V2Content {
   const summaryIds = new Set(facts.chapters.filter((f) => f.kind === "summary").map((f) => f.chapter_id));
+  const v5 = isV5(facts);
+  const tenseOf = new Map(facts.chapters.map((f) => [f.chapter_id, f.tense]));
+  const v5Chapter = (ch: V2Content["chapters"][number]) => {
+    const id = Number(ch.chapter_id);
+    const summary = summaryIds.has(id);
+    const tense = tenseOf.get(id) ?? "future";
+    return {
+      chapter_id: id,
+      title: clip(ch.title, V5_LIMITS.chapterTitle),
+      highlight: clipSentences(ch.highlight, V5_LIMITS.beat),
+      body: summary ? "" : clipSentences(ch.body, V5_LIMITS.body[tense]),
+      why: summary ? "" : clipSentences(ch.why, V5_LIMITS.why),
+      action: summary || tense === "past" ? "" : clipSentences(ch.action, V5_LIMITS.action),
+      share_line: clip(ch.share_line, LIMITS.share),
+      ...ev(ch.evidence_ids),
+    };
+  };
   const dayWin = new Map(facts.days.map((d) => [d.date, new Set(d.windows.filter((w) => !w.writer || w.writer === "llm").map((w) => w.id))]));
   const wdWin = new Map(facts.weekdays.map((d) => [d.weekday, new Set(d.windows.map((w) => w.id))]));
   const known = new Set(isV4(facts) ? facts.chart!.evidence.map((e) => e.id) : []);
@@ -589,14 +661,20 @@ function sanitizeRaw(c: V2Content, facts: V2Facts): V2Content {
       relationship_style: clip(c.profile?.relationship_style, LIMITS.style),
       share_line: clip(c.profile?.share_line, LIMITS.share),
       ...ev(c.profile?.evidence_ids),
+      ...(v5 ? { why: clipSentences(c.profile?.why, V5_LIMITS.why) } : {}),
     },
     areas: (c.areas ?? []).map((a) => ({
       area_id: a.area_id,
       headline: clip(a.headline, LIMITS.areaHeadline),
-      summary: clip(a.summary, LIMITS.areaSummary),
+      summary: v5 ? clipSentences(a.summary, LIMITS.areaSummary) : clip(a.summary, LIMITS.areaSummary),
       ...ev(a.evidence_ids),
+      ...(v5 ? { why: clipSentences(a.why, V5_LIMITS.why) } : {}),
     })),
-    chapters: (c.chapters ?? []).map((ch) => ({
+    ...(v5 && (c.arcs || c.life_story) ? {
+      arcs: (c.arcs ?? []).map((a) => ({ md: String(a.md ?? ""), line: clipSentences(a.line, V5_LIMITS.arcLine) })).filter((a) => a.md && a.line),
+      life_story: clipSentences(c.life_story, V5_LIMITS.lifeStory),
+    } : {}),
+    chapters: (c.chapters ?? []).map((ch) => v5 ? v5Chapter(ch) : ({
       chapter_id: Number(ch.chapter_id),
       title: clip(ch.title, LIMITS.chapterTitle),
       highlight: clip(ch.highlight, LIMITS.chapterHighlight),
@@ -985,6 +1063,7 @@ export function validateContent(c: V2Content | null, facts: V2Facts): Validation
     }
   }
 
+  if (isV5(facts)) for (const x of v5Flags(c, facts)) flag(x.section, x.id, x.reason);
   const flags = [...flagMap.values()];
   return {
     ok: fatal.length === 0,
@@ -1050,6 +1129,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     ...v.flags.filter((f) => f.section !== "days" || scope.days?.includes(String(f.id))).map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
     "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters; title_too_long = 2-4 words, at most 28 characters; formula_phrase (stock link) = drop 'నక్షత్రం వల్ల ఈరోజు' / 'thanks to <star>' and give the reason in fresh words; jargon = replace corporate/tech-job words (backend, workflow, bottleneck, operational, stakeholders ...) with everyday words and do not assume a profession; reason_missing = in the line or body name that day's star (or tithi) and say plainly WHY it suits this action (because / so / which means; Telugu కాబట్టి / అందుకే / కావడంతో), without opening the body with the star's name.",
     "stock_star_line = drop '<star> is today's star' / 'today's star is'; give the reason from MEANINGS in fresh words; hint_word = never write 'hint'; slot_opener = start the slot note with what the slot suits, not 'Use this slot/A good slot/Good for'; trait_off_day = remove every mention of their personality trait (this day's angle.trait_ok is false); overused:<word> = do not use that word; ngram_repeat = do not use that phrase; title_formula = no '<Star>'s <Noun>' title; star_misspelled = spell the star/tithi exactly as in FACTS; unsupported_claim:<x> = either cite the EVIDENCE id that states <x> in evidence_ids or remove <x> (never invent a chart fact).",
+    ...(isV5(facts) ? ["lord_chain = drop 'X lord in Y links/connects A with B' and say what it means for the person in plain words; truncated = end on a complete sentence and stay inside the length; opener_repeat = open this chapter differently from the others; stage_missing = frame the chapter by its life_stage and ages first; past_asserted = describe what the chart suggests for that age, never state an event as fact; past_hedge = no 'may have/perhaps you': say what the stretch favoured; action_missing = add ONE concrete thing to do (verb first); why_missing = add the one-sentence plain why; verdict_mismatch = this day's verdict is not for big starts: make the line and do chips fit verdict.tone (finish, review, keep light)."] : []),
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 45))}`,
     ...(v.stats.theme ? ["Already said elsewhere in this reading (do not echo):", ...alreadySaid(content.days ?? [], new Set(scope.days ?? []), v.stats.theme)] : []),
     ...(isV3(facts) && facts.meanings ? ["MEANINGS (engine tables):", JSON.stringify(facts.meanings)] : []),
@@ -1176,6 +1256,7 @@ export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptio
   }
   const chFacts = new Map(facts.chapters.map((f) => [f.chapter_id, f]));
   const v4 = isV4(facts);
+  const v5 = isV5(facts);
   const written = new Map((c.chapters ?? []).map((ch) => [Number(ch.chapter_id), ch]));
   // v4 is progressive: chapters not written yet show an engine card (period themes) and are
   // written on demand when opened.
@@ -1214,6 +1295,13 @@ export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptio
       tense,
       freePreview: tense === "current" || isFirstFuture,
       ...(v4 ? { pending: Boolean(ch.pending), evidence: (ch.evidence_ids ?? []).map((id) => evRef.get(id)).filter(Boolean) } : {}),
+      ...(v5 ? {
+        why: ch.why ?? "",
+        action: ch.action ?? "",
+        lifeStage: stageKey(f.age_from, f.age_to),
+        chapterDomains: f.chapter_domains ?? [],
+        arcMd: f.arc_md ?? f.md,
+      } : {}),
     };
   });
   const journeyFacts = journeyPhases.map((p) => ({
@@ -1258,12 +1346,19 @@ export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptio
       strengths: c.profile?.strengths ?? [],
       watchouts: c.profile?.watchouts ?? [],
       share_hook: c.profile?.share_line,
+      ...(v5 ? { why: c.profile?.why ?? "" } : {}),
     },
+    ...(v5 ? {
+      life_story: c.life_story ?? "",
+      life_arcs: arcsOf(facts.chapters).map((a) => ({
+        md: a.md, line: (c.arcs ?? []).find((x) => x.md === a.md)?.line ?? "", ageFrom: a.from, ageTo: a.to, chapterIds: a.chapter_ids,
+      })),
+    } : {}),
     user_identity: {
       work_money_pattern: c.profile?.work_style,
       relationship_pattern: c.profile?.relationship_style,
     },
-    category_reports: Object.fromEntries((c.areas ?? []).map((a) => [a.area_id, { headline: a.headline, summary: a.summary, ...(v4 ? { evidence: (a.evidence_ids ?? []).map((id) => evRef.get(id)).filter(Boolean) } : {}) }])),
+    category_reports: Object.fromEntries((c.areas ?? []).map((a) => [a.area_id, { headline: a.headline, summary: a.summary, ...(v5 ? { why: a.why ?? "" } : {}), ...(v4 ? { evidence: (a.evidence_ids ?? []).map((id) => evRef.get(id)).filter(Boolean) } : {}) }])),
     ...(v4 ? { chart_evidence: { houses_from: facts.chart!.ref, confidence: facts.chart!.confidence, profile: (c.profile?.evidence_ids ?? []).map((id) => evRef.get(id)).filter(Boolean) } } : {}),
     journey_phases: journeyPhases,
     journey_phase_facts: journeyFacts,

@@ -32,7 +32,10 @@ export type AngleInput = {
   tara: string | null;
   rank: number;
   favours: string[];
-  windows: { id: string; kind: "good" | "caution"; hora?: string }[];
+  windows: { id: string; kind: "good" | "caution"; hora?: string; best?: boolean }[];
+  /** The engine's day verdict (calendar.ts); the card must agree with it. */
+  tone?: "supportive" | "mixed" | "rest";
+  avoid?: string | null;
 };
 
 const ADULT_POOL = ["work", "money", "home", "family", "partner", "friends", "body", "learning", "self", "errands"];
@@ -69,7 +72,29 @@ const AREA_HORA: Record<string, string[]> = {
   outdoors: ["mars", "sun"], calm: ["moon", "jupiter"],
 };
 
+/** Areas that suit a keep-light day, and the actions a non-supportive day must not suggest. */
+const LIGHT_AREAS = new Set(["self", "home", "errands", "body", "family", "learning", "sleep", "calm", "food", "bonding"]);
+const AVOID_AREA: Record<string, string[]> = {
+  money: ["money"], travel: ["errands", "outdoors"], talks: ["friends"], love: ["partner"], health: ["body"], new_starts: ["work"],
+};
+const BIG_ACTIONS = new Set(["start", "decide", "celebrate"]);
+
 function actionCandidates(d: AngleInput): string[] {
+  const all = actionCandidatesRaw(d);
+  // Verdict first: no "start"/"decide" on a keep-light day, no "start" on a mixed day unless
+  // the Calendar itself says the day favours new starts.
+  if (d.tone === "rest") {
+    const ok = all.filter((a) => !BIG_ACTIONS.has(a));
+    return ok.length ? ok : ["rest", "plan", "tidy"];
+  }
+  if (d.tone === "mixed" && !d.favours.includes("new_starts")) {
+    const ok = all.filter((a) => a !== "start");
+    return ok.length ? ok : ["finish", "plan", "fix"];
+  }
+  return all;
+}
+
+function actionCandidatesRaw(d: AngleInput): string[] {
   const base = tithiBase(d.tithi);
   const group = TITHI_MEANING[base]?.group;
   if (d.tara === "Janma") return ["rest", "plan", "tidy"];
@@ -107,11 +132,13 @@ export function planDayAngles(days: AngleInput[], isChild: boolean, seed = 0): D
     const recentAreas = out.slice(-3).map((a) => a.area);
     const recentActions = out.slice(-2).map((a) => a.action);
     const fav = d.favours.map((f) => FAVOUR_AREA[f]?.[isChild ? 1 : 0]).filter((x): x is string => Boolean(x));
-    let area = fav.find((a) => !recentAreas.includes(a));
+    const banned = new Set(d.avoid ? AVOID_AREA[d.avoid] ?? [] : []);
+    const fits = (a: string) => !banned.has(a) && (d.tone !== "rest" || LIGHT_AREAS.has(a));
+    let area = fav.find((a) => !recentAreas.includes(a) && !banned.has(a));
     if (!area) {
       for (let k = 0; k < pool.length; k++) {
         const cand = pool[(rot + k) % pool.length];
-        if (!recentAreas.includes(cand)) {
+        if (!recentAreas.includes(cand) && fits(cand)) {
           area = cand;
           rot = (rot + k + 1) % pool.length;
           break;
@@ -122,11 +149,12 @@ export function planDayAngles(days: AngleInput[], isChild: boolean, seed = 0): D
     const acts = actionCandidates(d);
     const action = acts.find((a) => !recentActions.includes(a)) ?? acts[0];
     const opener = OPENERS[(i * 3 + seed) % OPENERS.length];
-    const toneKey = d.rank >= 1 ? "supportive" : d.rank <= -1 ? "careful" : "mixed";
+    const toneKey = d.tone ? (d.tone === "rest" ? "careful" : d.tone) : d.rank >= 1 ? "supportive" : d.rank <= -1 ? "careful" : "mixed";
     const tone = TONES[toneKey][i % 3];
     const prefer = AREA_HORA[area] ?? [];
     const good = d.windows.filter((w) => w.kind === "good");
-    const slot = good.find((w) => w.hora && prefer.includes(w.hora))?.id ?? good[i % Math.max(1, good.length)]?.id ?? d.windows[0]?.id ?? "g1";
+    // The model's one slot note goes on the verdict's best window, so Today's "best" and the note agree.
+    const slot = good.find((w) => w.best)?.id ?? good.find((w) => w.hora && prefer.includes(w.hora))?.id ?? good[i % Math.max(1, good.length)]?.id ?? d.windows[0]?.id ?? "g1";
     out.push({ area, action, opener, tone, lead: leadOf(d, i), trait_ok: i % 5 === traitOffset, slot });
   });
   return out;

@@ -20,6 +20,7 @@ import {
   isV3,
   isV4,
   READING_PROMPT_VERSION_V4,
+  READING_PROMPT_VERSION_V5,
   validateContent,
   type V2Content,
   type V2Facts,
@@ -35,6 +36,7 @@ import {
   type ResponseObject,
 } from "./openai_responses.ts";
 import { chapterPlanV4, fillPlansV4, newItemScope } from "./reading_v4.ts";
+import { isV5 } from "./reading_v5.ts";
 import { mergeShards, offScriptShare, planShards, previewFrom, readingEffort, type ReadingPreview, type ShardKey, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
 
 /** Job attempts come from maxAttempts() in llm_policy.ts (Luna: first try + one retry). */
@@ -341,7 +343,7 @@ export async function startReading(
       source: "llm",
       provider: providerOf(readingModel()),
       model: readingModel(),
-      prompt_version: isV4(args.facts) ? READING_PROMPT_VERSION_V4 : READING_PROMPT_VERSION,
+      prompt_version: isV5(args.facts) ? READING_PROMPT_VERSION_V5 : isV4(args.facts) ? READING_PROMPT_VERSION_V4 : READING_PROMPT_VERSION,
       generated_for_date: args.facts.generation_date,
     }).select(READING_COLS).single();
     if (error) {
@@ -1021,7 +1023,7 @@ export async function runInlineA(admin: SupabaseClient, jobId: string, reading: 
   });
 }
 
-type FillState = { status: "running" | "done" | "failed"; tries: number; at: string; days?: number; cost_usd?: number; ms?: number; error?: string; flagged?: number };
+type FillState = { status: "running" | "done" | "failed"; tries: number; at: string; days?: number; chapters?: number; cost_usd?: number; ms?: number; error?: string; flagged?: number };
 
 async function addJobCost(admin: SupabaseClient, readingId: string, add: Totals): Promise<void> {
   const job = await latestJob(admin, readingId);
@@ -1195,16 +1197,25 @@ export async function fillDaysV4(admin: SupabaseClient, readingId: string): Prom
   const days = out.parts.flatMap((p) => p.days ?? []);
   const wanted = new Set(plans.flatMap((p) => p.scope.days ?? []));
   const got = days.filter((d) => wanted.has(d.date));
-  const missing = [...wanted].filter((d) => !got.find((x) => x.date === d));
-  const rep = got.length ? await repairNew(admin, r, r.content, { days: got }, job?.id ?? null) : null;
-  const fixedDays = rep?.add.days ?? got;
+  // v5: the remaining chapters are written in the same background fill (all chapters up front).
+  const wantCh = new Set(plans.flatMap((p) => p.scope.chapters ?? []));
+  const gotCh = out.parts.flatMap((p) => p.chapters ?? []).filter((c) => wantCh.has(Number(c.chapter_id)));
+  const missing = [
+    ...[...wanted].filter((d) => !got.find((x) => x.date === d)),
+    ...[...wantCh].filter((id) => !gotCh.find((x) => Number(x.chapter_id) === id)).map(String),
+  ];
+  const rep = got.length || gotCh.length
+    ? await repairNew(admin, r, r.content, { ...(got.length ? { days: got } : {}), ...(gotCh.length ? { chapters: gotCh } : {}) }, job?.id ?? null)
+    : null;
+  const fixedDays = rep?.add.days?.length ? rep.add.days : got;
+  const fixedCh = rep?.add.chapters?.length ? rep.add.chapters : gotCh;
   out.totals = rep ? sumT(out.totals, rep.totals) : out.totals;
   const state: FillState = {
-    status: missing.length ? "failed" : "done", tries, at: new Date().toISOString(), days: got.length,
+    status: missing.length ? "failed" : "done", tries, at: new Date().toISOString(), days: got.length, chapters: gotCh.length,
     cost_usd: Number(((fill?.cost_usd ?? 0) + out.totals.cost_usd).toFixed(6)), ms: Date.now() - t0,
     ...(out.errors.length || missing.length ? { error: [...out.errors, missing.length ? `missing:${missing.length}` : ""].filter(Boolean).join("; ").slice(0, 300) } : {}),
   };
-  const saved = await mergeIntoReading(admin, readingId, { days: fixedDays }, () => ({ fill: { ...state, flagged: rep?.flagged ?? 0 } }));
+  const saved = await mergeIntoReading(admin, readingId, { days: fixedDays, ...(fixedCh.length ? { chapters: fixedCh } : {}) }, () => ({ fill: { ...state, flagged: rep?.flagged ?? 0 } }));
   if (!saved.ok) {
     await admin.from("readings").update({ validation: { ...(r.validation ?? {}), fill: { ...state, status: "failed", error: "merge_rejected" } } })
       .eq("id", readingId);
@@ -1242,7 +1253,7 @@ export async function writeChaptersV4(
 export async function sweepFillsV4(admin: SupabaseClient, limit = 1): Promise<Record<string, unknown>[]> {
   const since = new Date(Date.now() - 3 * 86_400_000).toISOString();
   const { data } = await admin.from("readings").select("id, validation, ready_at")
-    .eq("status", "ready").eq("prompt_version", READING_PROMPT_VERSION_V4).gt("ready_at", since)
+    .eq("status", "ready").in("prompt_version", [READING_PROMPT_VERSION_V4, READING_PROMPT_VERSION_V5]).gt("ready_at", since)
     .lt("ready_at", new Date(Date.now() - 90_000).toISOString())
     .order("ready_at", { ascending: false }).limit(25);
   const todo = ((data ?? []) as { id: string; validation: { fill?: FillState } | null }[]).filter((x) => {

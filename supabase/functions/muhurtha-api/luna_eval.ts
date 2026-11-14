@@ -18,6 +18,16 @@ import { themeOk } from "./theme_check.ts";
 import { buildSystemPrompt, mergeRepair, repairPrompt, repairScope, sanitizeContent, type V2Content, validateContent } from "./reading_v2.ts";
 import { createWithSchema } from "./reading_jobs.ts";
 import { isV4 } from "./reading_v2.ts";
+import { isV5 } from "./reading_v5.ts";
+import { groundedFallback, verdictCard } from "./ask_grounded.ts";
+
+/** An answer that tells someone to start/launch something big today on a mixed or rest day. */
+export function askVerdictClash(text: string, tone: string | null, locale: "en" | "te" | "hi"): boolean {
+  if (!tone || tone === "supportive") return false;
+  const today = { en: /\btoday\b/i, te: /ఈరోజు/, hi: /आज/ }[locale];
+  const go = { en: /\b(great|perfect|ideal|best) (day|time) (to|for) (start|begin|launch|sign)/i, te: /(ప్రారంభించడానికి|మొదలుపెట్టడానికి) (చాలా )?(మంచి|బెస్ట్) రోజు/, hi: /(शुरू करने|शुरुआत) (के लिए )?(बहुत )?(अच्छा|बढ़िया|सबसे अच्छा) दिन/ }[locale];
+  return text.split(/(?<=[.!?।])\s+/).some((s) => today.test(s) && go.test(s));
+}
 import { chapterPlanV4, fillPlansV4, newItemScope } from "./reading_v4.ts";
 import { moonSiderealLongitudeDeg, nakshatraMetaFromSiderealLon } from "./ephemeris.ts";
 import { lagnaSidereal } from "./grahas.ts";
@@ -114,17 +124,18 @@ export function evalCases(profiles = 30, perProfile = 5): EvalCase[] {
 
 export async function runAskCase(c: EvalCase, date: string): Promise<Record<string, unknown>> {
   const sp = syntheticProfiles(30)[c.profile];
-  const facts = liveFacts(sp.prof, sp.bi, c.locale, date, null);
+  const facts = liveFacts(sp.prof, sp.bi, c.locale, date, null, { v5: v5Eval });
   const { good, caution } = todayWindows(sp.prof, date);
+  const bestStart = facts?.days.find((d) => d.date === date)?.verdict?.best?.start ?? null;
   const windows = [
-    ...good.slice(0, 2).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, start: w.start, end: w.end })),
+    ...good.slice(0, 2).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, start: w.start, end: w.end, ...(w.start === bestStart ? { best: true } : {}) })),
     ...caution.slice(0, 1).map((w) => ({ id: "c1", kind: "caution" as const, start: w.start, end: w.end })),
   ];
   const upcoming = (facts?.days ?? []).map((d) => d.date).filter((d) => d > date).slice(0, 10);
   const ctx: LiveContextInput = {
     locale: c.locale, facts, reading: null, subject: { name: sp.prof.display_name, isOwner: true, isChild: sp.age < 13 },
     date, nowIst: DateTime.now().setZone("Asia/Kolkata").toFormat("ccc d LLL yyyy, HH:mm"), windows, screen: "ask",
-    memory: [], history: [], upcomingDates: upcoming,
+    memory: [], history: [], upcomingDates: upcoming, grounding: verdictCard(facts, date, null),
   };
   const cls = classifyQuestion(c.question);
   const allowed = allowedDates(facts, date, upcoming);
@@ -175,11 +186,18 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
     json: Boolean(parsed.answer),
     dates_grounded: rawDateHits.length === 0 && actionGuard.hits.filter((h) => h.kind !== "safety").length === 0,
     suggested_date_valid: !sd || upcoming.includes(sd),
-    window_ids_valid: ["g1", "g2", "none"].includes(String(parsed.best_window ?? "none")) && ["c1", "none"].includes(String(parsed.caution_window ?? "none")),
+    window_ids_valid: ["g1", "g2", "g3", "none"].includes(String(parsed.best_window ?? "none")) && ["c1", "none"].includes(String(parsed.caution_window ?? "none")),
     language: c.locale === "en" ? lang >= 0.9 : lang >= 0.6,
     voice_clean: banned.length === 0 && jargon.length === 0,
     safety: !cls.sensitive || rawSafetyHits.length === 0,
     length_ok: raw.length <= 700,
+    // Cross-screen: never call a mixed/rest day good for big starts (the Today verdict).
+    verdict_consistent: !askVerdictClash(raw, facts?.days.find((d) => d.date === date)?.verdict?.tone ?? null, c.locale),
+    // The no-LLM fallback must answer this question too (non-empty, in the right script).
+    fallback_ok: (() => {
+      const fb = groundedFallback(c.question, c.locale, facts, date, null);
+      return Boolean(fb) && (c.locale === "en" || scriptShare(fb!, c.locale) >= 0.6);
+    })(),
   };
   const pass = Object.values(checks).every(Boolean);
   const model = resp?.model ?? readingModel();
@@ -201,9 +219,10 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
  */
 /** Reading eval: v4 unless the request says v4:false (tests the new path before rollout). */
 let v4Eval = true;
+let v5Eval = false;
 export async function runReadingCase(i: number, effort: ReasoningEffort, date: string): Promise<Record<string, unknown>> {
   const sp = syntheticProfiles(30)[i];
-  const facts = liveFacts(sp.prof, sp.bi, sp.locale, date, null, { v4: v4Eval })!;
+  const facts = liveFacts(sp.prof, sp.bi, sp.locale, date, null, { v4: v4Eval, v5: v5Eval })!;
   if (isV4(facts)) return await runReadingCaseV4(i, facts, sp.locale);
   const plans = planShards(facts);
   const t0 = Date.now();
@@ -356,11 +375,17 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
   const fills = await Promise.all(fp.map((p) => run(p, fill, final)));
   const have = new Set(final.days.map((d) => d.date));
   const newDays = fills.flatMap((x) => x?.days ?? []).filter((d) => !have.has(d.date));
-  let full = sanitizeContent({ ...final, days: [...final.days, ...newDays].sort((a, b) => a.date.localeCompare(b.date)) }, facts);
+  const haveCh = new Set(final.chapters.map((c) => Number(c.chapter_id)));
+  const newCh = fills.flatMap((x) => x?.chapters ?? []).filter((c) => !haveCh.has(Number(c.chapter_id)));
+  let full = sanitizeContent({
+    ...final,
+    days: [...final.days, ...newDays].sort((a, b) => a.date.localeCompare(b.date)),
+    chapters: [...final.chapters, ...newCh].sort((a, b) => Number(a.chapter_id) - Number(b.chapter_id)),
+  }, facts);
   let vf = validateContent(full, facts);
   // Same one repair of the new days as production (fillDaysV4 -> repairNew).
   const fillFlagsBefore = vf.flags.filter((f) => f.section === "days" && newDays.some((d) => d.date === String(f.id))).length;
-  const fscope = newItemScope(vf, newDays.map((d) => d.date), []);
+  const fscope = newItemScope(vf, newDays.map((d) => d.date), newCh.map((c) => Number(c.chapter_id)));
   if (fscope) {
     try {
       const r = await createWithSchema(facts, { system: buildSystemPrompt(facts), user: repairPrompt(facts, full, vf, fscope), scope: fscope, background: false });
@@ -389,10 +414,16 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
   const st = vf.stats as Record<string, unknown>;
   const unsupportedPct = Number(st.unsupported_pct ?? 0);
   const allDays = full.days.length === facts.days.length;
+  const v5 = isV5(facts);
+  const rc = vf.flags.flatMap((f) => f.reasons).reduce((m: Record<string, number>, r) => ((m[r.split(":")[0]] = (m[r.split(":")[0]] ?? 0) + 1), m), {});
+  // v5 quality gates after the one repair (production does the same): hard zero for the
+  // cross-screen and script problems, a small budget for style ones.
+  const v5Gate = !v5 || ((rc.lord_chain ?? 0) === 0 && (rc.wrong_script ?? 0) <= 1 && (rc.verdict_mismatch ?? 0) <= 1 && (rc.truncated ?? 0) <= 1 &&
+    (rc.action_missing ?? 0) <= 1 && (rc.stage_missing ?? 0) <= 2 && (rc.past_asserted ?? 0) === 0 && full.chapters.length === facts.chapters.length);
   return {
-    case_id: `reading-v4-p${i}`, locale,
-    pass: v.ok && vf.ok && Object.keys(errs).length === 0 && theme.ok && allDays && unsupportedPct <= 5,
-    checks: { valid: v.ok, valid_after_fill: vf.ok, fatal: vf.fatal, flags: vf.flags.length, theme_ok: theme.ok, theme_fails: theme.fails, all_days: allDays, unsupported_pct: unsupportedPct },
+    case_id: `reading-v${v5 ? 5 : 4}-p${i}`, locale,
+    pass: v.ok && vf.ok && Object.keys(errs).length === 0 && theme.ok && allDays && unsupportedPct <= 5 && v5Gate,
+    checks: { valid: v.ok, valid_after_fill: vf.ok, fatal: vf.fatal, flags: vf.flags.length, theme_ok: theme.ok, theme_fails: theme.fails, all_days: allDays, unsupported_pct: unsupportedPct, v5_gate: v5Gate, all_chapters: full.chapters.length === facts.chapters.length },
     latency_ms: readyMs, first_token_ms: firstToken, first_shown_ms: firstInsight,
     output: {
       v: 4, shard_ms: times, errors: errs, off_script_retries: retried, ready_ms: readyMs, fill_ms: fillMs, lazy_ms: lazyMs, lazy_chapters: lazyN,
@@ -416,6 +447,14 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
       }, {}),
       profile: final.profile ? { title: final.profile.title, summary: final.profile.summary } : null,
       sample_chapter: final.chapters.find((c) => Number(c.chapter_id) === facts.current_chapter_id) ?? null,
+      ...(v5 ? {
+        sample_past: full.chapters.filter((c) => facts.chapters.find((x) => x.chapter_id === Number(c.chapter_id))?.tense === "past" && c.body).slice(-2),
+        sample_future: full.chapters.filter((c) => facts.chapters.find((x) => x.chapter_id === Number(c.chapter_id))?.tense === "future" && c.body).slice(0, 1),
+        arcs: full.arcs ?? [], life_story: full.life_story ?? "",
+        areas: full.areas.slice(0, 3).map((a) => ({ area_id: a.area_id, headline: a.headline, summary: a.summary, why: a.why })),
+        profile_why: full.profile?.why ?? "",
+        day_verdicts: full.days.slice(0, 7).map((d) => ({ date: d.date, tone: facts.days.find((x) => x.date === d.date)?.verdict?.tone, line: d.line, do: d.do })),
+      } : {}),
       sample_days: full.days.slice(0, 3).map((d) => ({ date: d.date, title: d.title, line: d.line, body: d.body })),
     },
   };
@@ -456,7 +495,7 @@ export async function runPersonalCase(date: string, v4 = true): Promise<Record<s
   const t0 = Date.now();
   const t = zeroT();
   const one = async (x: { prof: ProfRow; bi: BioRow }) => {
-    const f = liveFacts(x.prof, x.bi, "en", date, null, { v4 })!;
+    const f = liveFacts(x.prof, x.bi, "en", date, null, { v4, v5: v5Eval })!;
     const A = planShards(f).find((p) => p.key === "A")!;
     const r = await shardCall(f, A, { background: false, timeoutMs: 120_000 });
     addT(t, r.model, r.usage);
@@ -470,7 +509,7 @@ export async function runPersonalCase(date: string, v4 = true): Promise<Record<s
   const evA = new Set(a.c?.profile?.evidence_ids ?? []), evB = new Set(b.c?.profile?.evidence_ids ?? []);
   const jEv = jaccard(evA, evB);
   return {
-    case_id: v4 ? "personal-hasta" : "personal-hasta-v3", locale: "en", pass: j < 0.3,
+    case_id: v5Eval ? "personal-hasta-v5" : v4 ? "personal-hasta" : "personal-hasta-v3", locale: "en", pass: j < 0.3,
     checks: { v4, word_jaccard: Math.round(j * 1000) / 1000, evidence_jaccard: Math.round(jEv * 1000) / 1000 },
     latency_ms: Date.now() - t0,
     output: {
@@ -498,6 +537,7 @@ export async function runLunaEval(admin: SupabaseClient, body: Record<string, un
   const runId = String(body.run_id ?? `eval-${Date.now()}`).slice(0, 60);
   const date = DateTime.now().setZone("Asia/Kolkata").toISODate()!;
   const kind = body.kind === "reading" ? "reading" : body.kind === "personal" ? "personal" : "ask";
+  v5Eval = body.v5 === true;
   const results: Record<string, unknown>[] = [];
   if (kind === "ask") {
     const all = evalCases(Number(body.profiles ?? 30), Number(body.per_profile ?? 5));
@@ -509,6 +549,7 @@ export async function runLunaEval(admin: SupabaseClient, body: Record<string, un
   } else {
     const effort = (body.effort === "none" ? "none" : "low") as ReasoningEffort;
     v4Eval = body.v4 !== false;
+    v5Eval = body.v5 === true;
     const ids = (Array.isArray(body.profiles) ? body.profiles : [0, 1, 2]).map(Number);
     results.push(...await pool(ids, 3, (i) => runReadingCase(i, effort, date)));
   }

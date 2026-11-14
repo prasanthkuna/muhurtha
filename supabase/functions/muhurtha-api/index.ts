@@ -6,6 +6,7 @@ import {
   handleRequest,
   pushBondMoments,
   pushBriefLine,
+  pushVerdict,
   pushSavedEvents,
   migrateLegacyPacks,
   pushChartMoments,
@@ -334,6 +335,7 @@ Deno.serve(async (req) => {
       const result = await dispatchDuePush(adminSupabase, Date.now(), pushChartMoments, pushBondMoments, {
         briefLine: pushBriefLine,
         savedEvents: pushSavedEvents,
+        verdict: pushVerdict,
       });
       if (result.considered > 0 || result.suppressed > 0) console.log("[push_dispatch]", JSON.stringify(result));
       return new Response(JSON.stringify(result), {

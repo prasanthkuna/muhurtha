@@ -10,6 +10,7 @@ import { planDayAngles } from "./angles.ts";
 import { grahasAt, natalGrahas } from "./grahas.ts";
 import { buildChartPack } from "./jyotisha.ts";
 import { buildStory, chartFacts, readingV4Enabled } from "./reading_v4.ts";
+import { enrichChapters, readingV5Enabled } from "./reading_v5.ts";
 import { SCREEN_JOB, valueMeaning } from "./engine_copy.ts";
 import { scoreDay } from "./calendar.ts";
 import {
@@ -18,6 +19,7 @@ import {
   bondMomentsFor,
   type BioLite,
   calendarDayForBirth,
+  personFrom,
   moonDatesForBirth,
   handleBondAction,
   prepareBondMonths,
@@ -64,7 +66,7 @@ import {
 import { BOND_TERMS, glossEntry } from "./glossary.ts";
 import { isQuotaCap, isTransientLlmError } from "./llm_policy.ts";
 import { ASK_V2_PROMPT_VERSION, askWithLlm, normalizeQuestion, type AskContext, type AskLlmAnswer } from "./ask_v2.ts";
-import { sendReadingReadyToProfile } from "./push.ts";
+import { type PushVerdict, sendReadingReadyToProfile } from "./push.ts";
 import {
   normalizePrefs,
   pushConfigured,
@@ -73,6 +75,7 @@ import {
 } from "./push.ts";
 import {
   allAntardashasFromMahadashas,
+  antardashasInMahadasha,
   type AdSegment,
   type MdSegment,
   recentAntardashasClipped,
@@ -95,6 +98,7 @@ import {
 } from "./content_llm.ts";
 import { ASK_PROMPT_VERSION } from "./ask_llm.ts";
 import { formatAskWindow, normalizeAskTemplates, resolveAskFromPack, type AskAnswerCopy } from "./ask_pack.ts";
+import { type AskLocale, askSources, askTopic, groundedFallback, personalExplain, verdictCard } from "./ask_grounded.ts";
 import {
   BIRTH_PACK_VERSION,
   type BirthIntelligencePackContent,
@@ -315,6 +319,25 @@ function birthMoonDetails(
     nakshatra: meta.name,
     pada: meta.pada,
   };
+}
+
+/** Birth star, Moon sign and the current dasha, for the "writing your reading" screen. */
+function generationChartFacts(bi: BioRow, profile: ProfRow, dateStr: string): { nakshatra: string | null; moonSign: string | null; md: string | null; ad: string | null; adUntil: string | null } | null {
+  try {
+    const tz = profile.current_timezone ?? "Asia/Kolkata";
+    const natal = birthMoonDetails(bi, tz, "en");
+    const { segments } = computeTimeline(bi, tz);
+    const at = parseDateAsUtcInstant(dateStr, tz);
+    const md = segments.length ? segmentAt(segments, at) : null;
+    const ad = md ? segmentAtAntardasha(antardashasInMahadasha(md), at) : null;
+    return {
+      nakshatra: natal?.nakshatra ?? bi.janma_nakshatra ?? null,
+      moonSign: (natal?.sign as { key?: string } | undefined)?.key ?? null,
+      md: md?.lord ?? null, ad: ad?.adLord ?? null, adUntil: ad ? ad.end.toISOString().slice(0, 7) : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function birthSunDetails(
@@ -1840,7 +1863,9 @@ async function persistNotificationSchedule(
     }
     return rows;
   });
-  if (notificationRows.length) {
+  // Legacy table: nothing reads these rows (push.ts builds alerts live from the day verdict).
+  // Writes are off; NOTIFICATION_SCHEDULE_WRITES=1 turns them back on.
+  if (notificationRows.length && Deno.env.get("NOTIFICATION_SCHEDULE_WRITES") === "1") {
     const { error } = await supabase.from("notification_schedule").upsert(
       notificationRows,
       { onConflict: "profile_id,notification_key,locale" },
@@ -3067,11 +3092,14 @@ function seedOf(id: string): number {
 }
 
 /** Engine windows with hora lord + reason (v3). */
-export function v3Windows(d: QuickDayFacts): V2WindowFact[] {
+export function v3Windows(d: QuickDayFacts, best: { start: string } | null = null): V2WindowFact[] {
   const hora = (start: string, end: string) =>
     d.sunrise && d.sunset ? horaLord(d.weekday, toMin(d.sunrise), toMin(d.sunset), (toMin(start) + toMin(end)) / 2) : undefined;
   return [
-    ...d.good.slice(0, 3).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, part: partOfDay(w.start), hora: hora(w.start, w.end), why: "clean" as const })),
+    ...d.good.slice(0, 3).map((w, i) => ({
+      id: `g${i + 1}`, kind: "good" as const, part: partOfDay(w.start), hora: hora(w.start, w.end), why: "clean" as const,
+      ...(best && best.start === w.start ? { best: true } : {}),
+    })),
     ...(d.rahu ? [{ id: "c1", kind: "caution" as const, part: partOfDay(d.rahu.start), hora: hora(d.rahu.start, d.rahu.end), why: "rahu" as const }] : []),
   ];
 }
@@ -3088,14 +3116,17 @@ export function v3Days(list: QuickDayFacts[], isChild: boolean, seed: number): V
       yoga: d.yoga,
       moon_sign: d.moonRashi,
       tara: d.tara,
-      day_tone: (d.rank >= 1 ? "supportive" : d.rank <= -1 ? "careful" : "mixed") as V2DayFact["day_tone"],
-      windows: v3Windows(d),
+      // One verdict: the Calendar's tone (rest -> careful), never a second rank-based guess.
+      day_tone: (c.tone === "rest" ? "careful" : c.tone) as V2DayFact["day_tone"],
+      windows: v3Windows(d, c.best),
       calendar: { favours: c.favours as string[], avoid: c.avoid as string | null, why: c.why },
+      verdict: { tone: c.tone, best: c.best, best_kind: c.best_kind ?? "go", favours: c.favours as string[], avoid: c.avoid as string | null },
     };
   });
   const angles = planDayAngles(list.map((d, i) => ({
     date: d.date, weekday: d.weekday, tithi: d.tithi, tithiIndex: d.tithiIndex, nakshatra: d.nakshatra, yoga: d.yoga,
     tara: d.tara, rank: d.rank, favours: base[i].calendar.favours, windows: base[i].windows,
+    tone: base[i].verdict.tone, avoid: base[i].calendar.avoid,
   })), isChild, seed);
   return base.map((d, i) => ({
     ...d,
@@ -3144,7 +3175,7 @@ export function buildReadingFacts(
   locale: AppLocale,
   dateStr: string,
   subjectName: string | null,
-  opts: { v4?: boolean } = {},
+  opts: { v4?: boolean; v5?: boolean } = {},
 ): V2Facts {
   const tz = profile.current_timezone ?? "Asia/Kolkata";
   const refInstant = parseDateAsUtcInstant(dateStr, tz);
@@ -3158,6 +3189,15 @@ export function buildReadingFacts(
   const lat = Number(profile.current_lat ?? DEFAULT_LAT);
   const lng = Number(profile.current_lng ?? DEFAULT_LNG);
   const start = DateTime.fromISO(dateStr, { zone: tz });
+  // Same natal star/sign the Calendar, Today and push use (stored star first), so every
+  // screen gets one verdict for a day, including star-only and time-bucket charts.
+  const calPlace = (() => {
+    try {
+      return personFrom(bi as never, "", { zone: tz, lat, lng }).place;
+    } catch {
+      return null;
+    }
+  })();
 
   const quick = Array.from({ length: 64 }, (_, i) =>
     quickDayFacts({
@@ -3165,8 +3205,8 @@ export function buildReadingFacts(
       zone: tz,
       latitude: lat,
       longitude: lng,
-      natalNakshatra: natal?.nakshatra ?? bi.janma_nakshatra ?? null,
-      natalRashi: natal?.sign.key ?? null,
+      natalNakshatra: calPlace?.natalNakshatra ?? natal?.nakshatra ?? bi.janma_nakshatra ?? null,
+      natalRashi: calPlace?.natalRashi ?? natal?.sign.key ?? null,
     })
   ).filter((d): d is NonNullable<typeof d> => d != null);
 
@@ -3180,13 +3220,17 @@ export function buildReadingFacts(
     return p ? p.id : null;
   };
   const dayLabel = (d: (typeof quick)[number]) => `${DateTime.fromISO(d.date).toFormat("cccc")} (${d.nakshatra})`;
+  // Best/light days come from the same day verdict the Calendar and Today show.
+  const verdictOf = new Map(quick.map((q) => [q.date, scoreDay(q)]));
+  const toneOf = (d: (typeof quick)[number]) => verdictOf.get(d.date)?.tone ?? "mixed";
   const periodFrom = (key: string, label: string, list: typeof quick): V2PeriodFact => ({
     period_key: key,
-    best_days: [...list].sort((a, b) => b.rank - a.rank || a.date.localeCompare(b.date)).filter((d) => d.rank >= 1).slice(0, 2).map(dayLabel),
-    light_days: [...list].sort((a, b) => a.rank - b.rank || a.date.localeCompare(b.date)).filter((d) => d.rank <= -1).slice(0, 2).map(dayLabel),
+    best_days: list.filter((d) => toneOf(d) === "supportive")
+      .sort((a, b) => (verdictOf.get(b.date)?.peak ?? 0) - (verdictOf.get(a.date)?.peak ?? 0) || a.date.localeCompare(b.date)).slice(0, 2).map(dayLabel),
+    light_days: list.filter((d) => toneOf(d) === "rest").slice(0, 2).map(dayLabel),
     label,
-    supportive_days: list.filter((d) => d.rank >= 1).length,
-    careful_days: list.filter((d) => d.rank <= -1).length,
+    supportive_days: list.filter((d) => toneOf(d) === "supportive").length,
+    careful_days: list.filter((d) => toneOf(d) === "rest").length,
     notable: list.filter((d) => NOTABLE_TITHI.test(d.tithi))
       .map((d) => `${d.tithi} (${WEEKDAYS[d.weekday]})`).slice(0, 4),
     chapter_id: list[0] ? chapterAt(DateTime.fromISO(list[0].date, { zone: tz }).toUTC().toISO()!) : null,
@@ -3245,7 +3289,8 @@ export function buildReadingFacts(
   }));
   const arch = kernel?.natal.archetype;
   const intent = profile.onboarding_intent ?? {};
-  const v4 = opts.v4 ?? readingV4Enabled();
+  const v5 = opts.v5 ?? readingV5Enabled();
+  const v4 = opts.v4 ?? (v5 || readingV4Enabled());
   const areaIds = isChild ? [...CHILD_AREAS] : [...ADULT_AREAS];
   let chart: V2Facts["chart"];
   let story: V2Facts["story"];
@@ -3259,9 +3304,10 @@ export function buildReadingFacts(
       console.warn("[reading] chart pack failed", e instanceof Error ? e.message : e);
     }
   }
+  const useV5 = Boolean(chart && v5);
   return {
     schema_version: 2,
-    facts_version: chart ? 4 : 3,
+    facts_version: chart ? (useV5 ? 5 : 4) : 3,
     ...(chart ? { chart, story } : {}),
     meanings: meaningsFor(days),
     locale: locale as V2Facts["locale"],
@@ -3293,7 +3339,7 @@ export function buildReadingFacts(
       focus: subjectName ? null : (intent as Record<string, unknown>).focus_areas ?? (intent as Record<string, unknown>).focus ?? null,
     },
     current_chapter_id: plans.find((p) => p.tense === "current")?.id ?? null,
-    chapters,
+    chapters: useV5 ? enrichChapters(chapters, chart) : chapters,
     days,
     weekdays,
     weeks,
@@ -5363,6 +5409,13 @@ async function _handleInternal(
       body,
     );
     let pack = await loadBirthPack(adminSupabase, profile, bi, locale, dateStr);
+    // Another language of your own reading is written only when asked for (the app shows a
+    // "Write it in <language>" button), not just because the UI language changed.
+    const ownChart = !chartProfileIdFromBody(body);
+    const primary = normalizeLocale(String(profile.language_code ?? "en"));
+    if ((!pack || !isClientServablePack(pack)) && body.ensure === true && !mayGenerate && ownChart && locale !== primary && body.generate_locale !== true) {
+      return { not_written: true, status: "not_written", locale, primaryLocale: primary, date: dateStr, birthInputId: bi.id, chart: generationChartFacts(bi, profile, dateStr) };
+    }
     if ((!pack || !isClientServablePack(pack)) && body.ensure === true && !mayGenerate) {
       // Background generation for the client poll loop (partner/friend charts and any
       // reading that was never generated): never blocks the request.
@@ -5383,6 +5436,8 @@ async function _handleInternal(
           locale,
           displayName: subjectName,
           birthInputId: bi.id,
+          // Chart facts are engine-only and instant: shown while the words are written.
+          chart: generationChartFacts(bi, profile, dateStr),
           access: buildAccessPayload(access),
         };
       }
@@ -7084,9 +7139,9 @@ export async function pushChartMoments(
 const liveFactsCache = new Map<string, { at: number; facts: V2Facts }>();
 
 /** Engine facts for live calls (pure, ~20 ms warm); cached per isolate for 6 h. */
-export function liveFacts(profile: ProfRow, bi: BioRow | null, locale: AppLocale, date: string, subject: string | null, opts: { v4?: boolean } = {}): V2Facts | null {
+export function liveFacts(profile: ProfRow, bi: BioRow | null, locale: AppLocale, date: string, subject: string | null, opts: { v4?: boolean; v5?: boolean } = {}): V2Facts | null {
   if (!bi) return null;
-  const key = [opts.v4 ?? "", bi.id, bi.date_of_birth, bi.exact_birth_time, bi.time_bucket, bi.birth_lat, bi.birth_lng, locale, date, profile.current_timezone, subject ?? ""].join("|");
+  const key = [opts.v4 ?? "", opts.v5 ?? "", bi.id, bi.date_of_birth, bi.exact_birth_time, bi.time_bucket, bi.birth_lat, bi.birth_lng, locale, date, profile.current_timezone, subject ?? ""].join("|");
   const hit = liveFactsCache.get(key);
   if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.facts;
   try {
@@ -7114,6 +7169,7 @@ function liveReadingCopy(pack: BirthPackRow | null, date: string): LiveContextIn
     profileTitle: safeString(me.title), profileSummary: safeString(me.summary).slice(0, 400),
     strengths: asArray<string>(me.strengths).slice(0, 3), watchouts: asArray<string>(me.watchouts).slice(0, 3),
     chapterTitle: cur ? safeString(cur.title) : undefined, chapterHighlight: cur ? safeString(cur.highlight) : undefined,
+    chapterWhy: cur ? safeString(cur.why) || undefined : undefined, chapterAction: cur ? safeString(cur.action) || undefined : undefined,
     todayTitle: card ? safeString(card.title) : undefined, todayLine: card ? safeString(card.one_line) : undefined,
   };
 }
@@ -7121,9 +7177,11 @@ function liveReadingCopy(pack: BirthPackRow | null, date: string): LiveContextIn
 function liveWindowsFrom(
   good: { start: string; end: string; label: string }[],
   caution: { start: string; end: string; label: string }[],
+  bestStart?: string | null,
 ): LiveWindow[] {
+  const n = bestStart && good.findIndex((w) => w.start === bestStart) === 2 ? 3 : 2;
   return [
-    ...good.slice(0, 2).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, start: w.start, end: w.end })),
+    ...good.slice(0, n).map((w, i) => ({ id: `g${i + 1}`, kind: "good" as const, start: w.start, end: w.end, ...(bestStart && w.start === bestStart ? { best: true } : {}) })),
     ...caution.slice(0, 1).map((w) => ({ id: "c1", kind: "caution" as const, start: w.start, end: w.end, label: w.label })),
   ];
 }
@@ -7280,12 +7338,14 @@ async function explainTerm(admin: SupabaseClient, supabase: SupabaseClient, prof
   // Item-specific traditional layer: what THIS star / tithi / tara on screen means (engine table), not just the term.
   const itemMeaning = valueMeaning(term, value, locale as "en" | "te" | "hi");
   const traditional = itemMeaning ? `${itemMeaning} ${base.traditional}` : base.traditional;
-  const out = { term, screen, title: base.title, simple: base.simple, traditional, practical: base.practical, source: "glossary" };
-  if (!askLlmEnabled()) return out;
   const tz = profile.current_timezone ?? "Asia/Kolkata";
   const date = todayInTimezone(tz);
   const rawBi = await resolveBirthInputForRequest(supabase, profile.id, body);
   const bi = rawBi ? await ensureBirthPlacePrecision(supabase, rawBi) : null;
+  // Personal layer from the engine (no LLM): what this term is for THIS person today.
+  const forYou = bi ? personalExplain(term, liveFacts(profile, bi, locale, date, null), date, locale as AskLocale) : null;
+  const out = { term, screen, title: base.title, simple: base.simple, traditional, practical: base.practical, source: "glossary", ...(forYou ? { for_you: forYou } : {}) };
+  if (!askLlmEnabled()) return out;
   const key = "explain:" + (await sha256Hex([term, screen, value, bi?.id ?? "none", locale, date, LIVE_PROMPT_VERSION, "ex2"].join("|")));
   const { data: hit } = await admin.from("ai_cache").select("value").eq("key", key).maybeSingle();
   if (hit) return { ...out, ...(hit as { value: Record<string, string> }).value, source: "llm_cached" };
@@ -7503,7 +7563,13 @@ export async function askStreamResponse(
         shown += t;
         send("delta", { t });
       };
-      const template = resolveAskFromPack(pack?.content, question, locale, goodWindows, cautionWindows);
+      const facts = liveFacts(profile, bi, locale, targetDate, subject);
+      const readingCopy = liveReadingCopy(pack, targetDate);
+      const packTemplate = resolveAskFromPack(pack?.content, question, locale, goodWindows, cautionWindows);
+      // Fallback answers the question asked, from the engine's verdict, dates and chapter.
+      const grounded = groundedFallback(question, locale as AskLocale, facts, targetDate, readingCopy);
+      const template: AskAnswerCopy = grounded ? { ...packTemplate, direct_answer: grounded } : packTemplate;
+      const sources = askSources(askTopic(question), cls.intent);
       let copy: AskAnswerCopy = template;
       let llm: Record<string, unknown> | null = null;
       let busy = false;
@@ -7512,7 +7578,6 @@ export async function askStreamResponse(
       let suggestedDate: string | null = null;
       let guardHits: GuardHit[] = [];
       let cacheKey: string | null = null;
-      const facts = liveFacts(profile, bi, locale, targetDate, subject);
       try {
         if (askLlmEnabled()) {
           cacheKey = await sha256Hex([bi?.id ?? "none", locale, targetDate, normalizeQuestion(question)].join("|"));
@@ -7524,14 +7589,14 @@ export async function askStreamResponse(
             suggestedDate = (cached.meta.suggested_date as string | null) ?? null;
             await releaseQuota(admin, profile.id, "ask", askQuotaResult.key);
           } else {
-            const windows = liveWindowsFrom(good, caution);
+            const windows = liveWindowsFrom(good, caution, facts?.days.find((d) => d.date === targetDate)?.verdict?.best?.start ?? null);
             const upcoming = upcomingFrom(facts, targetDate);
             const [daily, memory] = await Promise.all([
               getDailyContext(admin, profile, bi, locale, targetDate, { generate: false, pack, subject }).catch(() => null),
               scope.isFriend ? Promise.resolve([] as string[]) : memoryFacts(admin, profile.id),
             ]);
             const ctx: LiveContextInput = {
-              locale, facts, reading: liveReadingCopy(pack, targetDate),
+              locale, facts, reading: readingCopy, grounding: verdictCard(facts, targetDate, readingCopy),
               subject: { name: subject ?? profile.display_name ?? null, isOwner: !subject, isChild: bi ? calculateAge(bi.date_of_birth) < 13 : false },
               date: targetDate, nowIst: nowIstLabel(tz), windows, screen,
               dailySummary: daily ? { headline: daily.summary.headline, line: daily.summary.line } : null,
@@ -7570,7 +7635,7 @@ export async function askStreamResponse(
                 parsed = JSON.parse(resp.output_text ?? "{}");
               } catch { /* keep what was shown */ }
               if (!shownByModel) emit(template.direct_answer);
-              const pick = parsed.best_window === "g2" ? good[1] ?? good[0] : parsed.best_window === "g1" ? good[0] : null;
+              const pick = parsed.best_window === "g3" ? good[2] ?? null : parsed.best_window === "g2" ? good[1] ?? good[0] : parsed.best_window === "g1" ? good[0] : null;
               const cw = parsed.caution_window === "c1" ? caution[0] : null;
               const al = guardText(safeString(parsed.action_line).slice(0, 200), locale, allowed, Boolean(cls.sensitive));
               const sd = safeString(parsed.suggested_date);
@@ -7629,7 +7694,7 @@ export async function askStreamResponse(
           session_id: sessionId, profile_id: profile.id, role: "assistant", content: copy.direct_answer,
           payload: {
             answer: copy, provenance, ...(cacheKey && llm && !partial ? { cache_key: cacheKey } : {}), ...(llm ? { llm } : {}),
-            chips, remember, stream: true,
+            chips, remember, sources, stream: true,
             context: { goodWindows, cautionWindows, currentLord, currentSubLord, screen, engineMode: bi ? resolveEngineMode(bi) : "general_panchanga" },
           },
         }).select("id").single();
@@ -7640,7 +7705,7 @@ export async function askStreamResponse(
           sessionId, birthInputId: scope.birthInputId, answerId: (saved as { id: string }).id,
           directAnswer: copy.direct_answer, bestTime: copy.best_time, cautionTime: copy.caution_time,
           betterOption: copy.better_option, simpleWhy: copy.simple_why, actionLine: copy.action_line, shareHook: copy.share_hook,
-          goodWindows, cautionWindows, provenance, suggestedDate, aiAnswer: Boolean(llm), chips, remember,
+          goodWindows, cautionWindows, provenance, suggestedDate, aiAnswer: Boolean(llm), chips, remember, sources,
           intent: cls.intent, partial, ...(busy ? { llmBusy: true, retryAfterS: 30 } : {}),
           timing: { first_shown_ms: firstShownMs, total_ms: Date.now() - t0, first_token_ms: llm?.first_token_ms ?? null },
           locale,
@@ -7666,16 +7731,31 @@ export async function askStreamResponse(
 const PROFILE_COLS = "id, current_city, current_timezone, current_lat, current_lng, display_name, language_code, explanation_mode";
 
 /** Morning brief line from the daily context summary (generated on time; null = template). */
-export async function pushBriefLine(admin: SupabaseClient, profileId: string, localeRaw: string, dateStr: string): Promise<{ title?: string; line: string } | null> {
-  if (!askLlmEnabled()) return null;
+/**
+ * Morning brief line: the reading's own card for today (already written to the engine's day
+ * verdict), so the alert says what Today says. No extra model call; template copy when the
+ * day is not written yet.
+ */
+export async function pushBriefLine(admin: SupabaseClient, profileId: string, localeRaw: string, dateStr: string): Promise<{ title?: string; line?: string; verdict?: PushVerdict | null } | null> {
   const { data: prof } = await admin.from("profiles").select(PROFILE_COLS).eq("id", profileId).maybeSingle();
   if (!prof) return null;
   const bi = await getLatestBirthInput(admin, profileId).catch(() => null);
   if (!bi) return null;
   const locale = normalizeLocale(localeRaw);
-  const r = await getDailyContext(admin, prof as ProfRow, bi, locale, dateStr, { generate: true, timeoutMs: 7_000 });
-  if (!r || r.source !== "llm") return null;
-  return { title: r.summary.headline, line: r.summary.line || r.summary.focus };
+  const pack = await loadBirthPack(admin, prof as ProfRow, bi, locale, dateStr).catch(() => null);
+  const card = packTodayCard(pack, dateStr);
+  const line = card ? safeString(card.one_line) : "";
+  return line ? { line } : null;
+}
+
+/** The one day verdict for a profile's own chart (calendar.ts scoreDay), for push. No LLM. */
+export async function pushVerdict(admin: SupabaseClient, profileId: string, dateStr: string): Promise<PushVerdict | null> {
+  const { data: prof } = await admin.from("profiles").select(PROFILE_COLS).eq("id", profileId).maybeSingle();
+  if (!prof) return null;
+  const bi = await getLatestBirthInput(admin, profileId).catch(() => null);
+  if (!bi) return null;
+  const cal = calendarDayForBirth(bi as unknown as BioLite, prof as ProfRow, dateStr);
+  return cal ? { tone: cal.tone, best: cal.best, best_kind: cal.best_kind } : null;
 }
 
 export async function pushSavedEvents(admin: SupabaseClient, profileId: string, dateStr: string) {

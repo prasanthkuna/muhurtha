@@ -236,6 +236,8 @@ export function mergeShards(parts: Partial<V2Content>[]): V2Content {
     if (!p) continue;
     if (p.profile && !out.profile) out.profile = p.profile;
     if (p.push && !out.push) out.push = p.push;
+    if (p.arcs?.length && !out.arcs) out.arcs = p.arcs;
+    if (p.life_story && !out.life_story) out.life_story = p.life_story;
     for (const k of ["areas", "chapters", "days", "weekdays", "weeks", "months", "ask_starters", "remedies"] as const) {
       const arr = p[k] as unknown[] | undefined;
       if (Array.isArray(arr)) (out[k] as unknown[]).push(...arr);

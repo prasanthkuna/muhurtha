@@ -494,7 +494,7 @@ const DOMAIN_LIBRARY: Record<string, DomainLens> = {
   },
   personality: {
     key: "personality",
-    label: "Personality Mirror",
+    label: "Your pattern",
     signals: ["decision style", "speech pattern", "stress response"],
     cautions: ["acting from old pressure", "needing everyone to understand"],
     actions: ["name the real pressure", "choose one grounded response"],

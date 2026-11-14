@@ -145,7 +145,11 @@ function randomToken(): string {
   return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-const firstName = (s: string | null | undefined, fallback: string) => (String(s ?? "").trim().split(/\s+/)[0] || fallback).slice(0, 24);
+/** First name, display-cased: "sweety" / "SWEETY" -> "Sweety" (non-Latin names untouched). */
+export const firstName = (s: string | null | undefined, fallback: string) => {
+  const w = (String(s ?? "").trim().split(/\s+/)[0] || fallback).slice(0, 24);
+  return /^[a-z][a-z'.-]*$/i.test(w) && (w === w.toLowerCase() || w === w.toUpperCase()) ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w;
+};
 
 function bioHash(bi: BioLite): Promise<string> {
   const n = (v: unknown) => (v == null || v === "" ? "" : Number(v).toFixed(4));
@@ -617,7 +621,7 @@ export async function handleBondAction(
       if (!pro) return { locked: true, from, months: [], approximate: me.starApprox };
       const segs = deps.segmentsFor(bi, base.zone);
       const lordsAt = (d: Date) => ({ ad: segs.length ? vimshottariLordsAt(segs, d)?.adLord ?? null : null });
-      return { locked: false, from, months: yearMonths(from, me.place, lordsAt, 12), approximate: me.starApprox, version: "cal-v2" };
+      return { locked: false, from, months: yearMonths(from, me.place, lordsAt, 12, today), approximate: me.starApprox, version: "cal-v2" };
     }
     const month = typeof body.month === "string" && /^\d{4}-\d{2}$/.test(body.month) ? body.month : today.slice(0, 7);
     const tomorrow = DateTime.fromISO(today).plus({ days: 1 }).toISODate()!;

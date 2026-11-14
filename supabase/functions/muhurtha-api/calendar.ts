@@ -274,13 +274,15 @@ export function yearMonths(
   p: CalPlace,
   lordsAt: (d: Date) => { ad: string | null },
   count = 12,
+  /** Best dates before this day are dropped (the current month never lists past days). */
+  today: string | null = null,
 ): YearMonth[] {
   const f0 = DateTime.fromISO(`${fromMonth}-01`, { zone: p.zone });
   const lordKey = Array.from({ length: count }, (_, i) => {
     const mm = f0.plus({ months: i });
     return `${lordsAt(mm.set({ day: 1, hour: 12 }).toJSDate()).ad}.${lordsAt(mm.set({ day: 15, hour: 12 }).toJSDate()).ad}.${lordsAt(mm.endOf("month").set({ hour: 12 }).toJSDate()).ad}`;
   }).join(",");
-  const ck = `${fromMonth}|${count}|${p.zone}|${p.lat}|${p.lng}|${p.natalRashi}|${p.natalNakshatra ?? ""}|${lordKey}`;
+  const ck = `${today ?? ""}|${fromMonth}|${count}|${p.zone}|${p.lat}|${p.lng}|${p.natalRashi}|${p.natalNakshatra ?? ""}|${lordKey}`;
   const hit = YEAR_CACHE.get(ck);
   if (hit) return hit;
   const moonSign = p.natalRashi ? RASHIS.indexOf(p.natalRashi.toLowerCase()) : -1;
@@ -342,7 +344,7 @@ export function yearMonths(
     else if (rx >= 10) pick("review");
     else if (rest >= 10 && rest > supportive) pick("pace");
     const best = days
-      .filter((d) => d.tone === "supportive")
+      .filter((d) => d.tone === "supportive" && (!today || d.date >= today))
       .flatMap((d) => d.favours.filter((f) => f !== "rest").slice(0, 1).map((f) => ({ date: d.date, area: f, s: d.scores[f] })))
       .sort((a, b) => b.s - a.s || a.date.localeCompare(b.date))
       .slice(0, 3)

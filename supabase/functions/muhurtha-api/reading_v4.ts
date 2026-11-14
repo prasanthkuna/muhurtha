@@ -16,6 +16,7 @@ import { areaEvidence, type ChartPack, topEvidence } from "./jyotisha.ts";
 import { SCREEN_JOB } from "./engine_copy.ts";
 import type { ReadingLocale, SchemaScope, V2ChapterFact, V2Content, V2Facts } from "./reading_v2.ts";
 import { promptFacts } from "./reading_v2.ts";
+import { arcsOf, AREA_WORDS_EN, isV5, V5_LANGUAGE_LINE } from "./reading_v5.ts";
 
 export const INITIAL_DAYS = 7;
 export const FILL_BATCHES = 2;
@@ -109,6 +110,14 @@ export function requiredIdsV4(f: V2Facts): { days: string[]; chapters: number[] 
 
 export function planPartsV4(f: V2Facts): V4Plan[] {
   const req = requiredIdsV4(f);
+  if (isV5(f)) {
+    return [
+      { key: "A", scope: { profile: true, areas: f.area_ids }, maxTokens: 3200, note: "the personality profile and every life area" },
+      { key: "B", scope: { chapters: req.chapters, arcs: true }, maxTokens: 4200, note: "the previous, current and next life chapters, every arc line and the life story" },
+      { key: "C", scope: { days: req.days }, maxTokens: 4000, note: "the first seven days" },
+      { key: "D", scope: { weeks: f.weeks.map((w) => w.period_key), months: f.months.map((m) => m.period_key), extras: true }, maxTokens: 3000, note: "the weeks, the months, the ask starters, the remedies and the push lines" },
+    ];
+  }
   return [
     { key: "A", scope: { profile: true, areas: f.area_ids }, maxTokens: 3000, note: "the personality profile and every life area" },
     { key: "B", scope: { chapters: req.chapters }, maxTokens: 3000, note: "the previous, current and next life chapters" },
@@ -117,13 +126,27 @@ export function planPartsV4(f: V2Facts): V4Plan[] {
   ];
 }
 
-/** Background day batches for whatever days are not written yet. */
+/** v5: chapters per background batch (every chapter is written up front, after the reading is ready). */
+export const CHAPTER_BATCH_V5 = 7;
+
+/** Background batches for whatever days (and, v5, chapters) are not written yet. */
 export function fillPlansV4(f: V2Facts, c: Partial<V2Content> | null): V4Plan[] {
   const have = new Set((c?.days ?? []).map((d) => d.date));
   const rest = f.days.map((d) => d.date).filter((d) => !have.has(d));
-  if (!rest.length) return [];
-  const per = Math.ceil(rest.length / FILL_BATCHES);
   const out: V4Plan[] = [];
+  if (isV5(f)) {
+    const haveCh = new Set((c?.chapters ?? []).map((x) => Number(x.chapter_id)));
+    const todo = f.chapters.map((x) => x.chapter_id).filter((id) => !haveCh.has(id));
+    // Nearest to now first: the next ones people open, then outward.
+    const cur = f.current_chapter_id ?? f.chapters[0]?.chapter_id ?? 0;
+    todo.sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur) || a - b);
+    for (let i = 0; i < todo.length; i += CHAPTER_BATCH_V5) {
+      const ids = todo.slice(i, i + CHAPTER_BATCH_V5).sort((a, b) => a - b);
+      out.push({ key: "L", scope: { chapters: ids }, maxTokens: 7000, note: "these life chapters" });
+    }
+  }
+  if (!rest.length) return out;
+  const per = Math.ceil(rest.length / FILL_BATCHES);
   for (let i = 0; i < FILL_BATCHES; i++) {
     const ids = rest.slice(i * per, (i + 1) * per);
     if (ids.length) out.push({ key: i === 0 ? "F1" : "F2", scope: { days: ids }, maxTokens: 9000, note: "these days" });
@@ -144,7 +167,15 @@ export function chapterPlanV4(f: V2Facts, c: Partial<V2Content> | null, chapterI
 
 // ---------------------------------------------------------------- context compiler
 
-const compactChapter = (c: V2ChapterFact) => ({
+const compactChapter = (c: V2ChapterFact) => c.life_stage !== undefined || c.chapter_domains ? ({
+  // v5: the chapter's own areas and its life stage; no person-level domain list, no lord chain.
+  chapter_id: c.chapter_id, period: c.period, md: c.md, ad: c.ad, kind: c.kind ?? "detail",
+  ...(c.kind === "summary" ? { md_lords: c.md_lords, early: c.early } : {}),
+  age_from: c.age_from, age_to: c.age_to, tense: c.tense,
+  ...(c.life_stage ? { life_stage: c.life_stage } : {}),
+  ...(c.chapter_domains?.length ? { chapter_domains: c.chapter_domains.map((k) => AREA_WORDS_EN[k] ?? k) } : {}),
+  brings: c.ad_theme?.support ?? c.support, asks: c.ad_theme?.pressure ?? c.pressure,
+}) : ({
   chapter_id: c.chapter_id, period: c.period, md: c.md, ad: c.ad, kind: c.kind ?? "detail",
   ...(c.kind === "summary" ? { md_lords: c.md_lords, early: c.early } : {}),
   age_from: c.age_from, age_to: c.age_to, tense: c.tense, domains: c.domains, support: c.support, pressure: c.pressure,
@@ -210,11 +241,14 @@ export function compileContext(f: V2Facts, p: V4Plan, c?: Partial<V2Content> | n
     for (const id of ["md-ad", "t:saturn-moon", "t:jupiter-moon", "lagna"]) ids.add(id);
     ev = [...ids];
     const usedTitles = (c?.chapters ?? []).filter((x) => !(p.scope.chapters ?? []).includes(Number(x.chapter_id))).map((x) => x.title);
+    const usedOpeners = (c?.chapters ?? []).filter((x) => !(p.scope.chapters ?? []).includes(Number(x.chapter_id))).map((x) => (x.body ?? "").split(/\s+/).slice(0, 3).join(" ")).filter(Boolean);
     ctx = {
       ...base,
       chapters: chs.map(compactChapter),
-      chapter_ledger: f.chapters.map((x) => ({ id: x.chapter_id, period: x.period, md: x.md, ad: x.ad, tense: x.tense })),
+      chapter_ledger: f.chapters.map((x) => ({ id: x.chapter_id, period: x.period, md: x.md, ad: x.ad, tense: x.tense, ...(isV5(f) ? { ages: `${x.age_from ?? "?"}-${x.age_to ?? "?"}` } : {}) })),
+      ...(isV5(f) && p.scope.arcs ? { arcs: arcsOf(f.chapters).map((a) => ({ md: a.md, ages: `${a.from ?? 0}-${a.to ?? "?"}`, tense: a.tense })) } : {}),
       ...(usedTitles.length ? { titles_already_used: usedTitles } : {}),
+      ...(isV5(f) && usedOpeners.length ? { openers_already_used: usedOpeners } : {}),
     };
   } else if (p.key === "C" || p.key === "F1" || p.key === "F2") {
     const pf = promptFacts(f) as V2Facts & { meanings?: Record<string, Record<string, string>> };
@@ -252,11 +286,12 @@ export function partInstructionV4(f: V2Facts, p: V4Plan): string {
   if (p.scope.weeks?.length) ids.push("all weeks");
   if (p.scope.months?.length) ids.push("all months");
   if (p.scope.extras) ids.push("ask_starters (4), remedies (3), push (five keys)");
+  if (p.scope.arcs) ids.push("arcs (one line per arc in FACTS.arcs) and life_story");
   return [
     `PART ${p.key}: write ${p.note} (${ids.join("; ")}). Each listed id exactly once.`,
     p.key === "F1" || p.key === "F2" ? "Other days are already written: never reuse a title, body opener or chip from titles_already_used / openers_already_used." : "",
-    p.key === "L" ? "Other chapters are already written: never reuse a title or its first word from titles_already_used." : "",
-    LANGUAGE_LINE[f.locale] ?? `Language: ${f.locale}.`,
+    p.key === "L" ? "Other chapters are already written: never reuse a title or its first word from titles_already_used" + (isV5(f) ? ", or an opener from openers_already_used." : ".") : "",
+    (isV5(f) ? V5_LANGUAGE_LINE[f.locale] : LANGUAGE_LINE[f.locale]) ?? `Language: ${f.locale}.`,
   ].filter(Boolean).join("\n");
 }
 
@@ -269,7 +304,7 @@ const LANGUAGE_LINE: Record<string, string> = {
 /** One bounded repair for freshly written items (fill days / on-demand chapters). */
 export function newItemScope(v: { flags: { section: string; id: string | number }[] }, days: string[], chapters: number[]): { days?: string[]; chapters?: number[] } | null {
   const d = [...new Set(v.flags.filter((f) => f.section === "days" && days.includes(String(f.id))).map((f) => String(f.id)))].sort().slice(0, 18);
-  const c = [...new Set(v.flags.filter((f) => f.section === "chapters" && chapters.includes(Number(f.id))).map((f) => Number(f.id)))];
+  const c = [...new Set(v.flags.filter((f) => f.section === "chapters" && chapters.includes(Number(f.id))).map((f) => Number(f.id)))].slice(0, 10);
   return d.length || c.length ? { ...(d.length ? { days: d } : {}), ...(c.length ? { chapters: c } : {}) } : null;
 }
 
