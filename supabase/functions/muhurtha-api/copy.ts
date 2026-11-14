@@ -164,9 +164,16 @@ export function lordFlavor(
   };
 }
 
+const LORD_NATIVE: Record<"te" | "hi", Record<string, string>> = {
+  te: { Sun: "సూర్య", Moon: "చంద్ర", Mars: "కుజ", Mercury: "బుధ", Jupiter: "గురు", Venus: "శుక్ర", Saturn: "శని", Rahu: "రాహు", Ketu: "కేతు" },
+  hi: { Sun: "सूर्य", Moon: "चंद्र", Mars: "मंगल", Mercury: "बुध", Jupiter: "गुरु", Venus: "शुक्र", Saturn: "शनि", Rahu: "राहु", Ketu: "केतु" },
+};
+
 function blendedTitle(mdLord: string, adLord: string, loc: AppLocale): string[] {
   if (loc !== "en") {
-    return [`${mdLord}-${adLord}`, `${mdLord} / ${adLord}`];
+    // te/hi period labels name the lords in the reader's script (never "Moon / Moon").
+    const n = (g: string) => LORD_NATIVE[loc as "te" | "hi"]?.[g] ?? g;
+    return mdLord === adLord ? [`${n(mdLord)} ${loc === "hi" ? "दशा" : "దశ"}`] : [`${n(mdLord)}–${n(adLord)}`];
   }
   const md = lordFlavor(mdLord, loc);
   const ad = lordFlavor(adLord, loc);

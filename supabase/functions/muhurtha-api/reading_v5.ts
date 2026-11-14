@@ -231,8 +231,8 @@ const START_WORDS: Record<ReadingLocale, RegExp> = {
 };
 const NEGATION: Record<ReadingLocale, RegExp> = {
   en: /\b(not|no|don't|avoid|skip|hold off|wait|later|instead|finish|already)\b/i,
-  te: /(వద్దు|కాదు|ఆపండి|తర్వాత|బదులు|చేయకండి|మానుకోండి|పూర్తి)/,
-  hi: /(नहीं|न करें|ना|टालें|बाद में|बजाय|रुकें|पूरा)/,
+  te: /(వద్దు|కాదు|ఆపండి|తర్వాత|బదులు|కండి|మానుకోండి|మానండి|పూర్తి|ఆగండి|వాయిదా|కాకుండా)/,
+  hi: /(नहीं|न करें|ना|मत|टालें|टाल|बाद में|बजाय|रुकें|पूरा|पूरी)/,
 };
 const SCRIPT_RE: Record<"te" | "hi", RegExp> = { te: /[\u0C00-\u0C7F]/g, hi: /[\u0900-\u097F]/g };
 const ALIEN_RE: Record<"te" | "hi", RegExp> = { te: /[\u0B80-\u0BFF\u0C80-\u0CFF\u0D00-\u0D7F]/, hi: /[\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF]/ };
