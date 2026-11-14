@@ -186,11 +186,11 @@ export function v5Rules(f: V2Facts, openersLine: string, banned: string[]): stri
     "L5. highlight = the beat: one short sentence (max 14 words) a person could repeat. why = one plain sentence naming the sub-period lord's role for this person from EVIDENCE. action = for current and future detail chapters ONE concrete thing to do in that stretch (a verb first); empty \"\" for past and summary chapters.",
     "L6. Titles: 2-4 words, concrete to the chapter's areas, no planet names, unique, and no two chapters share a first word or main noun. Summary chapters (kind=summary) get title, highlight and share_line only; body, why and action are \"\".",
     "L7. No two chapters may open with the same three words; vary how each opens (age frame, the area, a contrast, the person).",
-    "D1. Day cards follow the engine's verdict for that date (verdict.tone, verdict.favours, verdict.avoid). line = the verdict in one sentence; on a rest day it says keep it light; on a mixed day never suggest starting something big unless favours has new_starts; never recommend what verdict.avoid names.",
+    "D1. Day cards follow the engine's verdict for that date (verdict.tone, verdict.favours, verdict.avoid). line = the verdict in one sentence; on a rest day it says to keep the day light, in different words each rest day; on a mixed day never suggest starting something big unless favours has new_starts; never recommend what verdict.avoid names.",
     "D2. Write the day ABOUT angle.area, suggest angle.action, in angle.tone, opening the way angle.opener says (" + openersLine + "). The reason comes from angle.lead: star -> MEANINGS.stars, tithi -> MEANINGS.tithis, tara -> MEANINGS.taras, yoga -> MEANINGS.yogas; say it in fresh everyday words (" + CAUSAL[f.locale] + "), name the lead fact once mid-sentence, never as a stock line ('<star> is a … star', 'today's star is …'" + (te ? ", 'ఈరోజు నక్షత్రం …'" : hi ? ", 'आज का नक्षत्र …'" : "") + ").",
     "D3. title, line, body, do/avoid and the slot note each take a different job: line = verdict; body = the why + one concrete example; do/avoid = two other actions; the note = what the best window suits. Never repeat a task across them. Titles 2-5 words, fresh each day. Mention the natal trait only when angle.trait_ok is true.",
     "D4. window_notes: exactly ONE note, for the window whose writer is \"llm\" (the verdict's best window). Never write times; never start with 'Use this slot', 'A good slot', 'Good for' or 'This slot'.",
-    "D5. Words like 'gentle', 'simple', 'steady', 'quiet', 'small step' at most once per five days; never reuse a sentence frame more than twice in the reading.",
+    "D5. Name the tithi or star by its own name once; never use frames like 'the lunar day for', 'the mixed/supportive/rest day favours' or 'this day\'s verdict' (the tone is shown by the app, do not label it). Words like 'gentle', 'simple', 'steady', 'quiet', 'small step' at most once per five days; never reuse a sentence frame more than twice in the reading.",
     "P1. weeks/months: talk about the stretch itself using best_days and light_days (weekday + star), never dates; do not restate the chapter theme or day tasks. ask_starters: 4 questions this person would actually ask, tied to the current chapter and the coming weeks. push lines: short, no times.",
   ];
 }
@@ -220,9 +220,9 @@ const PAST_HEDGE: Record<ReadingLocale, RegExp> = {
   hi: /(हुआ होगा|रहा होगा|शायद आप)/,
 };
 const STAGE_WORDS: Record<ReadingLocale, RegExp> = {
-  en: /\b(teen\w*|twent\w+|thirt\w+|fort\w+|fift\w+|sixt\w+|sevent\w+|school\w*|college|childhood|child|kid|career|mid-?\d0s|\d0s|age|aged|years old|young|youth|adult\w*|elder\w*|retire\w*|\d{1,2})\b/i,
-  te: /(వయసు|ఏళ్ల|ఏళ్లు|బాల్య|చిన్నతన|చిన్నప్పు|స్కూల్|కాలేజ|టీనేజ్|యవ్వన|ఇరవై|ముప్పై|నలభై|యాభై|అరవై|డెబ్బై|పెద్దయ్యా|కెరీర్|\d{1,2})/,
-  hi: /(उम्र|साल|बचपन|स्कूल|कॉलेज|किशोर|जवानी|युवा|बीस|तीस|चालीस|पचास|साठ|सत्तर|करियर|\d{1,2})/,
+  en: /\b(teen\w*|twent\w+|thirt\w+|fort\w+|fift\w+|sixt\w+|sevent\w+|school\w*|college|childhood|child|kid|career|mid-?\d0s|\d0s|age|aged|years old|young|youth|adult\w*|elder\w*|retire\w*|later (life|years)|senior|grandparent\w*|eight\w+|nine\w+|mid-?life|middle years|grown|\d{1,2})\b/i,
+  te: /(వయసు|ఏళ్ల|ఏళ్లు|బాల్య|చిన్నతన|చిన్నప్పు|స్కూల్|కాలేజ|టీనేజ్|యవ్వన|ఇరవై|ముప్పై|నలభై|యాభై|అరవై|డెబ్బై|ఎనభై|తొంభై|వృద్ధాప్య|పెద్ద వయసు|తర్వాతి ఏళ్ల|మలి వయసు|పెద్దయ్యా|కెరీర్|\d{1,2})/,
+  hi: /(उम्र|साल|बचपन|स्कूल|कॉलेज|किशोर|जवानी|युवा|बीस|तीस|चालीस|पचास|साठ|सत्तर|अस्सी|नब्बे|बुढ़ाप|वृद्धावस्था|बाद के वर्ष|बाद के साल|ढलती उम्र|करियर|\d{1,2})/,
 };
 const START_WORDS: Record<ReadingLocale, RegExp> = {
   en: /\b(start|begin|launch|sign|kick off)\w*/i,
