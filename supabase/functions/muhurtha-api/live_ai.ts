@@ -388,7 +388,16 @@ export function allowedDates(facts: V2Facts | null, date: string, upcoming: stri
   return { dayMonths, months, years };
 }
 
-export type GuardHit = { kind: "time" | "date" | "safety" | "iso"; text: string };
+export type GuardHit = { kind: "time" | "date" | "safety" | "iso" | "script"; text: string };
+
+/** Letters from another Indic script in a te/hi answer (Luna sometimes drifts into Tamil or Kannada). */
+const ALIEN_ASK: Partial<Record<LiveLocale, RegExp>> = {
+  te: /[\u0900-\u097F\u0980-\u09FF\u0B80-\u0BFF\u0C80-\u0CFF\u0D00-\u0D7F]/,
+  hi: /[\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]/,
+};
+export function alienScript(s: string, locale: LiveLocale): boolean {
+  return Boolean(ALIEN_ASK[locale]?.test(s));
+}
 
 export function sentenceProblem(s: string, allowed: GuardAllowed, sensitive: boolean): GuardHit["kind"] | null {
   if (CLOCK_RE.test(s)) return "time";
@@ -435,7 +444,7 @@ export class StreamGuard {
     private emit: (text: string) => void,
   ) {}
   private risky(s: string): boolean {
-    return /\d/.test(s) || new RegExp(`(?<![\\p{L}])(${MONTH_ALT})`, "iu").test(s) || this.sensitive;
+    return /\d/.test(s) || new RegExp(`(?<![\\p{L}])(${MONTH_ALT})`, "iu").test(s) || this.sensitive || alienScript(s, this.locale);
   }
   private out(t: string) {
     if (!t) return;
@@ -446,6 +455,12 @@ export class StreamGuard {
   private sentence(s: string) {
     const head = this.headShown;
     this.headShown = false;
+    if (alienScript(s, this.locale)) {
+      // Wrong script: drop it (never shown). If nothing else is shown, the caller shows the grounded answer.
+      this.hits.push({ kind: "script", text: s.slice(0, 200) });
+      if (head) this.out("…" + (/\s$/.test(s) ? " " : ""));
+      return;
+    }
     const p = sentenceProblem(s, this.allowed, this.sensitive);
     if (!p) return this.out(s);
     this.hits.push({ kind: p, text: s.slice(0, 200) });

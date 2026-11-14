@@ -62,7 +62,7 @@ import {
 import { createResponse, llmConfigured, providerOf, readingModel, streamResponse, type ResponseObject } from "./openai_responses.ts";
 import {
   allowedDates, chartCard, classifyQuestion, followupChips, guardText, JsonFieldStream, LIVE_PROMPT_VERSION, liveAskSchema,
-  liveSystem, liveUserMessage, normalizeScreen, StreamGuard, type GuardHit, type LiveContextInput, type LiveWindow,
+  liveSystem, liveUserMessage, normalizeScreen, StreamGuard, alienScript, type GuardHit, type LiveLocale, type LiveContextInput, type LiveWindow,
 } from "./live_ai.ts";
 import { BOND_TERMS, glossEntry } from "./glossary.ts";
 import { isQuotaCap, isTransientLlmError } from "./llm_policy.ts";
@@ -3877,7 +3877,11 @@ function composeAskCopy(
     : { good: "Good time", caution: "Caution time" };
   const pick = a.best_window === "g2" ? good[1] ?? good[0] : a.best_window === "g1" ? good[0] : null;
   const c = a.caution_window === "c1" ? caution[0] : null;
-  const strip = (t: string, max: number) => safeString(t).replace(/\b\d{1,2}[:.]\d{2}\s*(am|pm)?/gi, "").slice(0, max);
+  // Wrong-script text (e.g. Tamil in a Telugu answer) is dropped, so the grounded fallback shows instead.
+  const strip = (t: string, max: number) => {
+    const v = safeString(t).replace(/\b\d{1,2}[:.]\d{2}\s*(am|pm)?/gi, "").slice(0, max);
+    return alienScript(v, locale as LiveLocale) ? "" : v;
+  };
   return {
     direct_answer: strip(a.direct_answer, 700) || fallback.direct_answer,
     best_time: pick ? `${prefix.good}: ${formatAskWindow(pick)}` : fallback.best_time,
@@ -7662,7 +7666,9 @@ export async function askStreamResponse(
               try {
                 parsed = JSON.parse(resp.output_text ?? "{}");
               } catch { /* keep what was shown */ }
-              if (!shownByModel) emit(template.direct_answer);
+              // Nothing (or only "…") shown, e.g. a wrong-script answer the guard dropped: show the grounded answer.
+              const shownLetters = (shownByModel.match(/[\p{L}]/gu) ?? []).length;
+              if (!shownByModel || (guardHits.some((h) => h.kind === "script") && shownLetters < 20)) emit((shownByModel ? " " : "") + template.direct_answer);
               const pick = parsed.best_window === "g3" ? good[2] ?? null : parsed.best_window === "g2" ? good[1] ?? good[0] : parsed.best_window === "g1" ? good[0] : null;
               const cw = parsed.caution_window === "c1" ? caution[0] : null;
               const al = guardText(safeString(parsed.action_line).slice(0, 200), locale, allowed, Boolean(cls.sensitive));

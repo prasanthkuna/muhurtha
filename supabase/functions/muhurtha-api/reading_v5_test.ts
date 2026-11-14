@@ -269,3 +269,20 @@ Deno.test("v5: rollout is per locale (default en+hi, env overrides)", async () =
     if (prev == null) Deno.env.delete("READING_V5"); else Deno.env.set("READING_V5", prev);
   }
 });
+
+Deno.test("Ask stream guard drops wrong-script sentences (Tamil in Telugu, Telugu in Hindi)", async () => {
+  const { StreamGuard } = await import("./live_ai.ts");
+  const run = (loc: "te" | "hi", text: string) => {
+    let out = "";
+    const g = new StreamGuard(loc, { dayMonths: new Set(), months: new Set(), years: new Set() }, false, (t) => (out += t));
+    for (const ch of text.match(/.{1,7}/gsu) ?? []) g.push(ch);
+    g.end();
+    return { out: out.trim(), script: g.hits.some((h) => h.kind === "script") };
+  };
+  const ta = run("te", "ஈரோஜு கலந்த நாளாக இருப்பதால், அம்மாவிடம் அமைதியாகப் பேசுங்கள். ");
+  assert(ta.script && !/[\u0B80-\u0BFF]/.test(ta.out), ta.out);
+  const ok = run("te", "ఈరోజు అమ్మతో ప్రశాంతంగా మాట్లాడండి. ");
+  assert(!ok.script && ok.out.length > 10, ok.out);
+  const hi = run("hi", "आज माँ से शांति से बात करें। ఈరోజు బాగుంది. ");
+  assert(hi.script && !/[\u0C00-\u0C7F]/.test(hi.out) && hi.out.includes("माँ"), hi.out);
+});

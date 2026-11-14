@@ -101,6 +101,8 @@ const QUESTIONS: Record<L, string[]> = {
 
 const SCRIPT: Record<L, RegExp> = { en: /[A-Za-z]/g, te: /[\u0C00-\u0C7F]/g, hi: /[\u0900-\u097F]/g };
 
+const visibleLetters = (t: string) => (t.match(/[\p{L}]/gu) ?? []).length;
+
 export function scriptShare(text: string, l: L): number {
   const letters = (text.match(/[\p{L}\p{M}]/gu) ?? []).length;
   if (!letters) return 0;
@@ -164,6 +166,9 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
     err = e instanceof Error ? e.message : String(e);
   }
   guard.end();
+  // Same as production: a wrong-script answer is dropped by the guard and the grounded answer is shown.
+  const scriptDrift = guard.hits.some((h) => h.kind === "script");
+  if (scriptDrift && visibleLetters(shown) < 20) shown = groundedFallback(c.question, c.locale, facts, date, null) ?? shown;
   let parsed: Record<string, unknown> = {};
   try {
     parsed = JSON.parse(resp?.output_text ?? "{}");
@@ -177,10 +182,11 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
   const rawSafetyHits = rawSentences.filter((s) => sentenceProblem(s, allowed, true) === "safety");
   const sd = String(parsed.suggested_date ?? "");
   const action = String(parsed.action_line ?? "");
-  const lang = scriptShare(raw + " " + action, c.locale);
   const banned = VOICE_BANNED[c.locale].filter((w) => (raw + action).toLowerCase().includes(w.toLowerCase()));
   const jargon = jargonHits(raw + " " + action, c.locale);
   const actionGuard = guardText(action, c.locale, allowed, Boolean(cls.sensitive));
+  // Language of what the user sees: the shown answer, plus the action line when the guard keeps it.
+  const lang = scriptShare(shown + " " + (actionGuard.hits.length ? "" : action), c.locale);
   const checks = {
     ok: !err && Boolean(raw.trim()),
     json: Boolean(parsed.answer),
@@ -191,6 +197,7 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
     voice_clean: banned.length === 0 && jargon.length === 0,
     safety: !cls.sensitive || rawSafetyHits.length === 0,
     length_ok: raw.length <= 700,
+    script_guarded: !scriptDrift || visibleLetters(shown) >= 20,
     // Cross-screen: never call a mixed/rest day good for big starts (the Today verdict).
     verdict_consistent: !askVerdictClash(raw, facts?.days.find((d) => d.date === date)?.verdict?.tone ?? null, c.locale),
     // The no-LLM fallback must answer this question too (non-empty, in the right script).
@@ -205,7 +212,7 @@ export async function runAskCase(c: EvalCase, date: string): Promise<Record<stri
     case_id: c.case_id, locale: c.locale, pass, checks,
     latency_ms: Date.now() - t0, first_token_ms: firstToken, first_shown_ms: firstShown,
     output: {
-      q: c.question, intent: cls.intent, sensitive: cls.sensitive, raw: raw.slice(0, 700), shown: shown.slice(0, 700),
+      q: c.question, script_drift: scriptDrift, intent: cls.intent, sensitive: cls.sensitive, raw: raw.slice(0, 700), shown: shown.slice(0, 700),
       action_line: action, suggested_date: sd, guard_hits: guard.hits, raw_date_hits: rawDateHits.slice(0, 3),
       raw_safety_hits: rawSafetyHits.slice(0, 3), script_share: Math.round(lang * 100) / 100, banned, jargon, error: err.slice(0, 200),
       usage: resp?.usage ?? null, cost_usd: costUsd(model, resp?.usage ?? null),
