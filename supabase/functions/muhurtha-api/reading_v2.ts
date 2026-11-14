@@ -7,12 +7,12 @@
  * zero-call adapter for readings written by the old 6-phase pack pipeline.
  */
 import { DATE_RULE, jargonHits, polishDeep, VOICE_BLOCK } from "./voice.ts";
-import { arcsOf, clipSentences, isV5, stageKey, V5_LIMITS, v5Flags, v5Rules } from "./reading_v5.ts";
+import { arcsOf, clipSentences, hasAlien, isV5, stripAlien, stageKey, V5_LIMITS, v5Flags, v5Rules } from "./reading_v5.ts";
 import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 import { type DayAngle, OPENER_HOW } from "./angles.ts";
 import { alreadySaid, themeCheck, type ThemeStats } from "./theme_check.ts";
-import { engineDayCopy, engineSlotNote } from "./engine_copy.ts";
+import { engineDayCopy, engineSlotNote, starName } from "./engine_copy.ts";
 import type { ChartFacts, ReadingStory } from "./reading_v4.ts";
 import { checkClaims, engineChapterCopy, requiredIdsV4, v4SystemRules } from "./reading_v4.ts";
 
@@ -757,9 +757,9 @@ const WEEKDAY_NAMES: Record<ReadingLocale, RegExp> = {
   hi: /(रविवार|सोमवार|मंगलवार|बुधवार|गुरुवार|शुक्रवार|शनिवार)/,
 };
 const TONE_LABEL_RE: Record<ReadingLocale, RegExp> = {
-  en: /\b(mixed|careful|supportive|balanced)\s+(day\s+)?(tone|tones|energy)\b|\bday tone\b|\btara\b/i,
-  te: /(మిక్స్‌డ్ టోన్|డే టోన్|టోన్ |తార బలం|తారా బలం)/,
-  hi: /(मिक्स्ड टोन|डे टोन)/,
+  en: /\b(mixed|careful|supportive|balanced)\s+(day\s+)?(tone|tones|energy)\b|\bday tone\b|\btara\b|\b(a|the|this|today'?s)\s+(warm,?\s+)?(mixed|supportive|restful|rest)\s+day\b/i,
+  te: /(మిక్స్‌డ్ టోన్|డే టోన్|టోన్ |తార బలం|తారా బలం|మిశ్రమ రోజు|మిక్స్‌డ్ రోజు|మిశ్రమమైన రోజు)/,
+  hi: /(मिक्स्ड टोन|डे टोन|मिला-जुला दिन|मिलाजुला दिन|मिश्रित दिन)/,
 };
 const NAK_EN_RE = new RegExp(`\\b(${Object.keys(NAKSHATRA_TE).sort((a, b) => b.length - a.length).join("|")})\\b`, "g");
 
@@ -832,13 +832,13 @@ const STOCK_LINK = /నక్షత్రం వల్ల ఈరోజు|\bthan
 const REASON_RE: Record<ReadingLocale, RegExp> = {
   en: /\b(because|since|so that|so|as (the|today|it|this|your)|which (means|makes|favours|favors|suits|helps)|that'?s why|this means|means|thanks to|with (today'?s|the|a) )\b/i,
   te: /(కాబట్టి|వల్ల|అందుకే|కనుక|ప్రభావంతో|కారణంగా|అంటే|కావడంతో|కావడం వల్ల|కదా|ఉండటంతో)/,
-  hi: /(क्योंकि|इसलिए|के कारण|की वजह से|यानी|इस वजह से)/,
+  hi: /(क्योंकि|इसलिए|के कारण|की वजह से|यानी|इस वजह से|जिससे|ताकि|इसी से)/,
 };
 
 const TITHI_WORD_RE: Record<ReadingLocale, RegExp> = {
   en: /\b(tithi|full moon|new moon|purnima|amavasya|ekadashi|chaturthi|ashtami|pratipada|dashami|navami|saptami|shashthi|panchami|tritiya|dwitiya|dvitiya|trayodashi|dwadashi|chaturdashi|lunar day)\b/i,
   te: /(తిథి|పౌర్ణమి|పున్నమి|అమావాస్య|ఏకాదశి|చవితి|చతుర్థి|అష్టమి|పాడ్యమి|దశమి|నవమి|సప్తమి|షష్ఠి|పంచమి|తదియ|విదియ|త్రయోదశి|ద్వాదశి|చతుర్దశి)/,
-  hi: /(तिथि|पूर्णिमा|अमावस्या|एकादशी|चतुर्थी|अष्टमी|प्रतिपदा)/,
+  hi: /(तिथि|पूर्णिमा|अमावस्या|एकादशी|चतुर्थी|अष्टमी|प्रतिपदा|द्वितीया|तृतीया|पंचमी|षष्ठी|सप्तमी|नवमी|दशमी|द्वादशी|त्रयोदशी|चतुर्दशी)/,
 };
 
 /**
@@ -848,7 +848,8 @@ const TITHI_WORD_RE: Record<ReadingLocale, RegExp> = {
 export function panchangReason(d: V2DayCopy, fx: V2DayFact | undefined, locale: ReadingLocale): boolean {
   if (!fx) return false;
   const text = `${d.line ?? ""} ${d.body ?? ""}`;
-  const star = fx.nakshatra ? text.toLowerCase().includes(fx.nakshatra.toLowerCase().split(" ").slice(-1)[0]) || (NAKSHATRA_TE[fx.nakshatra] ? text.includes(NAKSHATRA_TE[fx.nakshatra]) : false) : false;
+  const hiStar = locale === "hi" && fx.nakshatra ? starName(fx.nakshatra, "hi").split(" ").slice(-1)[0] : "";
+  const star = fx.nakshatra ? text.toLowerCase().includes(fx.nakshatra.toLowerCase().split(" ").slice(-1)[0]) || (NAKSHATRA_TE[fx.nakshatra] ? text.includes(NAKSHATRA_TE[fx.nakshatra]) : false) || (hiStar.length >= 2 && text.includes(hiStar)) : false;
   const tithiWord = (fx.tithi ?? "").split(" ").slice(-1)[0]?.toLowerCase() ?? "";
   const tithi = TITHI_WORD_RE[locale].test(text) || (tithiWord.length >= 4 && text.toLowerCase().includes(tithiWord));
   const yoga = Boolean(fx.angle) && fx.yoga.length >= 4 && text.toLowerCase().includes(fx.yoga.toLowerCase());
@@ -873,7 +874,9 @@ export function chapterTitleProblems(title: string, leadSeen: Set<string>): stri
   return out;
 }
 
-const CONTENT_STOP = new Set(["your", "you", "the", "and", "for", "with", "that", "this", "today", "from", "into", "some", "any", "one", "all", "are", "can", "will", "just", "keep", "make", "get", "use", "time", "slot", "good", "day"]);
+const CONTENT_STOP = new Set(["your", "you", "the", "and", "for", "with", "that", "this", "today", "from", "into", "some", "any", "one", "all", "are", "can", "will", "just", "keep", "make", "get", "use", "time", "slot", "good", "day",
+  "अपने", "अपनी", "अपना", "करें", "कीजिए", "किसी", "लिए", "साथ", "बातें", "थोड़ा", "थोड़ी", "दिन", "आज", "समय", "उनके", "उनकी", "जैसे",
+  "మీరు", "మీకు", "ఈరోజు", "కోసం", "చేయండి", "రోజు", "ఒకటి", "కొంచెం", "మీ", "ఇంకా"]);
 function contentWords(s: string): Set<string> {
   return new Set(tokenize(s).filter((w) => w.length >= 4 && !CONTENT_STOP.has(w)).map(titleStem));
 }
@@ -1127,7 +1130,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     "Rewrite ONLY these items. Fix every listed problem and keep everything else about the rules.",
     "Problems:",
     ...v.flags.filter((f) => f.section !== "days" || scope.days?.includes(String(f.id))).map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
-    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters; title_too_long = 2-4 words, at most 28 characters; formula_phrase (stock link) = drop 'నక్షత్రం వల్ల ఈరోజు' / 'thanks to <star>' and give the reason in fresh words; jargon = replace corporate/tech-job words (backend, workflow, bottleneck, operational, stakeholders ...) with everyday words and do not assume a profession; reason_missing = in the line or body name that day's star (or tithi) and say plainly WHY it suits this action (because / so / which means; Telugu కాబట్టి / అందుకే / కావడంతో), without opening the body with the star's name.",
+    "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and 'a mixed/supportive/rest day' (the app shows the tone) and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters; title_too_long = 2-4 words, at most 28 characters; formula_phrase (stock link) = drop 'నక్షత్రం వల్ల ఈరోజు' / 'thanks to <star>' and give the reason in fresh words; jargon = replace corporate/tech-job words (backend, workflow, bottleneck, operational, stakeholders ...) with everyday words and do not assume a profession; reason_missing = in the line or body name that day's star (or tithi) and say plainly WHY it suits this action (because / so / which means; Telugu కాబట్టి / అందుకే / కావడంతో), without opening the body with the star's name.",
     "stock_star_line = drop '<star> is today's star' / 'today's star is'; give the reason from MEANINGS in fresh words; hint_word = never write 'hint'; slot_opener = start the slot note with what the slot suits, not 'Use this slot/A good slot/Good for'; trait_off_day = remove every mention of their personality trait (this day's angle.trait_ok is false); overused:<word> = do not use that word; ngram_repeat = do not use that phrase; title_formula = no '<Star>'s <Noun>' title; star_misspelled = spell the star/tithi exactly as in FACTS; unsupported_claim:<x> = either cite the EVIDENCE id that states <x> in evidence_ids or remove <x> (never invent a chart fact).",
     ...(isV5(facts) ? ["lord_chain = drop 'X lord in Y links/connects A with B' and say what it means for the person in plain words; truncated = end on a complete sentence and stay inside the length; opener_repeat = open this chapter differently from the others; stage_missing = frame the chapter by its life_stage and ages first; past_asserted = describe what the chart suggests for that age, never state an event as fact; past_hedge = no 'may have/perhaps you': say what the stretch favoured; action_missing = add ONE concrete thing to do (verb first); why_missing = add the one-sentence plain why; verdict_mismatch = this day's verdict is not for big starts: make the line and do chips fit verdict.tone (finish, review, keep light)."] : []),
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 45))}`,
@@ -1226,9 +1229,39 @@ function nativeView(loc: string, xs: string[] | undefined): string[] {
 }
 
 /** Build the content object today's PWA and engine readers understand. */
+/** Last-mile script guard for te/hi: sentences in a drifted script are dropped; a chapter or
+ * day left without a clean title/body falls back to the engine's own copy for that item. */
+export function scriptGuard(c: V2Content, facts: V2Facts): V2Content {
+  const L = facts.locale;
+  if (L === "en") return c;
+  const deep = (v: unknown): unknown =>
+    typeof v === "string" ? stripAlien(v, L)
+    : Array.isArray(v) ? v.map(deep).filter((x) => x !== "")
+    : v && typeof v === "object" ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, deep(x)]))
+    : v;
+  if (!hasAlien(JSON.stringify(c), L)) return c;
+  const out = deep(c) as V2Content;
+  const chF = new Map(facts.chapters.map((f) => [f.chapter_id, f]));
+  const dayF = new Map(facts.days.map((d) => [d.date, d]));
+  const summary = new Set(facts.chapters.filter((f) => f.kind === "summary").map((f) => f.chapter_id));
+  out.chapters = (out.chapters ?? []).map((ch) => {
+    const f = chF.get(Number(ch.chapter_id));
+    if (!f || (ch.title && ch.highlight && (ch.body || summary.has(f.chapter_id)))) return ch;
+    const e = engineChapterCopy(f, L);
+    return { ...ch, title: ch.title || e.title, highlight: ch.highlight || e.highlight, body: summary.has(f.chapter_id) ? "" : ch.body || e.body };
+  });
+  out.days = (out.days ?? []).map((d) => {
+    const f = dayF.get(d.date);
+    if (!f || (d.title && d.line && d.body)) return d;
+    const e = engineDayCopy(f, L) as Partial<V2DayCopy>;
+    return { ...d, title: d.title || e.title || "", line: d.line || e.line || "", body: d.body || e.body || "" };
+  });
+  return out;
+}
+
 export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptions): Record<string, unknown> {
   // Older stored readings (v2.2 and legacy) get the same last-mile voice fixes (human dates, no "window").
-  const c = polishDeep(raw, opts.locale, POLISH_SKIP);
+  const c = scriptGuard(polishDeep(raw, opts.locale, POLISH_SKIP), facts);
   const now = DateTime.fromISO(opts.dateStr, { zone: opts.tz }).set({ hour: 12 }).toMillis();
   const byDate = new Map((c.days ?? []).map((d) => [d.date, d]));
   const byWeekday = new Map((c.weekdays ?? []).map((d) => [d.weekday, d]));

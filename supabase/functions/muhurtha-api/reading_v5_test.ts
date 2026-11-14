@@ -226,3 +226,11 @@ Deno.test("small fixes: no past best dates in the current month; partner names d
   assertEquals(firstName("McKenzie", "Partner"), "McKenzie");
   assertEquals(firstName("", "Partner"), "Partner");
 });
+
+Deno.test("v5: stripAlien drops drifted Tamil sentences from Telugu, keeps clean ones", async () => {
+  const { stripAlien, hasAlien } = await import("./reading_v5.ts");
+  const t = "ఈ దశ బంధాలను బలపరుస్తుంది. அளவோடு ஏற்க வேண்டும். మాట నెమ్మదిగా చెప్పండి.";
+  const out = stripAlien(t, "te");
+  if (hasAlien(out, "te") || !out.includes("బంధాలను") || !out.includes("నెమ్మదిగా")) throw new Error(out);
+  if (stripAlien("Plain English.", "en") !== "Plain English.") throw new Error("en changed");
+});

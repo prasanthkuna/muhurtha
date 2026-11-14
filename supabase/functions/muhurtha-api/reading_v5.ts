@@ -198,7 +198,7 @@ export function v5Rules(f: V2Facts, openersLine: string, banned: string[]): stri
 /** Per-part language line (stronger than the global one: parts are written separately). */
 export const V5_LANGUAGE_LINE: Record<ReadingLocale, string> = {
   en: "Language: English, plain and warm.",
-  te: "Language: Telugu (తెలుగు script) in every text field: casual but respectful, the way a caring elder talks (మీరు, not నువ్వు); everyday words, English only where Telugu speech uses it (career, office, plan), never whole English sentences.",
+  te: "Language: Telugu (తెలుగు script) in every text field: casual but respectful, the way a caring elder talks (మీరు, not నువ్వు); everyday words, English only where Telugu speech uses it (career, office, plan), never whole English sentences. Only Telugu letters: never Tamil, Kannada or Malayalam letters or words.",
   hi: "Language: natural Hindi (देवनागरी) in every text field: warm and respectful (आप), everyday spoken Hindi rather than Sanskrit-heavy words; English only where Hindi speech uses it, never whole English sentences.",
 };
 
@@ -236,6 +236,17 @@ const NEGATION: Record<ReadingLocale, RegExp> = {
 };
 const SCRIPT_RE: Record<"te" | "hi", RegExp> = { te: /[\u0C00-\u0C7F]/g, hi: /[\u0900-\u097F]/g };
 const ALIEN_RE: Record<"te" | "hi", RegExp> = { te: /[\u0B80-\u0BFF\u0C80-\u0CFF\u0D00-\u0D7F]/, hi: /[\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF]/ };
+
+/** Telugu/Hindi copy with stray Tamil/Kannada/Malayalam/Bengali letters (model script drift):
+ * drop the drifted sentences so a user never sees another script. "" when nothing clean is left. */
+export function stripAlien(text: string, locale: ReadingLocale): string {
+  if (locale === "en" || !text || !ALIEN_RE[locale as "te" | "hi"].test(text)) return text;
+  const re = ALIEN_RE[locale as "te" | "hi"];
+  return text.split(/(?<=[.!?।])\s+/).filter((x) => !re.test(x)).join(" ").trim();
+}
+export function hasAlien(text: string, locale: ReadingLocale): boolean {
+  return locale !== "en" && Boolean(text) && ALIEN_RE[locale as "te" | "hi"].test(text);
+}
 
 /** True when text ends mid-sentence (cut off) rather than on terminal punctuation. */
 export function looksTruncated(text: string): boolean {

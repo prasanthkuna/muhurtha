@@ -15,7 +15,7 @@ import { costUsd, readingModel, type ReasoningEffort, streamResponse } from "./o
 import { jargonHits, VOICE_BANNED } from "./voice.ts";
 import { BULK_SHARDS, mergeShards, offScriptShare, planShards, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
 import { themeOk } from "./theme_check.ts";
-import { buildSystemPrompt, mergeRepair, repairPrompt, repairScope, sanitizeContent, type V2Content, validateContent } from "./reading_v2.ts";
+import { buildSystemPrompt, mergeRepair, repairPrompt, repairScope, sanitizeContent, scriptGuard, type V2Content, validateContent } from "./reading_v2.ts";
 import { createWithSchema } from "./reading_jobs.ts";
 import { isV4 } from "./reading_v2.ts";
 import { isV5 } from "./reading_v5.ts";
@@ -416,7 +416,10 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
   const unsupportedPct = Number(st.unsupported_pct ?? 0);
   const allDays = full.days.length === facts.days.length;
   const v5 = isV5(facts);
-  const rc = vf.flags.flatMap((f) => f.reasons).reduce((m: Record<string, number>, r) => ((m[r.split(":")[0]] = (m[r.split(":")[0]] ?? 0) + 1), m), {});
+  // Gate on what users see: the view's script guard drops drifted-script sentences first.
+  const rawWrongScript = vf.flags.filter((f) => f.reasons.includes("wrong_script")).length;
+  const vis = v5 ? validateContent(scriptGuard(full, facts), facts) : vf;
+  const rc = vis.flags.flatMap((f) => f.reasons).reduce((m: Record<string, number>, r) => ((m[r.split(":")[0]] = (m[r.split(":")[0]] ?? 0) + 1), m), {});
   // v5 quality gates after the one repair (production does the same): hard zero for the
   // cross-screen and script problems, a small budget for style ones.
   const v5Gate = !v5 || ((rc.lord_chain ?? 0) === 0 && (rc.wrong_script ?? 0) <= 1 && (rc.verdict_mismatch ?? 0) <= 1 && (rc.truncated ?? 0) <= 1 &&
@@ -429,7 +432,7 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
     output: {
       // Synthetic profile only: the full content, for local screenshots of the new screens.
       ...(keepContent ? { content: full } : {}),
-      v: 4, shard_ms: times, errors: errs, off_script_retries: retried, ready_ms: readyMs, fill_ms: fillMs, lazy_ms: lazyMs, lazy_chapters: lazyN,
+      v: v5 ? 5 : 4, raw_wrong_script: rawWrongScript, reasons_visible: rc, shard_ms: times, errors: errs, off_script_retries: retried, ready_ms: readyMs, fill_ms: fillMs, lazy_ms: lazyMs, lazy_chapters: lazyN,
       initial: { ...init, cost: round6(init.cost) }, fill: { ...fill, cost: round6(fill.cost) }, lazy: { ...lazy, cost: round6(lazy.cost) },
       cost_usd: round6(init.cost + fill.cost), cost_with_lazy: round6(init.cost + fill.cost + lazy.cost),
       input_tokens: init.input + fill.input, output_tokens: init.output + fill.output, cache_write_tokens: init.cache_write + fill.cache_write,
