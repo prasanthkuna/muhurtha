@@ -286,3 +286,12 @@ Deno.test("Ask stream guard drops wrong-script sentences (Tamil in Telugu, Telug
   const hi = run("hi", "आज माँ से शांति से बात करें। ఈరోజు బాగుంది. ");
   assert(hi.script && !/[\u0C00-\u0C7F]/.test(hi.out) && hi.out.includes("माँ"), hi.out);
 });
+
+Deno.test("stalled background parts fall back to the foreground (default on, env can turn it off)", async () => {
+  const { shardStallInline } = await import("./reading_jobs.ts");
+  Deno.env.delete("READING_STALL_INLINE");
+  assert(shardStallInline());
+  Deno.env.set("READING_STALL_INLINE", "0");
+  assert(!shardStallInline());
+  Deno.env.delete("READING_STALL_INLINE");
+});

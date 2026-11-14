@@ -701,6 +701,11 @@ export async function sweepReadingJobs(
 const SHARD_TRIES = 2;
 const SHARD_TIMEOUT_MS = 6 * 60_000;
 const SHARD_CLAIM_MS = 40_000;
+/** A background part still queued/in progress after this long is written in the foreground. */
+const SHARD_STALL_MS = 120_000;
+export function shardStallInline(): boolean {
+  return (Deno.env.get("READING_STALL_INLINE") ?? "1") !== "0";
+}
 
 /** Submit every shard that is not done yet (in parallel). Done shards are kept: resumable. */
 export async function submitShards(admin: SupabaseClient, job: JobRow, reading: ReadingRow): Promise<JobRow> {
@@ -821,6 +826,7 @@ async function advanceSharded(
   const running = plans.filter((p) => parts[p.key]?.status === "running" && parts[p.key]?.rid);
   const fetched = await Promise.allSettled(running.map((p) => retrieveResponse(parts[p.key]!.rid!)));
   const retry: typeof plans = [];
+  const stalled: ShardKey[] = [];
   for (let i = 0; i < running.length; i++) {
     const p = running[i];
     const e = parts[p.key]!;
@@ -829,6 +835,13 @@ async function advanceSharded(
     const resp = r.value;
     const sub = e.submitted_at ? Date.parse(e.submitted_at) : Date.parse(job.started_at ?? job.created_at);
     if (resp.status === "queued" || resp.status === "in_progress") {
+      // Background queue stalled (seen 14 Nov: parts queued at OpenAI for 6+ min while foreground
+      // calls took ~10s): write the part in the foreground instead of waiting or resubmitting.
+      if (now - sub > SHARD_STALL_MS && shardStallInline()) {
+        parts[p.key] = { status: "inline", rid: null, tries: e.tries, submitted_at: new Date(now).toISOString(), error: `bg_stall:${resp.status}` };
+        stalled.push(p.key);
+        continue;
+      }
       if (now - sub > SHARD_TIMEOUT_MS) {
         e.error = "timeout";
         retry.push(p);
@@ -863,6 +876,8 @@ async function advanceSharded(
       retry.push(p);
     }
   }
+  // Stalled background parts: written in the foreground; the result lands via withJobClaim.
+  for (const k of stalled) background(runInlinePart(admin, job.id, reading, k));
   for (const p of plans) {
     const e = parts[p.key];
     if (!e) parts[p.key] = { status: "queued", rid: null, tries: 0 };
@@ -911,7 +926,7 @@ async function advanceSharded(
       return await failJob(admin, job, reading, exhausted);
     }
     for (const p of out) parts[p.key] = { status: "queued", rid: null, tries: 0, error: parts[p.key]?.error };
-    const stillRunning = plans.some((p) => parts[p.key]?.status === "running");
+    const stillRunning = plans.some((p) => parts[p.key]?.status === "running" || parts[p.key]?.status === "inline");
     return await updateJob(admin, job.id, {
       ...totals, shards: { v: 1, parts }, first_insight_ms: firstInsight, error: exhausted.slice(0, 500),
       attempts: dayCap ? job.attempts : job.attempts + 1,
@@ -976,9 +991,15 @@ async function withJobClaim(admin: SupabaseClient, jobId: string, fn: (job: JobR
 }
 
 /** Inline part A: a streamed foreground call; the result lands in the job's shard state. */
-export async function runInlineA(admin: SupabaseClient, jobId: string, reading: ReadingRow): Promise<void> {
+export function runInlineA(admin: SupabaseClient, jobId: string, reading: ReadingRow): Promise<void> {
+  return runInlinePart(admin, jobId, reading, "A");
+}
+
+/** Any part as a streamed foreground call (part A always; others when the background queue stalls). */
+export async function runInlinePart(admin: SupabaseClient, jobId: string, reading: ReadingRow, key: ShardKey): Promise<void> {
   const facts = reading.facts!;
-  const plan = planShards(facts).find((p) => p.key === "A")!;
+  const plan = planShards(facts).find((p) => p.key === key);
+  if (!plan) return;
   const t0 = Date.now();
   let firstToken: number | null = null;
   let resp: ResponseObject | null = null;
@@ -986,7 +1007,7 @@ export async function runInlineA(admin: SupabaseClient, jobId: string, reading: 
   try {
     resp = await shardCall(facts, plan, {
       background: false, timeoutMs: INLINE_TIMEOUT_MS,
-      metadata: { job_id: jobId, reading_id: reading.id, locale: reading.locale, shard: "A" },
+      metadata: { job_id: jobId, reading_id: reading.id, locale: reading.locale, shard: key },
       stream: { onFirstToken: (ms) => (firstToken = ms) },
     });
   } catch (e) {
@@ -999,11 +1020,11 @@ export async function runInlineA(admin: SupabaseClient, jobId: string, reading: 
     job_id: jobId, profile_id: (jrow as { profile_id?: string } | null)?.profile_id ?? reading.profile_id, purpose: "reading_shard",
     model: resp?.model ?? readingModel(), response_id: resp?.id ?? null, locale: reading.locale,
     status: resp?.status ?? "error", usage: resp?.usage, latency_ms: ms, error: err ? err.slice(0, 300) : resp?.error ?? resp?.incomplete_reason,
-    meta: { shard: "A", inline: true, first_token_ms: firstToken },
+    meta: { shard: key, inline: true, first_token_ms: firstToken },
   });
   await withJobClaim(admin, jobId, (job) => {
     const parts = { ...(job.shards?.parts ?? {}) };
-    const e = parts.A;
+    const e = parts[key];
     if (e?.status !== "inline") return null; // superseded (timed out and resubmitted): drop it
     const patch: Partial<JobRow> = {
       input_tokens: job.input_tokens + (resp?.usage?.input_tokens ?? 0),
@@ -1013,10 +1034,10 @@ export async function runInlineA(admin: SupabaseClient, jobId: string, reading: 
       cost_usd: Number(job.cost_usd ?? 0) + cost,
     };
     if (parsed) {
-      parts.A = { ...e, status: "done", ms, content: parsed as unknown as Record<string, unknown> };
-      if (job.first_insight_ms == null) patch.first_insight_ms = Date.now() - Date.parse(job.created_at);
+      parts[key] = { ...e, status: "done", ms, content: parsed as unknown as Record<string, unknown> };
+      if (key === "A" && job.first_insight_ms == null) patch.first_insight_ms = Date.now() - Date.parse(job.created_at);
     } else {
-      parts.A = { status: "queued", rid: null, tries: e.tries, error: (err || `no_content:${resp?.status ?? ""}`).slice(0, 200) };
+      parts[key] = { status: "queued", rid: null, tries: e.tries, error: (err || `no_content:${resp?.status ?? ""}`).slice(0, 200) };
     }
     patch.shards = { v: 1, parts };
     return patch;
