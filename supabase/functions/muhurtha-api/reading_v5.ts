@@ -13,6 +13,7 @@
  */
 import type { ChartFacts } from "./reading_v4.ts";
 import type { ReadingLocale, V2ChapterFact, V2Content, V2Facts } from "./reading_v2.ts";
+import { ageYears, SUMMARY_MAX_AGE } from "./timeline_window.ts";
 
 /** Rollout switch, per locale. env READING_V5 wins: "0" off, "1" all locales, or a list
  * ("en,hi"). Otherwise the default: on for en and hi (both passed the eval gate); Telugu stays
@@ -137,6 +138,28 @@ export function enrichChapters(chapters: V2ChapterFact[], chart: ChartFacts | un
 }
 
 export type Arc = { md: string; from: number | null; to: number | null; tense: V2ChapterFact["tense"]; chapter_ids: number[] };
+
+/**
+ * Chapter ages as completed years. Readings before 14 Nov 2026 stored rounded ages (22.6 -> 23),
+ * so every boundary near a birthday read a year too old. The early-years row starts at birth,
+ * which gives the birth instant to recompute them; without it the stored ages stay.
+ * Also marks a last summary row cut at age 80 (its mahadasha runs on) as open-ended.
+ */
+export function fixChapterAges(f: V2Facts): V2Facts {
+  const chs = f.chapters ?? [];
+  const first = chs[0];
+  const birthIso = first && first.early && first.start_iso ? first.start_iso : null;
+  const birth = birthIso ? new Date(birthIso) : null;
+  if (!chs.length) return f;
+  const last = chs[chs.length - 1];
+  const chapters = chs.map((c) => {
+    const age_from = birth && c.start_iso ? ageYears(birth, new Date(c.start_iso)) : c.age_from ?? null;
+    const age_to = birth && c.end_iso ? ageYears(birth, new Date(c.end_iso)) : c.age_to ?? null;
+    const open_ended = c === last && c.kind === "summary" && !c.early && (age_to ?? 0) >= SUMMARY_MAX_AGE;
+    return { ...c, age_from, age_to, ...(open_ended ? { open_ended: true } : {}) };
+  });
+  return { ...f, chapters };
+}
 
 /** Mahadasha arcs in order (summary rows and detail rows grouped by md lord; childhood rows = "early"). */
 export function arcsOf(chapters: V2ChapterFact[]): Arc[] {
@@ -295,7 +318,7 @@ export function wrongScript(text: string, locale: ReadingLocale): boolean {
 }
 const opener3 = (t: string) => (t ?? "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean).slice(0, 3).join(" ");
 
-export type V5Flag = { section: "chapters" | "days" | "areas" | "profile"; id: string | number; reason: string };
+export type V5Flag = { section: "chapters" | "days" | "areas" | "profile" | "arcs"; id: string | number; reason: string };
 
 export function v5Flags(c: Partial<V2Content>, f: V2Facts): V5Flag[] {
   const L = f.locale;
@@ -322,6 +345,12 @@ export function v5Flags(c: Partial<V2Content>, f: V2Facts): V5Flag[] {
       if (PAST_HEDGE[L].test(text)) out.push({ section: "chapters", id, reason: "past_hedge" });
     } else if (!String(ch.action ?? "").trim()) out.push({ section: "chapters", id, reason: "action_missing" });
     if (!String(ch.why ?? "").trim()) out.push({ section: "chapters", id, reason: "why_missing" });
+  }
+  // Every arc needs its line and the reading its life story (the Life map headers and story card).
+  const arcKeys = [...new Set(arcsOf(f.chapters).map((x) => x.md))];
+  const lines = new Set((c.arcs ?? []).filter((x) => String(x.line ?? "").trim()).map((x) => x.md));
+  if (arcKeys.length && (arcKeys.some((k) => !lines.has(k)) || !String(c.life_story ?? "").trim())) {
+    out.push({ section: "arcs", id: "arcs", reason: "arcs_missing" });
   }
   for (const a of c.areas ?? []) {
     const text = `${a.headline} ${a.summary} ${a.why ?? ""}`;

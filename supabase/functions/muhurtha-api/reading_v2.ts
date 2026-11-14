@@ -7,7 +7,7 @@
  * zero-call adapter for readings written by the old 6-phase pack pipeline.
  */
 import { DATE_RULE, jargonHits, polishDeep, VOICE_BLOCK } from "./voice.ts";
-import { arcsOf, clipSentences, fixLordPairs, hasAlien, isV5, stripAlien, stageKey, V5_LIMITS, v5Flags, v5Rules } from "./reading_v5.ts";
+import { arcsOf, clipSentences, fixChapterAges, fixLordPairs, hasAlien, isV5, stripAlien, stageKey, V5_LIMITS, v5Flags, v5Rules } from "./reading_v5.ts";
 import { DateTime } from "luxon";
 import { localizeGrahaNames } from "./planner.ts";
 import { type DayAngle, OPENER_HOW } from "./angles.ts";
@@ -87,6 +87,8 @@ export type V2ChapterFact = {
   md_lords?: string[];
   /** Summary row that covers childhood up to where full chapters begin. */
   early?: boolean;
+  /** Last row cut at age 80: its mahadasha continues past the shown end. */
+  open_ended?: boolean;
   age_from?: number | null;
   age_to?: number | null;
   tense: "past" | "current" | "future";
@@ -473,7 +475,7 @@ export function buildSystemPrompt(facts: V2Facts): string {
       "4. weekdays are evergreen cards used after the dated days run out: write for that weekday in general, no tithi/nakshatra references.",
     ]),
     "5. chapters: use the chapter facts (period, lords, support, pressure, domains). Past chapters: 1-2 reflective sentences. Current chapter: most detail. Future: what to prepare. Each chapter title must be unique and short: 2-4 words and at most 28 characters (Telugu: 2-3 words), concrete rather than generic (not 'New Beginnings', 'Growth Phase', 'A Time of Change'), never the same word twice in one title (no 'New Horizon Horizon'), and no two chapters may start with the same word or share their main noun (avoid 'Quiet Mental Rest' vs 'Quiet Leadership', 'Refining Details' vs 'Refined Work'; in Telugu avoid 'పెద్దల బాధ్యత' vs 'పెద్దల ఆశీస్సులు' or three titles opening with 'స్మార్ట్'). Before answering, read the first word of every chapter title in order and change any repeat. Name what is specific to that chapter's lords and domains.",
-    "5b. Chapters with kind=\"summary\" are long overview rows (a whole mahadasha, or with early=true the childhood years up to age_from of the first detailed chapter): write ONLY title (2-3 words), highlight (one sentence giving that whole stretch's theme; for early=true, the childhood/teen years in a warm, general way: no events, no fear) and share_line; body MUST be an empty string. Summary titles follow the same uniqueness rules and must name the stretch's theme: never a generic label like 'Early Years', 'Childhood', 'Later Life' or the planet's name (the app already shows that label). Chapters with kind=\"detail\" get the full text as in rule 5.",
+    "5b. Chapters with kind=\"summary\" are long overview rows (a whole mahadasha, or with early=true every year from birth up to its age_to, which runs into adult years for older charts): write ONLY title (2-3 words), highlight (one sentence giving that whole stretch's theme; for early=true, cover the whole age_from to age_to stretch in a warm, general way, never 'childhood' alone when age_to is past 18: no events, no fear) and share_line; body MUST be an empty string. Summary titles follow the same uniqueness rules and must name the stretch's theme: never a generic label like 'Early Years', 'Childhood', 'Later Life' or the planet's name (the app already shows that label). Chapters with kind=\"detail\" get the full text as in rule 5.",
     "6. weeks/months: use the counts and notable days given; each period must differ. A week or month card must not restate the current chapter's theme or the day cards' tasks: talk about the stretch itself (which days to use, which to keep light).",
     child
       ? "7. This is a child's chart: speak to the parent about the child. Areas are child areas. No career, money, romance or marriage. No fear, no medical claims; never suggest delaying care."
@@ -1103,6 +1105,7 @@ export function repairScope(v: Validation): SchemaScope | null {
     else if (f.section === "months") (scope.months ??= []).push(String(f.id));
     else if (f.section === "areas") (scope.areas ??= []).push(String(f.id));
     else if (f.section === "profile") scope.profile = true;
+    else if (f.section === "arcs") scope.arcs = true;
   }
   // Bound one repair call: the earliest flagged days first (they are on screen first).
   if (scope.days && scope.days.length > REPAIR_MAX_DAYS) scope.days = [...new Set(scope.days)].sort().slice(0, REPAIR_MAX_DAYS);
@@ -1163,6 +1166,8 @@ export function mergeRepair(c: V2Content, patch: Partial<V2Content>): V2Content 
     months: merge(c.months as never[], patch.months as never[], "period_key"),
     areas: merge(c.areas as never[], patch.areas as never[], "area_id"),
     ...(patch.profile?.summary ? { profile: patch.profile } : {}),
+    ...(patch.arcs?.length ? { arcs: patch.arcs } : {}),
+    ...(patch.life_story ? { life_story: patch.life_story } : {}),
   };
 }
 
@@ -1279,7 +1284,9 @@ function lordGuard(c: V2Content, facts: V2Facts): V2Content {
   };
 }
 
-export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptions): Record<string, unknown> {
+export function buildReadingView(raw: V2Content, factsIn: V2Facts, opts: ViewOptions): Record<string, unknown> {
+  // Ages as completed years (older readings stored rounded ages).
+  const facts = fixChapterAges(factsIn);
   // Older stored readings (v2.2 and legacy) get the same last-mile voice fixes (human dates, no "window").
   const c = lordGuard(scriptGuard(polishDeep(raw, opts.locale, POLISH_SKIP), facts), facts);
   const now = DateTime.fromISO(opts.dateStr, { zone: opts.tz }).set({ hour: 12 }).toMillis();
@@ -1333,7 +1340,7 @@ export function buildReadingView(raw: V2Content, facts: V2Facts, opts: ViewOptio
       mahadashaLord: f.md,
       antardashaLord: f.ad,
       kind: f.kind ?? "detail",
-      ...(f.kind === "summary" ? { mdLords: f.md_lords ?? [f.md], early: Boolean(f.early) } : {}),
+      ...(f.kind === "summary" ? { mdLords: f.md_lords ?? [f.md], early: Boolean(f.early), ...(f.open_ended ? { openEnded: true } : {}) } : {}),
       ageFrom: f.age_from ?? null,
       ageTo: f.age_to ?? null,
       title: ch.title,

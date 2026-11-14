@@ -222,6 +222,9 @@ export function shardOnly(p: ShardPlan, c: Partial<V2Content>): Partial<V2Conten
     ask_starters: p.scope.extras ? c.ask_starters : [],
     remedies: p.scope.extras ? c.remedies : [],
     push: p.scope.extras ? c.push : undefined,
+    // v5: the part that writes the arcs also writes the life story (was dropped here, so
+    // background-written readings lost every arc line and the story card).
+    ...((p.scope as { arcs?: boolean }).arcs ? { arcs: c.arcs, life_story: c.life_story } : {}),
   } as Partial<V2Content>;
 }
 

@@ -295,3 +295,59 @@ Deno.test("stalled background parts fall back to the foreground (default on, env
   assert(!shardStallInline());
   Deno.env.delete("READING_STALL_INLINE");
 });
+
+Deno.test("Life map: ages are completed years, arcs survive the background path, labels match the app", async () => {
+  const { ageYears } = await import("./timeline_window.ts");
+  const { fixChapterAges } = await import("./reading_v5.ts");
+  const { shardOnly } = await import("./reading_shards.ts");
+  const { plainPeriodLabel } = await import("./copy.ts");
+  const b = new Date("1990-06-15T05:00:00Z");
+  assertEquals(ageYears(b, new Date("2013-01-22T00:00:00Z")), 22); // 22.6 years: "22", not "23"
+  assertEquals(ageYears(b, new Date("2013-06-15T06:00:00Z")), 23);
+  assertEquals(ageYears(b, new Date("2013-06-10T00:00:00Z")), 22);
+  // Engine facts: every chapter's ages equal the calendar age at its start/end; no gaps/overlaps.
+  for (const bi of CHARTS) {
+    const f = v5(bi, "en");
+    const birth = new Date(f.chapters[0].start_iso!);
+    assert(f.chapters[0].early, "first row is the early years from birth");
+    for (let i = 0; i < f.chapters.length; i++) {
+      const c = f.chapters[i];
+      assertEquals(c.age_from, ageYears(birth, new Date(c.start_iso!)), `${bi.id} #${c.chapter_id} from`);
+      assertEquals(c.age_to, ageYears(birth, new Date(c.end_iso!)), `${bi.id} #${c.chapter_id} to`);
+      if (i) assertEquals(c.start_iso, f.chapters[i - 1].end_iso, `${bi.id} #${c.chapter_id} contiguous`);
+    }
+    assertEquals(f.chapters.filter((c) => c.tense === "current").length, 1, "one current chapter");
+    // Stored rounded ages (older readings) are corrected in the view.
+    const stale = { ...f, chapters: f.chapters.map((c) => ({ ...c, age_from: (c.age_from ?? 0) + 1 })) };
+    assertEquals(fixChapterAges(stale).chapters.map((c) => c.age_from), f.chapters.map((c) => c.age_from));
+    const last = fixChapterAges(f).chapters.at(-1)!;
+    if (last.kind === "summary" && (last.age_to ?? 0) >= 80) assert(last.open_ended, "row cut at 80 is open-ended");
+  }
+  // The part that writes arcs keeps them (background shards used to drop them).
+  const kept = shardOnly({ key: "B", scope: { chapters: [1], arcs: true }, maxTokens: 1, note: "" } as never, { chapters: [{ chapter_id: 1 }], arcs: [{ md: "Rahu", line: "x." }], life_story: "y." } as never);
+  assertEquals((kept as { arcs?: unknown[] }).arcs?.length, 1);
+  assertEquals((kept as { life_story?: string }).life_story, "y.");
+  // Missing arcs are flagged (and repaired) instead of shipping empty arc headers.
+  const f = v5(BI, "en");
+  assert(v5Flags({ chapters: [] } as never, f).some((x) => x.reason === "arcs_missing"));
+  // Engine label months = the app's months (ends on 1-2 Dec IST read "Dec", not "Nov").
+  assertEquals(plainPeriodLabel(new Date("2044-10-23T03:51:18Z"), new Date("2045-12-01T23:18:20Z")), "Oct 2044 - Dec 2045");
+});
+
+Deno.test("Life map: a reading pack keeps its own chapters (no legacy re-map), arcs point at the right rows", async () => {
+  const { packOwnsTimeline } = await import("./engine.ts");
+  assert(packOwnsTimeline({ fact_signature: "v2:abc" }));
+  assert(!packOwnsTimeline({ fact_signature: "legacy-sig" }));
+  const { buildReadingView } = await import("./reading_v2.ts");
+  const f = v5(BI, "en");
+  const content = { chapters: f.chapters.map((c) => ({ chapter_id: c.chapter_id, title: `T${c.chapter_id}`, highlight: "h.", body: "", share_line: "", evidence_ids: [] })) } as never;
+  const view = buildReadingView(content, f, { dateStr: DATE, tz: "Asia/Kolkata", locale: "en" }) as Record<string, unknown>;
+  const phases = view.journey_phases as { sortOrder: number; mahadashaLord: string; kind: string; early?: boolean }[];
+  assertEquals(phases.map((p) => p.sortOrder), f.chapters.map((c) => c.chapter_id));
+  for (const a of view.life_arcs as { md: string; chapterIds: number[] }[]) {
+    for (const id of a.chapterIds) {
+      const p = phases.find((x) => x.sortOrder === id)!;
+      assert(a.md === "early" ? p.early === true : p.mahadashaLord === a.md, `arc ${a.md} holds #${id} (${p.mahadashaLord})`);
+    }
+  }
+});

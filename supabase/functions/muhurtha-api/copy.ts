@@ -363,9 +363,11 @@ export function phaseCardCopy(
   };
 }
 
-export function plainPeriodLabel(start: Date, end: Date): string {
-  const startDt = DateTime.fromJSDate(start);
-  const endDt = DateTime.fromJSDate(end).minus({ days: 1 });
+export function plainPeriodLabel(start: Date, end: Date, zone = "Asia/Kolkata"): string {
+  // Calendar months in the user's zone, end month = the month the period ends in (the app's
+  // Life map shows the same months from start/end; "minus a day" made 1 Dec ends read "Nov").
+  const startDt = DateTime.fromJSDate(start, { zone });
+  const endDt = DateTime.fromJSDate(end, { zone });
   if (startDt.year === endDt.year && startDt.month === endDt.month) {
     return startDt.toFormat("LLL yyyy");
   }

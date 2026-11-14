@@ -85,7 +85,7 @@ import {
   vimshottariLordsAt,
   vimshottariMahadashas,
 } from "./vimshottari.ts";
-import { ageAt, lifeTimelineRows } from "./timeline_window.ts";
+import { ageAt, ageYears, lifeTimelineRows } from "./timeline_window.ts";
 import {
   moonSiderealLongitudeDeg,
   nakshatraPadaFromSiderealLon,
@@ -935,8 +935,9 @@ function buildLifeTimelinePlans(
     const extra = {
       startIso: seg.start.toISOString(),
       endIso: seg.end.toISOString(),
-      ageFrom: Math.max(0, Math.round(ageAt(birth, seg.start))),
-      ageTo: Math.round(ageAt(birth, seg.end)),
+      // Completed years (the age he/she is), never rounded: 22.6 is "22", not "23".
+      ageFrom: ageYears(birth, seg.start),
+      ageTo: ageYears(birth, seg.end),
     };
     if (row.kind === "detail") return Object.assign(plan, extra, { kind: "detail" as const });
     return Object.assign(plan, extra, {
@@ -945,7 +946,7 @@ function buildLifeTimelinePlans(
       mdLords: row.mdLords,
       early: row.early,
       phasePulse: row.early
-        ? (locale === "te" ? "చిన్నప్పటి రోజులు" : locale === "hi" ? "शुरुआती साल" : "Early years")
+        ? (locale === "te" ? "తొలి సంవత్సరాలు" : locale === "hi" ? "शुरुआती साल" : "Early years")
         : (locale === "te" ? "పెద్ద దశ" : locale === "hi" ? "बड़ा दौर" : "Long period"),
     });
   });
@@ -1661,6 +1662,11 @@ function phasePlanToJourneyPhase(
     proLocked,
     subPhases: [],
   };
+}
+
+/** Reading-v2+ packs (built by readingToPack) own their Life timeline: never re-map it. */
+export function packOwnsTimeline(pack: { fact_signature?: string | null }): boolean {
+  return String(pack.fact_signature ?? "").startsWith("v2:");
 }
 
 /** Backfill missing journey phases / facts when planner timeline advances. */
@@ -5522,7 +5528,11 @@ async function _handleInternal(
     const packContent = pack.content as BirthIntelligencePackContent;
     // Coverage repair is applied to the response only; persistence happens on the
     // generation path (chart_initialize / ensureBirthPack), never on a read.
-    if (repairPackTimelineCoverage(packContent, phasePlans, locale)) {
+    // Legacy packs only: a reading-v2+ pack (fact_signature "v2:…") owns its Life timeline
+    // (early years + full chapters + summaries). Re-mapping it onto the legacy 25-row window
+    // dropped its first chapters, added a stray legacy row and renumbered sortOrder, so the
+    // Life map arcs pointed at the wrong chapters (Jupiter chapters under "Rahu years").
+    if (!packOwnsTimeline(pack) && repairPackTimelineCoverage(packContent, phasePlans, locale)) {
       pack.content = packContent;
     }
 

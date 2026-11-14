@@ -128,6 +128,19 @@ export function rowTense(row: { start: Date; end: Date }, now: Date): "past" | "
   return t >= row.end.getTime() ? "past" : t < row.start.getTime() ? "future" : "current";
 }
 
+/**
+ * Completed years at `at` (the age a person says they are), for chapter age labels. Calendar
+ * based (UTC dates), with two days of tolerance so a row clipped at the 80th year says 80.
+ */
+export function ageYears(birth: Date, at: Date): number {
+  const b = birth, t = new Date(at.getTime() + 2 * 86_400_000);
+  let y = t.getUTCFullYear() - b.getUTCFullYear();
+  const beforeBirthday = t.getUTCMonth() < b.getUTCMonth() ||
+    (t.getUTCMonth() === b.getUTCMonth() && t.getUTCDate() < b.getUTCDate());
+  if (beforeBirthday) y--;
+  return Math.max(0, y);
+}
+
 export function ageAt(birth: Date, at: Date): number {
   return Math.round(((at.getTime() - birth.getTime()) / YEAR_MS) * 10) / 10;
 }
