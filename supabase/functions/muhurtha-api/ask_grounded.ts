@@ -189,7 +189,10 @@ export function groundedFallback(
     else out.push(t.noDays);
     if (r.light.length) out.push(t.light(r.light.map((d) => dayLabel(d, locale)).join(t.and)));
   };
-  const cur = f.chapters.find((c) => c.chapter_id === f.current_chapter_id);
+  // The current chapter by id, else the one whose dates hold today, else the last one started.
+  const cur = f.chapters.find((c) => c.chapter_id === f.current_chapter_id) ??
+    f.chapters.find((c) => (c.start_iso ?? "") <= date && date <= (c.end_iso ?? "")) ??
+    [...f.chapters].filter((c) => (c.start_iso ?? "") <= date).slice(-1)[0];
   const chapterLine = () => {
     if (!cur) return;
     const md = localizeGrahaNames(cur.md, locale), ad = localizeGrahaNames(cur.ad || cur.md, locale);
@@ -209,6 +212,7 @@ export function groundedFallback(
     chapterLine();
     todayLine();
   }
+  if (!out.length) todayLine();
   return out.length ? out.join(" ") : null;
 }
 

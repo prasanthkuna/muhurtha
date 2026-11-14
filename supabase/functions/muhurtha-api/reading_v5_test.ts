@@ -192,6 +192,13 @@ Deno.test("Ask fallback answers the question asked, in all three languages", () 
     assertEquals(new Set(answers).size, answers.length, `${loc}: answers must differ by question`);
     if (loc !== "en") assert(answers.every((a) => !wrongScript(a, loc)), `${loc} script: ${answers.join(" | ")}`);
   }
+  // No current chapter id (e.g. a very old chart): still answers, never null.
+  const noCur = { ...v5(BI, "en"), current_chapter_id: null };
+  for (const loc of ["en", "te", "hi"] as const) {
+    for (const q of ["When does my current chapter end?", "Explain my Mahadasha simply."]) {
+      assert((groundedFallback(q, loc, noCur, DATE, null) ?? "").length > 20, `${loc} ${q}`);
+    }
+  }
   assertEquals(askTopic("Which day is best for travel?"), "which_day");
   assert(askSources("month", "when_best").includes("calendar"));
   const f = v5();
