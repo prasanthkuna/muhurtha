@@ -410,6 +410,22 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
     driftRewritten = again.length;
     full = sanitizeContent({ ...base, chapters: [...base.chapters, ...again].sort((a, b) => Number(a.chapter_id) - Number(b.chapter_id)) }, facts);
     vf = validateContent(full, facts);
+    // Same one repair of the rewritten chapters as production (repairNew).
+    const dscope = again.length ? newItemScope(vf, [], again.map((c) => Number(c.chapter_id))) : null;
+    if (dscope) {
+      try {
+        const r = await createWithSchema(facts, { system: buildSystemPrompt(facts), user: repairPrompt(facts, full, vf, dscope), scope: dscope, background: false });
+        addT(fill, r.model, r.usage);
+        const patch = JSON.parse(r.output_text ?? "null");
+        if (patch) {
+          const fixed = sanitizeContent(mergeRepair(full, patch), facts);
+          if (!fixed.chapters.some((c) => driftIds.includes(Number(c.chapter_id)) && hasAlien(JSON.stringify(c), locale as "en" | "te" | "hi"))) full = fixed;
+          vf = validateContent(full, facts);
+        }
+      } catch (e) {
+        errs.drift_repair = (e instanceof Error ? e.message : String(e)).slice(0, 160);
+      }
+    }
   }
   const fillMs = Date.now() - t0 - readyMs;
   // One on-demand chapter batch (a past chapter, as a Pro user browsing back).

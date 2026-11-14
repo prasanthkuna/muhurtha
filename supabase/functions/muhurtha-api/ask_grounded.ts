@@ -38,10 +38,10 @@ const clock = (hhmm: string) => {
 const TOPIC_RE: [AskTopic, RegExp][] = [
   ["life", /\bchapter|period|dasha|phase|future|life\b|దశ|జీవిత|భవిష్యత్|दशा|ज़िंदगी|जीवन|भविष्य|साल/i],
   ["month", /\b(this|next) month\b|\bmonth\b|నెల|महीने|महीना/i],
-  ["week", /\b(this|next) week\b|\bweek\b|వారం|हफ़्ते|हफ्ते|सप्ताह/i],
+  ["week", /\b(this|next) week\b|\bweek\b|వారం|हफ़्ते|हफ्ते|हफ़्ता|हफ्ता|सप्ताह/i],
   ["which_day", /\bwhich day\b|\bwhat day\b|\bbest day\b|\bwhen (should|can|is)\b|\bgood day\b|ఏ రోజు|ఎప్పుడు|कौन सा दिन|किस दिन|कब/i],
   ["today", /\btoday\b|\btonight\b|\bnow\b|ఈరోజు|ఇప్పుడు|आज|अभी/i],
-  ["money", /\bmoney|invest|loan|salary|buy|purchase|savings?\b|డబ్బు|పెట్టుబడి|కొన|पैसा|पैसे|निवेश|खरीद/i],
+  ["money", /\bmoney|invest|loan|salary|buy|purchase|savings?\b|డబ్బు|పెట్టుబడి|కొన|ఆర్థిక|पैसा|पैसे|पैसों|धन|निवेश|खरीद/i],
   ["work", /\bjob|work|career|interview|boss|office|promotion|business\b|ఉద్యోగ|కెరీర్|ఆఫీస్|ఇంటర్వ్యూ|नौकरी|काम|करियर|इंटरव्यू|व्यापार/i],
   ["love", /\blove|partner|marriage|wife|husband|relationship|date\b|ప్రేమ|పెళ్లి|భార్య|భర్త|प्यार|शादी|पत्नी|पति|रिश्ते/i],
   ["family", /\bfamily|mother|father|parents|kids|children|son|daughter\b|కుటుంబ|అమ్మ|నాన్న|పిల్ల|परिवार|माँ|पिता|बच्च/i],
@@ -111,6 +111,10 @@ const T = {
     days: (xs: string) => `Your best days coming up: ${xs}.`,
     light: (xs: string) => `Keep ${xs} light.`,
     noDays: "No strong days in that stretch, so keep big moves for later and use the good windows each day.",
+    area: { money: "money matters", new_starts: "work and new starts", love: "love and your partner", talks: "family talks", health: "health and rest", travel: "travel" } as Record<string, string>,
+    areaDays: (a: string, xs: string) => `Best days for ${a}: ${xs}.`,
+    noArea: (a: string) => `No day in that stretch stands out for ${a}, so keep it steady.`,
+    steady: (xs: string) => `Your steadiest days: ${xs}.`,
     chapter: (md: string, ad: string, until: string, hi: string) => `You're in your ${md}–${ad} chapter until ${until}${hi ? `: ${hi}` : "."}`,
     action: (a: string) => `This stretch: ${a}`,
     and: " and ",
@@ -122,6 +126,10 @@ const T = {
     days: (xs: string) => `రాబోయే మంచి రోజులు: ${xs}.`,
     light: (xs: string) => `${xs} తేలిగ్గా ఉంచండి.`,
     noDays: "ఈ రోజుల్లో బలమైన రోజులు లేవు, పెద్ద నిర్ణయాలు తర్వాతకు ఉంచి, ప్రతి రోజు మంచి టైమ్ వాడుకోండి.",
+    area: { money: "డబ్బు విషయాలకు", new_starts: "పని, కొత్త మొదలులకు", love: "ప్రేమ, భాగస్వామి విషయాలకు", talks: "కుటుంబంతో మాటలకు", health: "ఆరోగ్యం, విశ్రాంతికి", travel: "ప్రయాణానికి" } as Record<string, string>,
+    areaDays: (a: string, xs: string) => `${a} మంచి రోజులు: ${xs}.`,
+    noArea: (a: string) => `ఈ రోజుల్లో ${a} ప్రత్యేకంగా బలమైన రోజు లేదు, నిలకడగా ఉండండి.`,
+    steady: (xs: string) => `నిలకడైన రోజులు: ${xs}.`,
     chapter: (md: string, ad: string, until: string, hi: string) => `${until} వరకు మీరు ${md}–${ad} చాప్టర్‌లో ఉన్నారు${hi ? `: ${hi}` : "."}`,
     action: (a: string) => `ఈ దశలో: ${a}`,
     and: ", ",
@@ -133,6 +141,10 @@ const T = {
     days: (xs: string) => `आने वाले अच्छे दिन: ${xs}।`,
     light: (xs: string) => `${xs} को हल्का रखें।`,
     noDays: "इन दिनों में कोई मज़बूत दिन नहीं है, बड़े फ़ैसले बाद में रखें और हर दिन का अच्छा समय इस्तेमाल करें।",
+    area: { money: "पैसों के मामलों", new_starts: "काम और नई शुरुआत", love: "प्यार और जीवनसाथी", talks: "परिवार से बातचीत", health: "सेहत और आराम", travel: "यात्रा" } as Record<string, string>,
+    areaDays: (a: string, xs: string) => `${a} के लिए अच्छे दिन: ${xs}।`,
+    noArea: (a: string) => `इन दिनों में ${a} के लिए कोई दिन ख़ास नहीं है, इसलिए स्थिर रहें।`,
+    steady: (xs: string) => `सबसे स्थिर दिन: ${xs}।`,
     chapter: (md: string, ad: string, until: string, hi: string) => `${until} तक आप ${md}–${ad} अध्याय में हैं${hi ? `: ${hi}` : "।"}`,
     action: (a: string) => `इस दौर में: ${a}`,
     and: ", ",
@@ -165,8 +177,15 @@ export function groundedFallback(
   const datesLine = (to: string, area?: string) => {
     const from = plusDays(date, topic === "today" ? 0 : 1);
     let r = bestDays(f, from, to, area, 2);
-    if (area && !r.best.length) r = bestDays(f, from, to, undefined, 2);
-    if (r.best.length) out.push(t.days(r.best.map((d) => dayLabel(d, locale)).join(t.and)));
+    const aw = area ? t.area[area] : undefined;
+    const list = (xs: string[]) => [...xs].sort().map((d) => dayLabel(d, locale)).join(t.and);
+    if (aw && r.best.length) out.push(t.areaDays(aw, list(r.best)));
+    else if (aw) {
+      // Say plainly that nothing stands out for that area, then the steadiest days.
+      out.push(t.noArea(aw));
+      r = bestDays(f, from, to, undefined, 2);
+      if (r.best.length) out.push(t.steady(list(r.best)));
+    } else if (r.best.length) out.push(t.days(list(r.best)));
     else out.push(t.noDays);
     if (r.light.length) out.push(t.light(r.light.map((d) => dayLabel(d, locale)).join(t.and)));
   };
