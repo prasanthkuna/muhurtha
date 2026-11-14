@@ -8,6 +8,7 @@ import { formatTimesInString, formatWindowRange } from "@/lib/format-time";
 import { ShareCardButton } from "@/components/share/share-button";
 import { clip } from "@/lib/share/builders";
 import { useState } from "react";
+import Link from "next/link";
 import { savePlan } from "@/lib/saved-plans";
 
 async function enginePost(action: string, body: Record<string, unknown>): Promise<boolean> {
@@ -67,6 +68,20 @@ export function AskAnswerCard({
         {result.simpleWhy ? (
           <p className="mt-3 text-sm leading-relaxed text-ink-secondary">
             {formatTimesInString(result.simpleWhy)}
+          </p>
+        ) : null}
+        {result.sources?.length ? (
+          <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-ink-tertiary" data-testid="ask-sources">
+            <span>{t("ask5.from")}:</span>
+            {result.sources.map((s) => (
+              <Link
+                key={s}
+                href={`/${s}`}
+                className="rounded-full border border-line bg-paper px-2.5 py-0.5 font-semibold text-gold-text hover:border-gold-accent/50"
+              >
+                {t(`ask5.src.${s}`)}
+              </Link>
+            ))}
           </p>
         ) : null}
       </ProseBlock>

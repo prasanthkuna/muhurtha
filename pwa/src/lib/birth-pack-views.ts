@@ -58,6 +58,38 @@ export class BirthPackViews {
     return me?.summary?.toString() || identity?.summary?.toString() || "";
   }
 
+  /** v5: one plain sentence, the chart fact behind the profile summary. */
+  get profileWhy(): string {
+    const me = this.content.me_profile as Record<string, unknown> | undefined;
+    return me?.why?.toString() ?? "";
+  }
+
+  /** v4+: chart facts the profile cites (English refs). */
+  get profileEvidence(): string[] {
+    const ev = this.content.chart_evidence as Record<string, unknown> | undefined;
+    return Array.isArray(ev?.profile) ? ev.profile.map(String).filter(Boolean) : [];
+  }
+
+  /** v5: two sentences on where the story has been and what this stretch builds toward. */
+  get lifeStory(): string {
+    return this.content.life_story?.toString() ?? "";
+  }
+
+  /** v5: chapters grouped by mahadasha (early years first), each with a one-line arc. */
+  lifeArcs(): { md: string; line: string; ageFrom: number | null; ageTo: number | null; chapterIds: number[] }[] {
+    const raw = this.content.life_arcs;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((a): a is Record<string, unknown> => typeof a === "object" && a !== null)
+      .map((a) => ({
+        md: a.md?.toString() ?? "",
+        line: a.line?.toString() ?? "",
+        ageFrom: numOrUndef(a.ageFrom) ?? null,
+        ageTo: numOrUndef(a.ageTo) ?? null,
+        chapterIds: Array.isArray(a.chapterIds) ? a.chapterIds.map(Number).filter(Number.isFinite) : [],
+      }));
+  }
+
   get strengths(): string[] {
     const me = this.content.me_profile as Record<string, unknown> | undefined;
     const identity = this.content.user_identity as Record<string, unknown> | undefined;
@@ -155,6 +187,11 @@ export class BirthPackViews {
           early: p.early === true,
           ageFrom: numOrUndef(p.ageFrom ?? fact?.ageFrom),
           ageTo: numOrUndef(p.ageTo ?? fact?.ageTo),
+          why: p.why?.toString() ?? "",
+          action: p.action?.toString() ?? "",
+          lifeStage: p.lifeStage?.toString() ?? "",
+          chapterDomains: strList(p.chapterDomains),
+          arcMd: p.arcMd?.toString() ?? "",
         } satisfies ChapterView;
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -255,7 +292,7 @@ export class BirthPackViews {
     return knowledge?.compact_summary?.toString() ?? "";
   }
 
-  domainReports(): { key: string; title: string; body: string }[] {
+  domainReports(): { key: string; title: string; body: string; why: string; evidence: string[] }[] {
     const raw = this.content.category_reports as Record<string, unknown> | undefined;
     if (!raw) return [];
     const keys = [
@@ -266,14 +303,15 @@ export class BirthPackViews {
       "family",
       "health_routine",
     ];
-    const out: { key: string; title: string; body: string }[] = [];
+    const out: { key: string; title: string; body: string; why: string; evidence: string[] }[] = [];
     for (const key of keys) {
       const section = raw[key] as Record<string, unknown> | undefined;
       if (!section) continue;
       const body = section.body?.toString() || section.summary?.toString() || "";
       const headline = section.headline?.toString() || key.replace(/_/g, " ");
       if (!body && !headline) continue;
-      out.push({ key, title: headline, body });
+      const evidence = Array.isArray(section.evidence) ? section.evidence.map(String).filter(Boolean) : [];
+      out.push({ key, title: headline, body, why: section.why?.toString() ?? "", evidence });
     }
     return out;
   }

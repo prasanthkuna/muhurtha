@@ -7,6 +7,7 @@ import { BOND } from "./messages-bond";
 import { PRO } from "./messages-pro";
 import { WELCOME } from "./messages-welcome";
 import { LIVE } from "./messages-live";
+import { V5 } from "./messages-v5";
 
 type MessageTree = { [key: string]: string | MessageTree };
 
@@ -933,6 +934,7 @@ function lookup(tree: MessageTree, path: string): string | undefined {
 
 export function t(locale: AppLocale, key: string): string {
   return (
+    V5[locale]?.[key] ??
     LIVE[locale]?.[key] ??
     PRO[locale]?.[key] ??
     WELCOME[locale]?.[key] ??
@@ -950,6 +952,7 @@ export function t(locale: AppLocale, key: string): string {
     PRO.en[key] ??
     WELCOME.en[key] ??
     LIVE.en[key] ??
+    V5.en[key] ??
     key
   );
 }

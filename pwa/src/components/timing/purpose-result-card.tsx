@@ -104,7 +104,10 @@ export function PurposeResultCard({
         ) : null}
         <p className="mt-2 font-serif text-xl text-ink">{result.headline}</p>
         <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{result.summary}</p>
-        <p className="mt-2 text-xs leading-relaxed text-ink-tertiary">{t("timing.preliminaryNote")}</p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-tertiary" data-testid="timing-preliminary-note">
+          <span className="font-semibold text-ink-secondary">{t("timing.preliminary")}: </span>
+          {t("timing.preliminaryNote")}
+        </p>
 
         {result.personalSignals.length > 0 ? (
           <ul className="mt-3 space-y-1 border-l-2 border-gold-accent/40 pl-3 text-sm text-ink">

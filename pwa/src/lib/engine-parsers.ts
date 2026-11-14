@@ -51,6 +51,8 @@ export type AskAnswerResult = {
   suggestedDate?: string | null;
   partial?: boolean;
   answerId?: string;
+  /** Screens the answer draws on (shown as "From: Today · Calendar" chips). */
+  sources?: ("today" | "calendar" | "life" | "decode")[];
 };
 
 function windows(raw: unknown): TimingWindow[] {
@@ -150,6 +152,9 @@ export function parseAskAnswer(json: Record<string, unknown>): AskAnswerResult {
     suggestedDate: typeof json.suggestedDate === "string" ? json.suggestedDate : null,
     partial: json.partial === true,
     answerId: json.answerId?.toString(),
+    sources: Array.isArray(json.sources)
+      ? (json.sources as unknown[]).filter((x): x is "today" | "calendar" | "life" | "decode" => x === "today" || x === "calendar" || x === "life" || x === "decode")
+      : undefined,
     freeRemainingToday:
       typeof access.freeRemainingToday === "number"
         ? access.freeRemainingToday

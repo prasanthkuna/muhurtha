@@ -17,6 +17,8 @@ import { AfterReadingInstall } from "@/components/pwa/after-reading-install";
 import { clip, rashiGlyph } from "@/lib/share/builders";
 import { fill, nakLabel } from "@/lib/messages-bond";
 import { calWhyLine } from "@/lib/cal-text";
+import { ChartDetail, ExplainTerm } from "@/components/v5/chart-detail";
+import { grahaName } from "@/design-system/graha";
 
 const ADULT_ONLY_DOMAINS = new Set(["career", "money", "business", "relationship"]);
 
@@ -26,16 +28,7 @@ export default function DecodePage() {
 
   if (loading && !pack) return <LoadingState message={t("decode.opening")} />;
   if (preparing && (!views || !pack)) return <ReadingUnavailable title={t("nav.decode")} />;
-  if (error || !views || !pack) {
-    return (
-      <div className="space-y-4">
-        <PageHeader title={t("nav.decode")} subtitle={error ?? t("decode.unavailable")} />
-        <Link href="/welcome" className="text-sm font-medium text-gold-text underline-offset-2 hover:underline">
-          {t("decode.backWelcome")}
-        </Link>
-      </div>
-    );
-  }
+  if (error || !views || !pack) return <ReadingUnavailable title={t("nav.decode")} />;
 
   // A child's chart has no career/money/business/romance reading: hide those sections.
   const domains = isChildStage(activeLifeStage)
@@ -43,6 +36,18 @@ export default function DecodePage() {
     : views.domainReports();
   const luck = views.natalLuck;
   const birthStar = today?.birthStar ? nakLabel(today.birthStar, locale) : null;
+  const current = views.currentChapter();
+  const lords = current
+    ? [current.mahadashaLord, current.antardashaLord && current.antardashaLord !== current.mahadashaLord ? current.antardashaLord : ""]
+        .filter(Boolean).map((l) => grahaName(l, locale)).join(" · ")
+    : "";
+  // Chart refs are English engine strings: shown on English screens only.
+  const evidenceFor = (xs: string[]) => (locale === "en" ? xs : []);
+  const profileDetail = [
+    { label: t("chart.star"), value: birthStar ?? "", term: "nakshatra", termValue: today?.birthStar ?? undefined },
+    { label: t("chart.moon"), value: luck?.moonSignLabel ?? "", term: "moon_sign" },
+    { label: t("chart.lords"), value: lords, term: "mahadasha" },
+  ];
   const todayWhy = today?.calendar?.why
     ? calWhyLine({ why: today.calendar.why, nakshatra: today.dayStar ?? null, natal_star: today.calendar.natalStar ?? null }, t, locale)
     : "";
@@ -59,7 +64,7 @@ export default function DecodePage() {
             moonSignLabel={luck.moonSignLabel}
             heroSubline={views.identitySummary}
           >
-            <HeroChips birthStar={birthStar} moonSign={luck.moonSignLabel} t={t} />
+            <HeroChips birthStar={birthStar} birthStarValue={today?.birthStar ?? undefined} moonSign={luck.moonSignLabel} t={t} />
           </CelestialHeaderCard>
         ) : (
           <>
@@ -68,20 +73,17 @@ export default function DecodePage() {
               title={views.displayHook}
               subtitle={views.identitySummary}
             />
-            <HeroChips birthStar={birthStar} moonSign={null} t={t} />
+            <HeroChips birthStar={birthStar} birthStarValue={today?.birthStar ?? undefined} moonSign={null} t={t} />
           </>
         )}
 
-        <ExplainRow
-          screen="decode"
-          className=""
-          terms={[
-            { term: "nakshatra", value: typeof birthStar === "string" ? birthStar : undefined },
-            { term: "moon_sign" },
-            { term: "mahadasha" },
-            { term: "life_chapter" },
-          ]}
-        />
+        {views.profileWhy ? (
+          <p className="rounded-xl border-l-2 border-gold-accent/60 bg-paper px-4 py-3 text-sm leading-relaxed text-ink-secondary" data-testid="decode-why">
+            <span className="font-semibold text-gold-text">{t("why.fits")}: </span>
+            {views.profileWhy}
+          </p>
+        ) : null}
+        <ChartDetail rows={profileDetail} evidence={evidenceFor(views.profileEvidence)} screen="decode" testId="decode-chart-detail" />
 
         {today && !isChildStage(activeLifeStage) ? (
           <Link
@@ -101,23 +103,6 @@ export default function DecodePage() {
         ) : null}
       </div>
 
-      <AfterReadingInstall userId={userId} />
-
-      <div className="flex justify-end">
-        <ShareCardButton
-          type="decode"
-          build={() => ({
-            title: clip(views.displayHook, 88) ?? t("nav.decode"),
-            value: luck?.moonSignLabel || undefined,
-            subtitle: t("decode.janmaLabel"),
-            body: clip(views.identitySummary, 230),
-            chips: views.strengths.filter((x) => x.length <= 28).slice(0, 2),
-            glyph: rashiGlyph(luck?.moonSignKey || luck?.moonSymbol) ?? "decode",
-          })}
-        />
-      </div>
-
-      {luck ? <LuckyStrip luck={luck} compact showMedallion={false} /> : null}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gold-text">{t("decode.strengths")}</h2>
@@ -148,6 +133,17 @@ export default function DecodePage() {
             <ProseBlock key={d.key}>
               <p className="text-xs uppercase tracking-wide text-gold-text">{d.title}</p>
               <p className="mt-2 text-ink-secondary">{d.body}</p>
+              {d.why ? (
+                <p className="mt-2 text-xs leading-relaxed text-ink-tertiary" data-testid="decode-area-why">
+                  <span className="font-semibold text-gold-text">{t("why.label")}: </span>
+                  {d.why}
+                </p>
+              ) : null}
+              {locale === "en" && d.evidence.length ? (
+                <div className="mt-2">
+                  <ChartDetail rows={[]} evidence={d.evidence} screen="decode" testId="decode-area-detail" />
+                </div>
+              ) : null}
             </ProseBlock>
           ))}
         </section>
@@ -169,23 +165,55 @@ export default function DecodePage() {
           <ChevronRight className="h-4 w-4" aria-hidden />
         </Link>
       </div>
+
+      {luck ? <LuckyStrip luck={luck} compact showMedallion={false} /> : null}
+
+      <ExplainRow
+        screen="decode"
+        className=""
+        terms={[
+          { term: "nakshatra", value: today?.birthStar ?? undefined },
+          { term: "moon_sign" },
+          { term: "mahadasha" },
+          { term: "life_chapter" },
+        ]}
+      />
+
+      <div className="flex justify-end border-t border-line pt-4" data-testid="decode-share-row">
+        <ShareCardButton
+          type="decode"
+          build={() => ({
+            title: clip(views.displayHook, 88) ?? t("nav.decode"),
+            value: luck?.moonSignLabel || undefined,
+            subtitle: t("decode.janmaLabel"),
+            body: clip(views.identitySummary, 230),
+            chips: views.strengths.filter((x) => x.length <= 28).slice(0, 2),
+            glyph: rashiGlyph(luck?.moonSignKey || luck?.moonSymbol) ?? "decode",
+          })}
+        />
+      </div>
+      <AfterReadingInstall userId={userId} />
     </div>
   );
 }
 
-function HeroChips({ birthStar, moonSign, t }: { birthStar: string | null; moonSign: string | null; t: (k: string) => string }) {
+function HeroChips({ birthStar, birthStarValue, moonSign, t }: { birthStar: string | null; birthStarValue?: string; moonSign: string | null; t: (k: string) => string }) {
   if (!birthStar && !moonSign) return null;
   return (
     <div className="mt-3 flex flex-wrap gap-2" data-testid="decode-hero-chips">
       {birthStar ? (
         <span className="inline-flex items-center gap-1.5 rounded-full border border-gold-accent/40 bg-gold-wash/40 px-3 py-1 text-xs font-semibold text-gold-text">
-          <span className="text-ink-tertiary">{t("decode.hero.birthStar")}</span>
+          <span className="text-ink-tertiary">
+            <ExplainTerm term="nakshatra" screen="decode" value={birthStarValue}>{t("decode.hero.birthStar")}</ExplainTerm>
+          </span>
           {birthStar}
         </span>
       ) : null}
       {moonSign ? (
         <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-semibold text-ink">
-          <span className="text-ink-tertiary">{t("decode.hero.moonSign")}</span>
+          <span className="text-ink-tertiary">
+            <ExplainTerm term="moon_sign" screen="decode">{t("decode.hero.moonSign")}</ExplainTerm>
+          </span>
           {moonSign}
         </span>
       ) : null}

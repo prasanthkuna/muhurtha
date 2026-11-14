@@ -10,9 +10,9 @@ const PWA_LIB = new URL("../../../pwa/src/lib/", HERE);
 
 const PWA_FILES = [
   "messages.ts", "messages-supplement.ts", "messages-billing.ts", "messages-reading.ts",
-  "messages-share.ts", "messages-bond.ts", "jyotish-explainers/index.ts", "share/card-types.ts",
+  "messages-share.ts", "messages-bond.ts", "messages-v5.ts", "jyotish-explainers/index.ts", "share/card-types.ts",
 ];
-const SERVER_FILES = ["bond_phrases.ts", "push.ts", "share_copy.ts", "ask_pack.ts", "fallback_pack_copy.ts", "planner.ts", "copy.ts"];
+const SERVER_FILES = ["bond_phrases.ts", "push.ts", "share_copy.ts", "ask_pack.ts", "fallback_pack_copy.ts", "planner.ts", "copy.ts", "ask_grounded.ts", "reading_v5.ts"];
 
 const TE = /[\u0c00-\u0c7f]/;
 const HI = /[\u0900-\u097f]/;

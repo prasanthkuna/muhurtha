@@ -50,7 +50,36 @@ export type PackPreparing = {
   failed?: boolean;
   /** Sharded reading: Decode preview (profile, current chapter, today) once part A is written. */
   preview?: ReadingPreview | null;
+  /** Engine chart facts (birth star, Moon sign, current chapter), shown while the words are written. */
+  chart?: ChartFacts | null;
 };
+
+export type ChartFacts = {
+  nakshatra: string | null;
+  nakshatraLabel: string | null;
+  moonSign: string | null;
+  moonSignLabel: string | null;
+  md: string | null;
+  ad: string | null;
+  mdLabel: string | null;
+  adLabel: string | null;
+  adUntil: string | null;
+};
+
+/** Your reading exists in another language but not this one: written only when asked. */
+export type NotWritten = { locale: string; otherLocales: string[]; chart: ChartFacts | null };
+
+function chartFactsFrom(raw: unknown): ChartFacts | null {
+  if (!raw || typeof raw !== "object") return null;
+  const j = raw as Record<string, unknown>;
+  const s = (v: unknown) => (typeof v === "string" && v ? v : null);
+  return {
+    nakshatra: s(j.nakshatra), nakshatraLabel: s(j.nakshatraLabel) ?? s(j.nakshatra),
+    moonSign: s(j.moonSign), moonSignLabel: s(j.moonSignLabel),
+    md: s(j.md), ad: s(j.ad), mdLabel: s(j.mdLabel) ?? s(j.md), adLabel: s(j.adLabel) ?? s(j.ad),
+    adUntil: s(j.adUntil),
+  };
+}
 
 export type ReadingPreview = {
   profile: { title: string; summary: string; strengths: string[] } | null;
@@ -104,6 +133,10 @@ type AppDataContextValue = {
   /** Set while a reading (e.g. a newly added friend chart) is being generated. */
   preparing: PackPreparing | null;
   retryPreparing: () => void;
+  /** Set when this language's reading has not been written yet (another language has one). */
+  notWritten: NotWritten | null;
+  /** Start writing the reading in the current language (after the user asks for it). */
+  writeReadingInLocale: () => void;
   refresh: () => Promise<void>;
   /** Day payload for any date (cached per user/locale/chart/date); used by Today's day browser. */
   fetchDay: (date: string) => Promise<TodayPayload | null>;
@@ -219,6 +252,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [dataLocale, setDataLocale] = useState<string | null>(null);
   const [access, setAccessState] = useState<AccessInfo | null>(null);
   const [preparing, setPreparing] = useState<PackPreparing | null>(null);
+  const [notWritten, setNotWritten] = useState<NotWritten | null>(null);
   const [pollTick, setPollTick] = useState(0);
   const userIdRef = useRef<string | null>(null);
   const chartProfilesRef = useRef<ChartProfileSummary[]>([]);
@@ -307,7 +341,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const load = useCallback(
-    async (opts?: { silent?: boolean; force?: boolean; poll?: boolean; retry?: boolean }) => {
+    async (opts?: { silent?: boolean; force?: boolean; poll?: boolean; retry?: boolean; generate?: boolean }) => {
       const locale = localeRef.current;
       const chartId = readActiveChartId();
       const dataKey = `${locale}:${chartId ?? "self"}`;
@@ -318,7 +352,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         dataKeyRef.current = dataKey;
         setDataLocale(locale);
       };
-      const setPreparingFrom = (raw: unknown) => {
+      const setPreparingFrom = (raw: unknown, chartRaw?: unknown) => {
+        const chart = chartFactsFrom(chartRaw);
         const p = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
         const done = Number(p.done ?? 0) || 0;
         const total = Number(p.total ?? 0) || 0;
@@ -340,6 +375,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             slow,
             failed,
             preview: preview ?? prev?.preview ?? null,
+            chart: chart ?? prev?.chart ?? null,
           };
         });
       };
@@ -387,12 +423,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           setPack(cachedEntry.pack);
           recordAccess(cachedEntry.pack.access);
           setPreparing(null);
+          setNotWritten(null);
           markData();
         } else if (switchedData) {
           // Language or chart changed and nothing is cached for it: never keep showing the
           // previous language's reading while the new one loads.
           setPack(null);
           setToday(null);
+          setNotWritten(null);
         }
         if ((!opts?.silent || switchedData) && !hasPack) {
           setLoading(true);
@@ -444,15 +482,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 // Engine starts/advances generation in the background if no reading exists.
                 ensure: true,
                 ...(opts?.retry ? { retry: true } : {}),
+                ...(opts?.generate ? { generate_locale: true } : {}),
               }),
             ).then(({ res, json }) => {
               if (!live()) return;
+              if (res.ok && json.not_written === true) {
+                if (hasPack) return;
+                markData();
+                setError(null);
+                setPreparing(null);
+                setNotWritten({
+                  locale: json.locale?.toString() ?? locale,
+                  otherLocales: Array.isArray(json.otherLocales) ? json.otherLocales.map(String) : [],
+                  chart: chartFactsFrom(json.chart),
+                });
+                return;
+              }
               if (res.ok && json.generating === true) {
                 recordAccess(json.access as AccessInfo | undefined);
                 if (hasPack) return; // keep showing the cached reading
                 markData();
                 setError(null);
-                setPreparingFrom(json.progress);
+                setNotWritten(null);
+                setPreparingFrom(json.progress, json.chart);
                 return;
               }
               if (!res.ok) {
@@ -477,6 +529,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               );
               setPack(normalized);
               setPreparing(null);
+              setNotWritten(null);
               markData();
               setError(null);
               writeCachedPack(uid!, locale, chartId, normalized);
@@ -528,7 +581,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   /** Coalesce overlapping loads (mount + auth events + locale change). */
   const loadOnce = useCallback(
-    (opts?: { silent?: boolean; force?: boolean; poll?: boolean; retry?: boolean }) => {
+    (opts?: { silent?: boolean; force?: boolean; poll?: boolean; retry?: boolean; generate?: boolean }) => {
       const key = `${localeRef.current}:${readActiveChartId() ?? "self"}`;
       if (inflight.current && inflight.current.key === key && !opts?.force) {
         return inflight.current.promise;
@@ -762,6 +815,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setPreparing(null);
         void loadOnce({ silent: true, force: true, retry: true });
       },
+      notWritten,
+      writeReadingInLocale: () => {
+        setNotWritten(null);
+        setPreparing({ done: 0, total: 0, startedAt: Date.now(), stalled: false, chart: notWritten?.chart ?? null });
+        void loadOnce({ silent: true, force: true, generate: true });
+      },
       refresh: async () => {
         clearEngineCache();
         await loadOnce({ force: true });
@@ -785,6 +844,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     applyAccess,
     refreshAccess,
     preparing,
+    notWritten,
     today,
     loading,
     error,

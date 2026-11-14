@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useEngineBody } from "@/context/app-data-context";
+import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { fill } from "@/lib/messages-bond";
 
@@ -122,7 +122,7 @@ export const TERM_TITLES: Record<string, Record<string, string>> = {
 
 export type ExplainScreen = "decode" | "today" | "bond" | "calendar" | "timing" | "life" | "ask";
 
-type Layers = { title: string; simple: string; traditional: string; practical: string };
+type Layers = { title: string; simple: string; traditional: string; practical: string; forYou?: string };
 const cache = new Map<string, Layers>();
 
 export function ExplainSheet({
@@ -140,7 +140,9 @@ export function ExplainSheet({
 }) {
   const { t, locale } = useLocale();
   const engineBody = useEngineBody();
-  const key = `${locale}:${term}:${screen}:${value ?? ""}`;
+  const { activeChartProfileId } = useAppData();
+  // "For you" is per chart and per day.
+  const key = `${locale}:${activeChartProfileId ?? "self"}:${term}:${screen}:${value ?? ""}:${new Date().toDateString()}`;
   const [data, setData] = useState<Layers | null>(() => cache.get(key) ?? null);
   const [failed, setFailed] = useState(false);
 
@@ -165,6 +167,7 @@ export function ExplainSheet({
           simple: String(j.simple ?? ""),
           traditional: String(j.traditional ?? ""),
           practical: String(j.practical ?? ""),
+          forYou: typeof j.for_you === "string" ? j.for_you : undefined,
         };
         cache.set(key, l);
         if (alive) setData(l);
@@ -202,6 +205,12 @@ export function ExplainSheet({
         {failed && !data ? <p className="mt-4 text-sm text-ink-secondary">{t("live.explainError")}</p> : null}
         {data ? (
           <div className="mt-4 space-y-4">
+            {data.forYou ? (
+              <section className="rounded-xl border border-gold-accent/40 bg-gold-wash/30 px-3 py-2.5" data-testid="explain-for-you">
+                <p className="text-xs font-semibold uppercase text-gold-text">{t("explain.forYou")}</p>
+                <p className="mt-1 text-[15px] leading-relaxed text-ink">{data.forYou}</p>
+              </section>
+            ) : null}
             <section>
               <p className="text-xs font-semibold uppercase text-gold-text">{t("live.layerSimple")}</p>
               <p className="mt-1 text-[15px] leading-relaxed text-ink">{data.simple}</p>

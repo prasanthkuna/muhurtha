@@ -5,6 +5,7 @@ import { useLocale } from "@/context/locale-context";
 import { useAppData, type PackPreparing } from "@/context/app-data-context";
 import { MYTH_COUNT } from "@/lib/messages-reading";
 import { currentSubscription, enablePush, permissionState, pushSupported } from "@/lib/web-push";
+import { ChartFactsCard } from "@/components/v5/states";
 
 /**
  * Full-height "your reading is being written" screen: the nine grahas on a rashi wheel,
@@ -257,6 +258,8 @@ export function NavagrahaLoader({ preparing, name }: { preparing: PackPreparing;
           <p className="mt-3 text-xs text-success-ink">{t("loader.notifyOn")}</p>
         ) : null}
       </div>
+
+      {!failed && preparing.chart && !preparing.preview?.profile ? <ChartFactsCard chart={preparing.chart} className="mt-6 w-full max-w-sm rounded-2xl border border-gold-accent/30 bg-paper px-4 py-4 text-left" /> : null}
 
       {!failed && preparing.preview && (preparing.preview.profile || preparing.preview.chapter) ? (
         <article

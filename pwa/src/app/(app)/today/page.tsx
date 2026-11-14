@@ -26,9 +26,10 @@ import { todayInTimezone } from "@/lib/local-date";
 import type { TimingWindow, TodayPayload } from "@/lib/today-types";
 import { scrubList, scrubStaleTimes, windowsSummary } from "@/lib/window-text";
 import { areasIn, dateMoonMentions, dedupeByArea, dedupeList, mergeStems, restates, upcomingWindows } from "@/lib/day-dedupe";
-import { AREA_ICON, calWhyLine, tithiLabel } from "@/lib/cal-text";
+import { calWhyLine, tithiLabel } from "@/lib/cal-text";
 import { fill, nakLabel } from "@/lib/messages-bond";
 import { shortDate } from "@/lib/bond";
+import { VerdictCard } from "@/components/v5/verdict-card";
 
 /** How far the day browser goes from today (days). */
 const MIN_OFFSET = -30;
@@ -311,61 +312,7 @@ export default function TodayPage() {
       )}
 
       {isToday && !dayLoading ? <TodayBondLine /> : null}
-      {!dayLoading ? (
-        <ExplainRow
-          screen="today"
-          className="mt-1"
-          terms={[
-            { term: "nakshatra", value: day?.dayStar ?? undefined },
-            { term: "tithi", value: day?.tithi ?? undefined },
-            { term: "tara_bala", value: day?.tara ?? undefined },
-            { term: "good_slot" },
-            { term: "rahu_kalam" },
-          ]}
-        />
-      ) : null}
 
-      {!dayLoading && !dayError && !cardMissing ? (
-        <div className="flex flex-wrap items-center justify-end gap-2" data-testid="today-share-row">
-          {isToday ? <InstallChip className="mr-auto" /> : null}
-          <ShareCardButton
-            type="today"
-            build={() => {
-              const best = goodWindows[0];
-              const short = (xs: string[]) => xs.filter((x) => x.length <= 28).slice(0, 2);
-              return {
-                title: clip(cardTitle, 88) ?? t("nav.today"),
-                value: best ? `${t("today.firstGood")}: ${formatWindowRange(best.start, best.end)}` : undefined,
-                subtitle: [dateLabel, luck?.moonSignLabel].filter(Boolean).join(" · "),
-                body: clip(mainAdvice || detailedBody, 230),
-                chips: short(betterFor),
-                glyph: "sunrise",
-              };
-            }}
-          />
-          {isToday && goodWindows[0] ? (
-            <ShareCardButton
-              type="window"
-              label={t("today.firstGood")}
-              build={() => {
-                const best = goodWindows[0];
-                const caution = cautionWindows[0];
-                return {
-                  title: best.label || t("today.firstGood"),
-                  value: formatWindowRange(best.start, best.end),
-                  subtitle: dateLabel,
-                  body: clip(scrub(best.whyItWorks) || mainAdvice, 200),
-                  chips: caution
-                    ? [`${t("today.firstCaution")} ${formatWindowRange(caution.start, caution.end)}`]
-                    : undefined,
-                  glyph: "goodWindow",
-                  verdict: "good",
-                };
-              }}
-            />
-          ) : null}
-        </div>
-      ) : null}
 
       {dayLoading ? (
         <div className="space-y-3" aria-busy="true" aria-label={t("today.dayLoading")}>
@@ -405,37 +352,21 @@ export default function TodayPage() {
             </p>
           ) : null}
 
-          {panchangLine || cal ? (
-            <div className="rounded-2xl border border-line bg-paper px-4 py-3 text-sm" data-testid="today-panchang">
-              {panchangLine ? (
-                <p className="text-xs text-ink-tertiary">
-                  {panchangLine}
-                  {day?.birthStarToday ? (
-                    <span className="ml-1.5 rounded-full bg-gold-wash px-2 py-0.5 font-semibold text-gold-text" data-testid="today-birth-star">
-                      ★ {t("cal.birthStar")}
-                    </span>
-                  ) : null}
-                </p>
-              ) : null}
-              {cal && (calFavours.length || calAvoid) ? (
-                <p className="mt-1.5 text-ink" data-testid="today-calendar-tags">
-                  {calFavours.length ? (
-                    <>
-                      <span className="text-ink-tertiary">{t("cal.favours")}: </span>
-                      {calFavours.map((a) => `${AREA_ICON[a] ?? ""} ${t(`cal.area.${a}`)}`).join(" · ")}
-                    </>
-                  ) : null}
-                  {calAvoid ? (
-                    <>
-                      <span className="text-ink-tertiary">{calFavours.length ? " · " : ""}{t("cal.avoid")}: </span>
-                      {t(`cal.area.${calAvoid}`)}
-                    </>
-                  ) : null}
-                </p>
-              ) : null}
-              {calWhy ? <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{calWhy}</p> : null}
-              {cal?.chandrashtama ? <p className="mt-1 text-xs text-warning-ink">{t("cal.chandrashtamaGloss")}</p> : null}
-            </div>
+          {cal ? (
+            <VerdictCard
+              cal={cal}
+              why={calWhy}
+              favours={calFavours}
+              avoid={calAvoid}
+              detail={[
+                { label: t("cal.starLabel"), value: day?.dayStar ? `${nakLabel(day.dayStar, locale)}${day.birthStarToday ? ` ★ ${t("cal.birthStar")}` : ""}` : "", term: "nakshatra", termValue: day?.dayStar ?? undefined },
+                { label: t("cal.tithiLabel"), value: day?.tithi ? tithiLabel(day.tithi, locale) : "", term: "tithi", termValue: day?.tithi ?? undefined },
+                { label: t("cal.taraLabel"), value: day?.tara ? (t(`tara.${day.tara}`).startsWith("tara.") ? day.tara : t(`tara.${day.tara}`)) : "", term: "tara_bala", termValue: day?.tara ?? undefined },
+                { label: t("verdict.rahu"), value: cal.rahu ? formatWindowRange(cal.rahu.start, cal.rahu.end) : "", term: "rahu_kalam" },
+              ]}
+            />
+          ) : panchangLine ? (
+            <p className="text-xs text-ink-tertiary" data-testid="today-panchang">{panchangLine}</p>
           ) : null}
 
           {isToday && chapterSummary ? (
@@ -484,6 +415,62 @@ export default function TodayPage() {
       ) : null}
 
       <PrimaryButton href="/timing">{t("today.checkTiming")}</PrimaryButton>
+      {!dayLoading ? (
+        <ExplainRow
+          screen="today"
+          className=""
+          terms={[
+            { term: "nakshatra", value: day?.dayStar ?? undefined },
+            { term: "tithi", value: day?.tithi ?? undefined },
+            { term: "tara_bala", value: day?.tara ?? undefined },
+            { term: "good_slot" },
+            { term: "rahu_kalam" },
+          ]}
+        />
+      ) : null}
+      {!dayLoading && !dayError && !cardMissing ? (
+        <div className="flex flex-wrap items-center justify-end gap-2" data-testid="today-share-row">
+          {isToday ? <InstallChip className="mr-auto" /> : null}
+          <ShareCardButton
+            type="today"
+            build={() => {
+              const best = cal?.best ?? goodWindows[0];
+              const short = (xs: string[]) => xs.filter((x) => x.length <= 28).slice(0, 2);
+              return {
+                title: clip(cardTitle, 88) ?? t("nav.today"),
+                value: best ? `${t(cal?.bestKind === "calm" ? "verdict.calm" : "verdict.best")}: ${formatWindowRange(best.start, best.end)}` : undefined,
+                subtitle: [dateLabel, luck?.moonSignLabel].filter(Boolean).join(" · "),
+                body: clip(mainAdvice || detailedBody, 230),
+                chips: short(betterFor),
+                glyph: "sunrise",
+              };
+            }}
+          />
+          {isToday && (cal?.best ?? goodWindows[0]) && cal?.tone !== "rest" ? (
+            <ShareCardButton
+              type="window"
+              label={t("verdict.best")}
+              build={() => {
+                const best = cal?.best ?? goodWindows[0];
+                const caution = cautionWindows[0];
+                const win = goodWindows.find((w) => w.start === best?.start);
+                return {
+                  title: win?.label || t("verdict.best"),
+                  value: formatWindowRange(best!.start, best!.end),
+                  subtitle: dateLabel,
+                  body: clip(scrub(win?.whyItWorks) || mainAdvice, 200),
+                  chips: caution
+                    ? [`${t("today.firstCaution")} ${formatWindowRange(caution.start, caution.end)}`]
+                    : undefined,
+                  glyph: "goodWindow",
+                  verdict: "good",
+                };
+              }}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
       {childChart ? null : (
         <Link href="/decode" className="block text-center text-sm text-gold-text">
           {t("today.whyDecode")}

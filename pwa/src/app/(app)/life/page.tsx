@@ -14,11 +14,14 @@ import { DisclosureButton } from "@/components/ui/disclosure-button";
 import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { grahaSymbol, normalizeGraha } from "@/design-system/graha";
+import type { BirthPackViews } from "@/lib/birth-pack-views";
 import { formatPeriod } from "@/lib/format-date";
 import type { AppLocale } from "@/lib/locale";
 import type { ChapterView } from "@/lib/types";
 import { cn } from "@/components/ui/cn";
 import { fill } from "@/lib/messages-bond";
+import { formatMonthYear } from "@/lib/format-date";
+import { grahaName } from "@/design-system/graha";
 
 /** How many past chapters stay visible before "Show earlier chapters". */
 const RECENT_PAST = 2;
@@ -96,19 +99,22 @@ function ChapterRow({
   locale,
   t,
   onLocked,
+  hideAnchor = false,
 }: {
   c: ChapterView;
   isPro: boolean;
   locale: AppLocale;
   t: (key: string) => string;
   onLocked: (c: ChapterView) => void;
+  /** The Now card above carries the #current-chapter anchor (v5 layout). */
+  hideAnchor?: boolean;
 }) {
   const locked = c.proLocked && !isPro;
   const period = formatPeriod(c.periodLabel, c.periodStart, c.periodEnd, locale);
   const isNow = c.tense === "current";
   const ages = agesLabel(c, t);
   return (
-    <li className="relative pb-4 last:pb-0" id={isNow ? "current-chapter" : undefined} data-kind="detail">
+    <li className="relative pb-4 last:pb-0" id={isNow && !hideAnchor ? "current-chapter" : undefined} data-kind="detail">
       <span
         className={cn(
           "absolute -left-[21px] top-5 h-2.5 w-2.5 rounded-full ring-2 ring-canvas",
@@ -140,11 +146,12 @@ function ChapterRow({
           <GrahaMedallion lord={c.mahadashaLord} size="sm" />
           <div className="min-w-0 flex-1">
             <p className="text-xs text-ink-tertiary">
-              {period}
-              {ages ? <span className="whitespace-nowrap"> · {ages}</span> : null}
+              {ages || period}
+              {c.lifeStage ? <span className="whitespace-nowrap"> · {t(`stage.${c.lifeStage}`)}</span> : null}
+              {isNow ? <span className="ml-1.5 rounded-full bg-gold-wash px-2 py-0.5 font-semibold text-gold-text">{t("life.now")}</span> : null}
             </p>
-            <p className="font-serif text-lg text-ink">{c.title}</p>
-            {isNow ? <p className="mt-1 text-xs font-semibold text-gold-text">{t("life.now")}</p> : null}
+            <p className="font-serif text-lg leading-snug text-ink">{c.title}</p>
+            {c.highlight ? <p className="mt-0.5 line-clamp-2 text-sm text-ink-secondary" data-testid="life-row-beat">{c.highlight}</p> : null}
           </div>
           <ChevronRight className="h-5 w-5 shrink-0 text-gold-text/80" aria-hidden />
         </Link>
@@ -240,6 +247,117 @@ function JumpToNow({ label }: { label: string }) {
   );
 }
 
+/** "Your story so far": two sentences on where the story has been and where it is going. */
+function StoryCard({ text, t }: { text: string; t: (key: string) => string }) {
+  if (!text) return null;
+  return (
+    <section className="rounded-2xl border border-line bg-paper px-5 py-4" data-testid="life-story">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">{t("life5.storyTitle")}</p>
+      <p className="mt-2 font-serif text-[17px] leading-relaxed text-ink">{text}</p>
+    </section>
+  );
+}
+
+/** The current chapter: stage, title, the one-line beat, what it asks of you and the next turn. */
+function NowCard({ c, locale, t }: { c: ChapterView; locale: AppLocale; t: (key: string) => string }) {
+  const ages = agesLabel(c, t);
+  const lords = [c.mahadashaLord, c.antardashaLord && c.antardashaLord !== c.mahadashaLord ? c.antardashaLord : ""]
+    .filter(Boolean).map((l) => grahaName(l, locale)).join(" · ");
+  const next = c.periodEnd ? formatMonthYear(c.periodEnd, locale) : "";
+  return (
+    <Link
+      href={`/life/${c.id}`}
+      prefetch
+      id="current-chapter"
+      data-testid="life-now"
+      className="block rounded-2xl border border-gold-accent/45 bg-gradient-to-br from-paper via-paper to-gold-wash/30 px-5 py-5 shadow-[0_10px_32px_rgba(119,84,31,0.08)] transition-transform active:scale-[0.99]"
+    >
+      <div className="flex items-start gap-4">
+        <GrahaMedallion lord={c.mahadashaLord} size="lg" shimmer />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-tertiary">
+            {t("life5.nowTitle")}
+            {c.lifeStage ? ` · ${t(`stage.${c.lifeStage}`)}` : ages ? ` · ${ages}` : ""}
+          </p>
+          <h2 className="mt-1 font-serif text-2xl font-bold leading-tight text-gold-text">{c.title}</h2>
+          {c.highlight ? <p className="mt-2 text-[15px] font-medium leading-relaxed text-ink">{c.highlight}</p> : null}
+        </div>
+      </div>
+      {c.action ? (
+        <p className="mt-4 rounded-xl bg-paper/80 px-3 py-2.5 text-sm leading-relaxed text-ink-secondary" data-testid="life-now-action">
+          <span className="font-semibold text-gold-text">{t("life5.nowAction")}: </span>
+          {c.action}
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-tertiary">
+        <span>{[lords, next ? fill(t("life5.nextTurn"), { date: next }) : ""].filter(Boolean).join(" · ")}</span>
+        <span className="inline-flex items-center gap-1 font-semibold text-gold-text">
+          {t("life5.open")} <ChevronRight className="h-4 w-4" aria-hidden />
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+type Arc = ReturnType<BirthPackViews["lifeArcs"]>[number];
+
+/** v5 timeline: chapters grouped by mahadasha, each group with its one-line arc. */
+function ArcTimeline({
+  arcs,
+  chapters,
+  isPro,
+  locale,
+  t,
+  onLocked,
+}: {
+  arcs: Arc[];
+  chapters: ChapterView[];
+  isPro: boolean;
+  locale: AppLocale;
+  t: (key: string) => string;
+  onLocked: (c: ChapterView) => void;
+}) {
+  const [showEarlier, setShowEarlier] = useState(false);
+  const bySort = new Map(chapters.map((c) => [c.sortOrder, c]));
+  const groups = arcs
+    .map((a) => ({ arc: a, items: a.chapterIds.map((id) => bySort.get(id)).filter((c): c is ChapterView => Boolean(c)) }))
+    .filter((g) => g.items.length > 0);
+  const nowIdx = groups.findIndex((g) => g.items.some((c) => c.tense === "current"));
+  const firstShown = showEarlier || nowIdx <= 0 ? 0 : nowIdx;
+  const hiddenCount = groups.slice(0, firstShown).reduce((n, g) => n + g.items.length, 0);
+  const row = (c: ChapterView) =>
+    c.kind === "summary" ? (
+      <SummaryRow key={c.id} c={c} isPro={isPro} locale={locale} t={t} onLocked={onLocked} />
+    ) : (
+      <ChapterRow key={c.id} c={c} isPro={isPro} locale={locale} t={t} onLocked={onLocked} hideAnchor />
+    );
+  return (
+    <div className="space-y-6" data-testid="life-arcs">
+      {hiddenCount > 0 ? (
+        <DisclosureButton open={false} onToggle={() => setShowEarlier(true)}>
+          {fill(t("life5.earlier"), { n: hiddenCount })}
+        </DisclosureButton>
+      ) : null}
+      {groups.slice(firstShown).map(({ arc, items }) => {
+        const early = arc.md === "early";
+        const label = early ? t("life5.arcEarly") : fill(t("life5.arcMd"), { lord: grahaName(arc.md, locale) });
+        const ages = arc.ageFrom != null && arc.ageTo != null ? fill(t("life5.ages"), { from: arc.ageFrom, to: arc.ageTo }) : "";
+        return (
+          <section key={`${arc.md}-${arc.chapterIds[0]}`} className="space-y-2" data-testid="life-arc">
+            <header className="sticky top-0 z-20 -mx-5 flex items-center gap-2 border-b border-line bg-canvas px-5 py-2">
+              {!early ? <span className="sign-medallion-glyph text-base text-gold-text" aria-hidden>{grahaSymbol(arc.md)}</span> : null}
+              <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-gold-text">{label}</h2>
+              {ages ? <span className="text-xs text-ink-tertiary">· {ages}</span> : null}
+            </header>
+            {arc.line ? <p className="px-1 text-sm italic leading-relaxed text-ink-secondary" data-testid="life-arc-line">{arc.line}</p> : null}
+            <ol className="relative ml-1 border-l border-line pl-4">{items.map(row)}</ol>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function LifeIndexPage() {
   const { t, locale } = useLocale();
   const { views, loading, error, isPro } = useAppData();
@@ -262,6 +380,7 @@ export default function LifeIndexPage() {
   if (error || !views) {
     return <ReadingUnavailable title={t("life.title")} />;
   }
+  const arcs = views.lifeArcs();
 
   const chapters = views.chapters();
   const past = chapters.filter((c) => c.tense === "past");
@@ -286,7 +405,15 @@ export default function LifeIndexPage() {
       <Link href="/decode" className="-mt-2 inline-flex text-sm font-semibold text-gold-text underline-offset-4 hover:underline" data-testid="life-open-decode">
         {t("life.openDecode")} →
       </Link>
-      <ExplainRow screen="life" className="" terms={[{ term: "life_chapter" }, { term: "mahadasha" }, { term: "antardasha" }]} />
+      {arcs.length > 0 ? (
+        <>
+          <StoryCard text={views.lifeStory} t={t} />
+          {currentChapter ? <NowCard c={currentChapter} locale={locale} t={t} /> : null}
+          <ArcTimeline arcs={arcs} chapters={chapters} isPro={isPro} locale={locale} t={t} onLocked={setLockedChapter} />
+          <GlyphLegend chapters={chapters} t={t} />
+        </>
+      ) : (
+        <>
       {currentChapter ? (
         <Link
           href={`/life/${currentChapter.id}`}
@@ -328,6 +455,11 @@ export default function LifeIndexPage() {
       {future.length > 0 ? (
         <SpineSection label={t("life.spineAhead")}>{future.map(row)}</SpineSection>
       ) : null}
+
+        </>
+      )}
+
+      <ExplainRow screen="life" className="" terms={[{ term: "life_chapter" }, { term: "mahadasha" }, { term: "antardasha" }]} />
 
       <JumpToNow label={t("life.jumpNow")} />
 

@@ -11,7 +11,8 @@ import { grahasAt, natalGrahas } from "./grahas.ts";
 import { buildChartPack } from "./jyotisha.ts";
 import { buildStory, chartFacts, readingV4Enabled } from "./reading_v4.ts";
 import { enrichChapters, readingV5Enabled } from "./reading_v5.ts";
-import { SCREEN_JOB, valueMeaning } from "./engine_copy.ts";
+import { SCREEN_JOB, starName, valueMeaning } from "./engine_copy.ts";
+import { localizeGrahaNames } from "./planner.ts";
 import { scoreDay } from "./calendar.ts";
 import {
   BOND_ACTIONS,
@@ -321,8 +322,21 @@ function birthMoonDetails(
   };
 }
 
+/** Languages this birth chart already has a ready reading in (other than [locale]), unless one is already being written in [locale]. */
+async function readyReadingLocales(admin: SupabaseClient, profileId: string, birthInputId: string, locale: string): Promise<string[]> {
+  try {
+    const { data } = await admin.from("readings").select("locale, status")
+      .eq("profile_id", profileId).eq("birth_input_id", birthInputId).neq("status", "superseded").limit(30);
+    const rows = (data ?? []) as { locale: string; status: string }[];
+    if (rows.some((r) => r.locale === locale)) return [];
+    return [...new Set(rows.filter((r) => r.status === "ready").map((r) => r.locale))];
+  } catch {
+    return [];
+  }
+}
+
 /** Birth star, Moon sign and the current dasha, for the "writing your reading" screen. */
-function generationChartFacts(bi: BioRow, profile: ProfRow, dateStr: string): { nakshatra: string | null; moonSign: string | null; md: string | null; ad: string | null; adUntil: string | null } | null {
+function generationChartFacts(bi: BioRow, profile: ProfRow, dateStr: string, locale: AppLocale): Record<string, string | null> | null {
   try {
     const tz = profile.current_timezone ?? "Asia/Kolkata";
     const natal = birthMoonDetails(bi, tz, "en");
@@ -330,10 +344,17 @@ function generationChartFacts(bi: BioRow, profile: ProfRow, dateStr: string): { 
     const at = parseDateAsUtcInstant(dateStr, tz);
     const md = segments.length ? segmentAt(segments, at) : null;
     const ad = md ? segmentAtAntardasha(antardashasInMahadasha(md), at) : null;
+    const nak = bi.janma_nakshatra ?? natal?.nakshatra ?? null;
+    const signKey = (natal?.sign as { key?: string } | undefined)?.key ?? null;
     return {
-      nakshatra: natal?.nakshatra ?? bi.janma_nakshatra ?? null,
-      moonSign: (natal?.sign as { key?: string } | undefined)?.key ?? null,
-      md: md?.lord ?? null, ad: ad?.adLord ?? null, adUntil: ad ? ad.end.toISOString().slice(0, 7) : null,
+      nakshatra: nak,
+      nakshatraLabel: nak ? starName(nak, locale) : null,
+      moonSign: signKey,
+      moonSignLabel: signKey ? rashiDisplay(signKey, locale).label : null,
+      md: md?.lord ?? null, ad: ad?.adLord ?? null,
+      mdLabel: md ? localizeGrahaNames(md.lord, locale) : null,
+      adLabel: ad ? localizeGrahaNames(ad.adLord, locale) : null,
+      adUntil: ad ? ad.end.toISOString().slice(0, 7) : null,
     };
   } catch {
     return null;
@@ -5411,10 +5432,11 @@ async function _handleInternal(
     let pack = await loadBirthPack(adminSupabase, profile, bi, locale, dateStr);
     // Another language of your own reading is written only when asked for (the app shows a
     // "Write it in <language>" button), not just because the UI language changed.
-    const ownChart = !chartProfileIdFromBody(body);
-    const primary = normalizeLocale(String(profile.language_code ?? "en"));
-    if ((!pack || !isClientServablePack(pack)) && body.ensure === true && !mayGenerate && ownChart && locale !== primary && body.generate_locale !== true) {
-      return { not_written: true, status: "not_written", locale, primaryLocale: primary, date: dateStr, birthInputId: bi.id, chart: generationChartFacts(bi, profile, dateStr) };
+    if ((!pack || !isClientServablePack(pack)) && body.ensure === true && !mayGenerate && !chartProfileIdFromBody(body) && body.generate_locale !== true) {
+      const other = await readyReadingLocales(adminSupabase, profile.id, bi.id, locale);
+      if (other.length) {
+        return { not_written: true, status: "not_written", locale, otherLocales: other, date: dateStr, birthInputId: bi.id, chart: generationChartFacts(bi, profile, dateStr, locale) };
+      }
     }
     if ((!pack || !isClientServablePack(pack)) && body.ensure === true && !mayGenerate) {
       // Background generation for the client poll loop (partner/friend charts and any
@@ -5437,7 +5459,7 @@ async function _handleInternal(
           displayName: subjectName,
           birthInputId: bi.id,
           // Chart facts are engine-only and instant: shown while the words are written.
-          chart: generationChartFacts(bi, profile, dateStr),
+          chart: generationChartFacts(bi, profile, dateStr, locale),
           access: buildAccessPayload(access),
         };
       }

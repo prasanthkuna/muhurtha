@@ -38,7 +38,17 @@ export type TodayCalendar = {
   chandrashtama?: boolean;
   birthStar?: boolean;
   natalStar?: string | null;
+  /** The day's best window (the one every screen and alert names) and what kind it is. */
+  best?: { start: string; end: string } | null;
+  bestKind?: "go" | "calm";
+  rahu?: { start: string; end: string } | null;
 };
+
+function slot(v: unknown): { start: string; end: string } | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  return typeof o.start === "string" && typeof o.end === "string" ? { start: o.start, end: o.end } : null;
+}
 
 export function parseTodayPayload(raw: Record<string, unknown>): TodayPayload {
   const windows = (key: string): TimingWindow[] => {
@@ -95,6 +105,9 @@ export function parseTodayPayload(raw: Record<string, unknown>): TodayPayload {
           chandrashtama: cal.chandrashtama === true,
           birthStar: cal.birth_star === true,
           natalStar: cal.natal_star ? String(cal.natal_star) : null,
+          best: slot(cal.best),
+          bestKind: cal.best_kind === "calm" ? "calm" : "go",
+          rahu: slot(cal.rahu),
         }
       : null,
     moonDates: md
