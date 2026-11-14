@@ -336,7 +336,7 @@ async function readyReadingLocales(admin: SupabaseClient, profileId: string, bir
 }
 
 /** Birth star, Moon sign and the current dasha, for the "writing your reading" screen. */
-function generationChartFacts(bi: BioRow, profile: ProfRow, dateStr: string, locale: AppLocale): Record<string, string | null> | null {
+export function generationChartFacts(bi: BioRow, profile: ProfRow, dateStr: string, locale: AppLocale): Record<string, string | null> | null {
   try {
     const tz = profile.current_timezone ?? "Asia/Kolkata";
     const natal = birthMoonDetails(bi, tz, "en");
@@ -6095,6 +6095,12 @@ async function _handleInternal(
       goodWindows,
       cautionWindows,
     );
+    // Same fallback as ask_stream: answer the question asked from the verdict, dates and chapter.
+    try {
+      const subjectA = scope.isFriend && bi ? await chartSubjectName(adminSupabase, profile, bi) : null;
+      const groundedA = groundedFallback(question, locale as AskLocale, liveFacts(profile, bi, locale, targetDate, subjectA), targetDate, liveReadingCopy(pack, targetDate));
+      if (groundedA) copy = { ...copy, direct_answer: groundedA };
+    } catch { /* keep the pack template */ }
     // Real AI answer grounded in the reading + live windows; the template above is the
     // fallback when the model is unavailable (quota is refunded then).
     let askLlm: Record<string, unknown> | null = null;

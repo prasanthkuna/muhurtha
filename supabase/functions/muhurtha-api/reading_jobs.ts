@@ -36,7 +36,7 @@ import {
   type ResponseObject,
 } from "./openai_responses.ts";
 import { chapterPlanV4, fillPlansV4, newItemScope } from "./reading_v4.ts";
-import { isV5 } from "./reading_v5.ts";
+import { hasAlien, isV5 } from "./reading_v5.ts";
 import { mergeShards, offScriptShare, planShards, previewFrom, readingEffort, type ReadingPreview, type ShardKey, shardCall, shardEffort, shardMissing, shardOnly, shardStaggerMs } from "./reading_shards.ts";
 
 /** Job attempts come from maxAttempts() in llm_policy.ts (Luna: first try + one retry). */
@@ -1208,8 +1208,20 @@ export async function fillDaysV4(admin: SupabaseClient, readingId: string): Prom
     ? await repairNew(admin, r, r.content, { ...(got.length ? { days: got } : {}), ...(gotCh.length ? { chapters: gotCh } : {}) }, job?.id ?? null)
     : null;
   const fixedDays = rep?.add.days?.length ? rep.add.days : got;
-  const fixedCh = rep?.add.chapters?.length ? rep.add.chapters : gotCh;
+  let fixedCh = rep?.add.chapters?.length ? rep.add.chapters : gotCh;
   out.totals = rep ? sumT(out.totals, rep.totals) : out.totals;
+  // te/hi script drift (stray Tamil/Kannada words) that the repair did not fix: rewrite those
+  // chapters once; any still drifted stay unwritten and are written on demand when opened.
+  const drift = (cs: typeof fixedCh) => cs.filter((c) => hasAlien(JSON.stringify(c), r.locale as "en" | "te" | "hi")).map((c) => Number(c.chapter_id));
+  const drifted = drift(fixedCh);
+  if (drifted.length) {
+    const keep = fixedCh.filter((c) => !drifted.includes(Number(c.chapter_id)));
+    const base = { ...r.content, chapters: [...(r.content.chapters ?? []), ...keep] };
+    const re = await runParts(admin, r, base, [{ key: "L", scope: { chapters: drifted }, maxTokens: 6000, note: "these life chapters" }], job?.id ?? null);
+    out.totals = sumT(out.totals, re.totals);
+    const again = re.parts.flatMap((p) => p.chapters ?? []).filter((c) => drifted.includes(Number(c.chapter_id)));
+    fixedCh = [...keep, ...again.filter((c) => !drift([c]).length)];
+  }
   const state: FillState = {
     status: missing.length ? "failed" : "done", tries, at: new Date().toISOString(), days: got.length, chapters: gotCh.length,
     cost_usd: Number(((fill?.cost_usd ?? 0) + out.totals.cost_usd).toFixed(6)), ms: Date.now() - t0,
@@ -1239,7 +1251,8 @@ export async function writeChaptersV4(
   const want = new Set(plan.scope.chapters ?? []);
   const raw = out.parts.flatMap((p) => p.chapters ?? []).filter((c) => want.has(Number(c.chapter_id)));
   const rep = raw.length ? await repairNew(admin, r, r.content, { chapters: raw }, null) : null;
-  const chapters = rep?.add.chapters?.length ? rep.add.chapters : raw;
+  // Never save a chapter in a drifted script; it stays pending and the next open retries.
+  const chapters = (rep?.add.chapters?.length ? rep.add.chapters : raw).filter((c) => !hasAlien(JSON.stringify(c), r.locale as "en" | "te" | "hi"));
   if (rep) out.totals = sumT(out.totals, rep.totals);
   await addJobCost(admin, readingId, out.totals);
   if (!chapters.length) return { written: [], error: out.errors.join("; ") || "no_content", cost_usd: out.totals.cost_usd };

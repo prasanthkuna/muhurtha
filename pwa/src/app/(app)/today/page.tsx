@@ -355,7 +355,7 @@ export default function TodayPage() {
           {cal ? (
             <VerdictCard
               cal={cal}
-              why={calWhy}
+              why={bodyShown ? "" : calWhy}
               favours={calFavours}
               avoid={calAvoid}
               detail={[
@@ -390,6 +390,7 @@ export default function TodayPage() {
             key={date}
             isToday={isToday}
             goodWindows={decorate(liveGood)}
+            best={cal?.best && (!isToday || upcomingWindows([cal.best], date, profileTimezone, nowMs).length) ? { ...cal.best, label: t(cal.bestKind === "calm" ? "verdict.calm" : "verdict.best") } : null}
             cautionWindows={decorate(liveCaution)}
             betterFor={betterForShown}
             beCareful={beCarefulShown}

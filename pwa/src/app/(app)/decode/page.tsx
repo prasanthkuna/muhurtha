@@ -16,7 +16,7 @@ import { ShareCardButton } from "@/components/share/share-button";
 import { AfterReadingInstall } from "@/components/pwa/after-reading-install";
 import { clip, rashiGlyph } from "@/lib/share/builders";
 import { fill, nakLabel } from "@/lib/messages-bond";
-import { calWhyLine } from "@/lib/cal-text";
+import { formatWindowRange } from "@/lib/format-time";
 import { ChartDetail, ExplainTerm } from "@/components/v5/chart-detail";
 import { grahaName } from "@/design-system/graha";
 
@@ -48,8 +48,10 @@ export default function DecodePage() {
     { label: t("chart.moon"), value: luck?.moonSignLabel ?? "", term: "moon_sign" },
     { label: t("chart.lords"), value: lords, term: "mahadasha" },
   ];
-  const todayWhy = today?.calendar?.why
-    ? calWhyLine({ why: today.calendar.why, nakshatra: today.dayStar ?? null, natal_star: today.calendar.natalStar ?? null }, t, locale)
+  // The day's verdict (same as Today/Calendar/alerts): tone + the one best time, not a stock star line.
+  const vcal = today?.calendar ?? null;
+  const todayWhy = vcal
+    ? [t(`verdict.${vcal.tone}`), vcal.best ? `${t(vcal.bestKind === "calm" ? "verdict.calm" : "verdict.best")} ${formatWindowRange(vcal.best.start, vcal.best.end)}` : ""].filter(Boolean).join(" · ")
     : "";
 
   return (

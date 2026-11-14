@@ -15,7 +15,10 @@ export function TodayTimingPanel({
   beCareful,
   allPassed = false,
   onTomorrow,
+  best = null,
 }: {
+  /** The verdict's best window (Calendar/alerts name the same one); label = "Best time"/"Calmest time". */
+  best?: TimingWindow | null;
   isToday?: boolean;
   goodWindows: TimingWindow[];
   cautionWindows: TimingWindow[];
@@ -27,7 +30,12 @@ export function TodayTimingPanel({
 }) {
   const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
-  const nextGood = goodWindows[0];
+  const same = (a?: TimingWindow | null, b?: TimingWindow | null) => Boolean(a && b) && formatWindowRange(a!.start, a!.end) === formatWindowRange(b!.start, b!.end);
+  const bestMatch = best ? goodWindows.find((w) => same(w, best)) : undefined;
+  const bestWin = best ? { ...best, label: bestMatch?.label, whyItWorks: bestMatch?.whyItWorks } : null;
+  // "Next good time" only when it comes before the best one and is a different slot.
+  const first = goodWindows[0];
+  const nextGood = bestWin && (same(first, bestWin) || !first || first.start >= bestWin.start) ? undefined : first;
   const nextCaution = cautionWindows[0];
 
   return (
@@ -38,8 +46,15 @@ export function TodayTimingPanel({
         </p>
       </div>
 
-      {nextGood || nextCaution ? (
+      {bestWin || nextGood || nextCaution ? (
         <div className="space-y-3">
+          {bestWin ? (
+            <div data-testid="today-best-window">
+              <p className="mb-2 text-xs font-semibold text-success-ink">{best?.label}</p>
+              <WindowTimePill window={bestWin} tone="good" />
+              {bestWin.whyItWorks ? <p className="mt-2 text-xs leading-relaxed text-ink-tertiary">{bestWin.whyItWorks}</p> : null}
+            </div>
+          ) : null}
           {nextGood ? (
             <div>
               <p className="mb-2 text-xs font-semibold text-success-ink">{isToday ? t("today.nextGood") : t("today.firstGood")}</p>
@@ -126,11 +141,6 @@ export function TodayTimingPanel({
         </>
       )}
 
-      {nextGood && !expanded ? (
-        <p className="text-xs text-ink-tertiary">
-          {t("today.generalPanchanga")}: {formatWindowRange(nextGood.start, nextGood.end)}
-        </p>
-      ) : null}
     </section>
   );
 }

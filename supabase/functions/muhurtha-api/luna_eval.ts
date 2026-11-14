@@ -18,7 +18,7 @@ import { themeOk } from "./theme_check.ts";
 import { buildSystemPrompt, mergeRepair, repairPrompt, repairScope, sanitizeContent, scriptGuard, type V2Content, validateContent } from "./reading_v2.ts";
 import { createWithSchema } from "./reading_jobs.ts";
 import { isV4 } from "./reading_v2.ts";
-import { isV5 } from "./reading_v5.ts";
+import { hasAlien, isV5 } from "./reading_v5.ts";
 import { groundedFallback, verdictCard } from "./ask_grounded.ts";
 
 /** An answer that tells someone to start/launch something big today on a mixed or rest day. */
@@ -400,6 +400,17 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
       errs.fill_repair = (e instanceof Error ? e.message : String(e)).slice(0, 160);
     }
   }
+  // Same as production fillDaysV4: chapters still in a drifted script are rewritten once.
+  const driftIds = isV5(facts) ? full.chapters.filter((c) => hasAlien(JSON.stringify(c), locale as "en" | "te" | "hi")).map((c) => Number(c.chapter_id)) : [];
+  let driftRewritten = 0;
+  if (driftIds.length) {
+    const base = { ...full, chapters: full.chapters.filter((c) => !driftIds.includes(Number(c.chapter_id))) };
+    const out = await run({ key: "L", scope: { chapters: driftIds }, maxTokens: 6000, note: "these life chapters" } as never, fill, base);
+    const again = (out?.chapters ?? []).filter((c) => driftIds.includes(Number(c.chapter_id)) && !hasAlien(JSON.stringify(c), locale as "en" | "te" | "hi"));
+    driftRewritten = again.length;
+    full = sanitizeContent({ ...base, chapters: [...base.chapters, ...again].sort((a, b) => Number(a.chapter_id) - Number(b.chapter_id)) }, facts);
+    vf = validateContent(full, facts);
+  }
   const fillMs = Date.now() - t0 - readyMs;
   // One on-demand chapter batch (a past chapter, as a Pro user browsing back).
   const unwritten = facts.chapters.find((c) => !full.chapters.some((x) => Number(x.chapter_id) === c.chapter_id));
@@ -432,7 +443,7 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
     output: {
       // Synthetic profile only: the full content, for local screenshots of the new screens.
       ...(keepContent ? { content: full } : {}),
-      v: v5 ? 5 : 4, raw_wrong_script: rawWrongScript, reasons_visible: rc, shard_ms: times, errors: errs, off_script_retries: retried, ready_ms: readyMs, fill_ms: fillMs, lazy_ms: lazyMs, lazy_chapters: lazyN,
+      v: v5 ? 5 : 4, raw_wrong_script: rawWrongScript, drift_chapters: driftIds.length, drift_rewritten: driftRewritten, reasons_visible: rc, shard_ms: times, errors: errs, off_script_retries: retried, ready_ms: readyMs, fill_ms: fillMs, lazy_ms: lazyMs, lazy_chapters: lazyN,
       initial: { ...init, cost: round6(init.cost) }, fill: { ...fill, cost: round6(fill.cost) }, lazy: { ...lazy, cost: round6(lazy.cost) },
       cost_usd: round6(init.cost + fill.cost), cost_with_lazy: round6(init.cost + fill.cost + lazy.cost),
       input_tokens: init.input + fill.input, output_tokens: init.output + fill.output, cache_write_tokens: init.cache_write + fill.cache_write,
