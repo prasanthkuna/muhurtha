@@ -457,7 +457,7 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
   // v5 quality gates after the one repair (production does the same): hard zero for the
   // cross-screen and script problems, a small budget for style ones.
   const v5Gate = !v5 || ((rc.lord_chain ?? 0) === 0 && (rc.wrong_script ?? 0) <= 1 && (rc.verdict_mismatch ?? 0) <= 1 && (rc.truncated ?? 0) <= 1 &&
-    (rc.action_missing ?? 0) <= 1 && (rc.stage_missing ?? 0) <= 2 && (rc.past_asserted ?? 0) === 0 && full.chapters.length === facts.chapters.length);
+    (rc.action_missing ?? 0) <= 1 && (rc.stage_missing ?? 0) <= 2 && (rc.body_short ?? 0) <= 2 && (rc.past_asserted ?? 0) === 0 && full.chapters.length === facts.chapters.length);
   return {
     case_id: `reading-v${v5 ? 5 : 4}-p${i}`, locale,
     pass: v.ok && vf.ok && Object.keys(errs).length === 0 && theme.ok && allDays && unsupportedPct <= 5 && v5Gate,
@@ -491,6 +491,13 @@ async function runReadingCaseV4(i: number, facts: ReturnType<typeof liveFacts> &
         sample_past: full.chapters.filter((c) => facts.chapters.find((x) => x.chapter_id === Number(c.chapter_id))?.tense === "past" && c.body).slice(-2),
         sample_future: full.chapters.filter((c) => facts.chapters.find((x) => x.chapter_id === Number(c.chapter_id))?.tense === "future" && c.body).slice(0, 1),
         arcs: full.arcs ?? [], life_story: full.life_story ?? "",
+        // Average chapter body length by tense (t97u: the body is the one chapter section).
+        body_chars: (["past", "current", "future"] as const).reduce((m: Record<string, number>, t) => {
+          const xs = full.chapters.filter((c) => facts.chapters.find((x) => x.chapter_id === Number(c.chapter_id) && x.kind !== "summary")?.tense === t && c.body).map((c) => c.body.length);
+          m[t] = xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0;
+          return m;
+        }, {}),
+        chapter_why_chars: full.chapters.reduce((n, c) => n + String(c.why ?? "").length, 0),
         areas: full.areas.slice(0, 3).map((a) => ({ area_id: a.area_id, headline: a.headline, summary: a.summary, why: a.why })),
         profile_why: full.profile?.why ?? "",
         day_verdicts: full.days.slice(0, 7).map((d) => ({ date: d.date, tone: facts.days.find((x) => x.date === d.date)?.verdict?.tone, line: d.line, do: d.do })),
