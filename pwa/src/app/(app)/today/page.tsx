@@ -358,12 +358,6 @@ export default function TodayPage() {
               why={bodyShown ? "" : calWhy}
               favours={calFavours}
               avoid={calAvoid}
-              detail={[
-                { label: t("cal.starLabel"), value: day?.dayStar ? `${nakLabel(day.dayStar, locale)}${day.birthStarToday ? ` ★ ${t("cal.birthStar")}` : ""}` : "", term: "nakshatra", termValue: day?.dayStar ?? undefined },
-                { label: t("cal.tithiLabel"), value: day?.tithi ? tithiLabel(day.tithi, locale) : "", term: "tithi", termValue: day?.tithi ?? undefined },
-                { label: t("cal.taraLabel"), value: day?.tara ? (t(`tara.${day.tara}`).startsWith("tara.") ? day.tara : t(`tara.${day.tara}`)) : "", term: "tara_bala", termValue: day?.tara ?? undefined },
-                { label: t("verdict.rahu"), value: cal.rahu ? formatWindowRange(cal.rahu.start, cal.rahu.end) : "", term: "rahu_kalam" },
-              ]}
             />
           ) : panchangLine ? (
             <p className="text-xs text-ink-tertiary" data-testid="today-panchang">{panchangLine}</p>

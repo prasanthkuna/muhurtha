@@ -1,21 +1,12 @@
 import type { AppLocale } from "./locale";
 
 /**
- * Reading v5 screens: verdict card, Life story/arcs, chapter page, chart detail, friendly
+ * Reading v5 screens: verdict card, Life story/arcs, chapter page, friendly
  * states, "write in another language" and the chart facts shown while a reading is written.
  * Flat keys, looked up first.
  */
 export const V5: Record<AppLocale, Record<string, string>> = {
   en: {
-    "chart.md": "Main period (mahadasha)",
-    "chart.ad": "Sub-period (antardasha)",
-    "chart.period": "Dates",
-    "cal.starLabel": "Moon's star today",
-    "cal.tithiLabel": "Tithi",
-    "cal.taraLabel": "Tara Bala",
-    "tara.Janma": "Janma (your own star)", "tara.Sampat": "Sampat (wealth)", "tara.Vipat": "Vipat (obstacles)",
-    "tara.Kshema": "Kshema (well-being)", "tara.Pratyak": "Pratyak (friction)", "tara.Sadhana": "Sadhana (achievement)",
-    "tara.Naidhana": "Naidhana (hardest)", "tara.Mitra": "Mitra (friendly)", "tara.Parama Mitra": "Parama Mitra (very friendly)",
     "lang.en": "English",
     "lang.te": "Telugu",
     "lang.hi": "Hindi",
@@ -49,18 +40,10 @@ export const V5: Record<AppLocale, Record<string, string>> = {
     "verdict.restSub": "Rest, review and routine work.",
     "verdict.best": "Best time",
     "verdict.calm": "Calmest time",
-    "verdict.rahu": "Rahu Kalam",
-    "verdict.chartDetail": "Chart detail",
     "verdict.sameEverywhere": "Same call as your Calendar and alerts.",
 
     "why.label": "Why",
     "why.fits": "Why this fits you",
-    "chart.detail": "Chart detail",
-    "chart.lords": "Main period · sub-period",
-    "chart.basis": "Chart facts behind this",
-    "chart.star": "Birth star",
-    "chart.moon": "Moon sign",
-
     "life5.storyTitle": "Your story so far",
     "life5.nowTitle": "Where you are now",
     "life5.nowAction": "What this stretch asks of you",
@@ -111,20 +94,9 @@ export const V5: Record<AppLocale, Record<string, string>> = {
     "ask5.src.life": "Life",
     "ask5.src.decode": "Decode",
     "explain.forYou": "For you",
-    "explain.tap": "Tap a word to see what it means",
-
   },
   te: {
     "timing.preliminary": "ప్రాథమిక సూచన",
-    "chart.md": "మహాదశ",
-    "chart.ad": "అంతర్దశ",
-    "chart.period": "తేదీలు",
-    "cal.starLabel": "ఈరోజు చంద్ర నక్షత్రం",
-    "cal.tithiLabel": "తిథి",
-    "cal.taraLabel": "తారాబలం",
-    "tara.Janma": "జన్మ తార (మీ నక్షత్రమే)", "tara.Sampat": "సంపత్ తార (సంపద)", "tara.Vipat": "విపత్ తార (అడ్డంకులు)",
-    "tara.Kshema": "క్షేమ తార (క్షేమం)", "tara.Pratyak": "ప్రత్యక్ తార (ఘర్షణ)", "tara.Sadhana": "సాధన తార (సాధన)",
-    "tara.Naidhana": "నైధన తార (కష్టమైనది)", "tara.Mitra": "మిత్ర తార (స్నేహం)", "tara.Parama Mitra": "పరమ మిత్ర తార (చాలా మంచిది)",
     "lang.en": "ఇంగ్లీష్",
     "lang.te": "తెలుగు",
     "lang.hi": "హిందీ",
@@ -158,18 +130,10 @@ export const V5: Record<AppLocale, Record<string, string>> = {
     "verdict.restSub": "విశ్రాంతి, రివ్యూ, రోజువారీ పనులకు.",
     "verdict.best": "బెస్ట్ టైమ్",
     "verdict.calm": "ప్రశాంతమైన టైమ్",
-    "verdict.rahu": "రాహుకాలం",
-    "verdict.chartDetail": "చార్ట్ వివరాలు",
     "verdict.sameEverywhere": "మీ క్యాలెండర్, అలర్ట్స్‌లో కూడా ఇదే.",
 
     "why.label": "ఎందుకు",
     "why.fits": "ఇది మీకు ఎందుకు సరిపోతుంది",
-    "chart.detail": "చార్ట్ వివరాలు",
-    "chart.lords": "మహాదశ · అంతర్దశ",
-    "chart.basis": "దీని వెనుక ఉన్న చార్ట్ వివరాలు",
-    "chart.star": "జన్మ నక్షత్రం",
-    "chart.moon": "చంద్ర రాశి",
-
     "life5.storyTitle": "ఇప్పటివరకు మీ కథ",
     "life5.nowTitle": "ఇప్పుడు మీరు ఎక్కడ ఉన్నారు",
     "life5.nowAction": "ఈ దశ మీ నుంచి కోరేది",
@@ -220,8 +184,6 @@ export const V5: Record<AppLocale, Record<string, string>> = {
     "ask5.src.life": "లైఫ్",
     "ask5.src.decode": "డీకోడ్",
     "explain.forYou": "మీకు",
-    "explain.tap": "ఏ పదం అర్థం కావాలన్నా దాన్ని ట్యాప్ చేయండి",
-
   },
   hi: {
     "timing.preliminary": "प्रारंभिक",
@@ -233,15 +195,6 @@ export const V5: Record<AppLocale, Record<string, string>> = {
     "today.whyDecode": "डिकोड में देखें →",
     "settings.languageHint": "चुनी हुई भाषा में आपकी रीडिंग फिर से खुलेगी।",
     "install.afterBody": "मुहूर्त को होम स्क्रीन पर जोड़ें। सूचनाएँ ब्राउज़र के नाम से नहीं, मुहूर्त के नाम से आएँगी।",
-    "chart.md": "महादशा",
-    "chart.ad": "अंतर्दशा",
-    "chart.period": "तारीख़ें",
-    "cal.starLabel": "आज चंद्रमा का नक्षत्र",
-    "cal.tithiLabel": "तिथि",
-    "cal.taraLabel": "तारा बल",
-    "tara.Janma": "जन्म तारा (आपका अपना नक्षत्र)", "tara.Sampat": "संपत तारा (धन)", "tara.Vipat": "विपत तारा (रुकावटें)",
-    "tara.Kshema": "क्षेम तारा (कुशलता)", "tara.Pratyak": "प्रत्यक तारा (टकराव)", "tara.Sadhana": "साधना तारा (सफलता)",
-    "tara.Naidhana": "नैधन तारा (सबसे कठिन)", "tara.Mitra": "मित्र तारा (मित्रवत)", "tara.Parama Mitra": "परम मित्र तारा (बहुत अच्छा)",
     "lang.en": "अंग्रेज़ी",
     "lang.te": "तेलुगु",
     "lang.hi": "हिंदी",
@@ -275,18 +228,10 @@ export const V5: Record<AppLocale, Record<string, string>> = {
     "verdict.restSub": "आराम, समीक्षा और रोज़ के काम के लिए।",
     "verdict.best": "सबसे अच्छा समय",
     "verdict.calm": "सबसे शांत समय",
-    "verdict.rahu": "राहुकाल",
-    "verdict.chartDetail": "कुंडली विवरण",
     "verdict.sameEverywhere": "आपके कैलेंडर और अलर्ट में भी यही है।",
 
     "why.label": "क्यों",
     "why.fits": "यह आप पर क्यों लागू होता है",
-    "chart.detail": "कुंडली विवरण",
-    "chart.lords": "महादशा · अंतर्दशा",
-    "chart.basis": "इसके पीछे के कुंडली तथ्य",
-    "chart.star": "जन्म नक्षत्र",
-    "chart.moon": "चंद्र राशि",
-
     "life5.storyTitle": "अब तक की आपकी कहानी",
     "life5.nowTitle": "आप अभी कहाँ हैं",
     "life5.nowAction": "यह दौर आपसे क्या चाहता है",
@@ -337,7 +282,5 @@ export const V5: Record<AppLocale, Record<string, string>> = {
     "ask5.src.life": "जीवन",
     "ask5.src.decode": "डिकोड",
     "explain.forYou": "आपके लिए",
-    "explain.tap": "किसी शब्द का मतलब जानने के लिए उस पर टैप करें",
-
   },
 };

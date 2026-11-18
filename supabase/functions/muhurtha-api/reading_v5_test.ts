@@ -5,7 +5,7 @@ import { calendarDayForBirth } from "./bond.ts";
 import { eventsForDay, normalizePrefs } from "./push.ts";
 import { buildReadingSchema, buildReadingView, buildSystemPrompt, sanitizeContent, type V2Content, validateContent } from "./reading_v2.ts";
 import { compileContext, fillPlansV4, planPartsV4 } from "./reading_v4.ts";
-import { arcsOf, chapterAreas, clipSentences, looksTruncated, stageKey, v5Flags, wrongScript } from "./reading_v5.ts";
+import { arcsOf, chapterAreas, clipSentences, looksTruncated, stageKey, V5_LIMITS, v5Flags, wrongScript } from "./reading_v5.ts";
 import { askSources, askTopic, bestDays, groundedFallback, personalExplain } from "./ask_grounded.ts";
 
 const PROF = {
@@ -68,7 +68,7 @@ Deno.test("v5 prompt: no lord-chain mandate, no legacy weekday rules; every part
     const c = compileContext(f, p, null);
     assert(c.user.length < 16000, `${p.key} context too big: ${c.user.length}`);
     const schema = JSON.stringify(buildReadingSchema(f, { withLengths: true, scope: p.scope }));
-    if (p.key === "B") assert(schema.includes("\"arcs\"") && schema.includes("\"action\"") && schema.includes("\"why\""));
+    if (p.key === "B") assert(schema.includes("\"arcs\"") && schema.includes("\"action\"") && !schema.includes("\"why\""), "B: chapters carry body+action, no why");
   }
   const B = compileContext(f, planPartsV4(f).find((p) => p.key === "B")!, null).user;
   assert(B.includes("life_stage") && B.includes("chapter_domains"));
@@ -90,7 +90,7 @@ Deno.test("sentence-safe trim never cuts mid-sentence when a sentence fits", () 
   assertEquals(clipSentences("మొదటి వాక్యం. రెండవ వాక్యం చాలా పెద్దది మరియు ఇది సరిపోదు.", 20), "మొదటి వాక్యం.");
 });
 
-Deno.test("v5 validator flags lord chains, truncation, missing stage/action/why, past assertions, verdict clashes, wrong script", () => {
+Deno.test("v5 validator flags lord chains, truncation, missing stage/action, short bodies, past assertions, verdict clashes, wrong script", () => {
   const f = v5();
   const past = f.chapters.find((c) => c.kind !== "summary" && c.tense === "past")!;
   const cur = f.chapters.find((c) => c.chapter_id === f.current_chapter_id)!;
@@ -103,18 +103,20 @@ Deno.test("v5 validator flags lord chains, truncation, missing stage/action/why,
     days: [{ date: restDay.date, title: "x", line: "A great day to start a new venture.", body: "Fine.", do: ["Start the project"], avoid: [], window_notes: [] }],
   };
   const reasons = v5Flags(c, f).map((x) => `${x.section}:${x.reason}`);
-  for (const r of ["chapters:lord_chain", "chapters:truncated", "chapters:past_asserted", "chapters:why_missing", "chapters:action_missing", "chapters:stage_missing", "days:verdict_mismatch"]) {
+  for (const r of ["chapters:lord_chain", "chapters:truncated", "chapters:past_asserted", "chapters:body_short", "chapters:action_missing", "chapters:stage_missing", "days:verdict_mismatch"]) {
     assert(reasons.includes(r), `missing ${r}: ${reasons.join(" ")}`);
   }
+  // The chapter "why" is no longer written (t97u): an empty one is never flagged.
+  assert(!reasons.includes("chapters:why_missing"), reasons.join(" "));
   assert(wrongScript("This sentence is entirely English and long enough to count here.", "te"));
   assert(wrongScript("இது தமிழ்", "te"));
   assert(!wrongScript("ఈ వారం మీకు career లో మంచి మార్పులు వస్తాయి, ప్లాన్ చేసుకోండి.", "te"));
 });
 
-Deno.test("v5 view: arcs, life story, why/action and stage reach the client; trims by tense", () => {
+Deno.test("v5 view: arcs, life story, action and stage reach the client; no chapter why; trims by tense", () => {
   const f = v5();
   const cur = f.chapters.find((c) => c.chapter_id === f.current_chapter_id)!;
-  const long = Array.from({ length: 20 }, (_, i) => `Sentence number ${i} is here.`).join(" ");
+  const long = Array.from({ length: 60 }, (_, i) => `Sentence number ${i} is here.`).join(" ");
   const content = sanitizeContent({
     profile: { title: "T", summary: "S.", strengths: [], watchouts: [], work_style: "", relationship_style: "", share_line: "", why: "Because." },
     areas: [], days: [], weekdays: [], weeks: [], months: [], ask_starters: [], remedies: [], push: {} as never,
@@ -122,10 +124,16 @@ Deno.test("v5 view: arcs, life story, why/action and stage reach the client; tri
     arcs: [{ md: cur.md, line: "From chasing to building." }], life_story: "Two lines.",
   } as V2Content, f);
   const ch = content.chapters[0];
-  assert(ch.body.length <= 900 && !looksTruncated(ch.body));
+  assert(ch.body.length <= V5_LIMITS.body.current && ch.body.length > 900 && !looksTruncated(ch.body));
+  assert(!("why" in ch), "sanitized chapters carry no why");
   const view = buildReadingView(content, f, { dateStr: DATE, tz: "Asia/Kolkata", locale: "en" }) as Record<string, unknown>;
   const ph = (view.journey_phases as Record<string, unknown>[]).find((p) => p.sortOrder === cur.chapter_id)!;
   assertEquals(ph.action, "Save weekly.");
+  assert(!("why" in ph), "the view sends no chapter why");
+  // An older stored reading with a chapter why still renders: the field is ignored.
+  const old = buildReadingView({ ...content, chapters: [{ ...content.chapters[0], why: "Saturn rules you." }] }, f, { dateStr: DATE, tz: "Asia/Kolkata", locale: "en" }) as Record<string, unknown>;
+  const oph = (old.journey_phases as Record<string, unknown>[]).find((p) => p.sortOrder === cur.chapter_id)!;
+  assert(!("why" in oph) && (oph.sentences as string[]).length > 5);
   assertEquals(ph.lifeStage, stageKey(cur.age_from, cur.age_to));
   assert((view.life_arcs as unknown[]).length >= 2);
   assertEquals(view.life_story, "Two lines.");

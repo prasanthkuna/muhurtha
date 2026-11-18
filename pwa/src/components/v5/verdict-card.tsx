@@ -5,7 +5,6 @@ import { AREA_ICON } from "@/lib/cal-text";
 import { formatWindowRange } from "@/lib/format-time";
 import type { TodayCalendar } from "@/lib/today-types";
 import { cn } from "@/components/ui/cn";
-import { ChartDetail, type DetailRow } from "./chart-detail";
 
 const TONE_STYLE: Record<TodayCalendar["tone"], string> = {
   supportive: "border-success-ink/30 bg-success-ink/5",
@@ -20,18 +19,16 @@ const DOT: Record<TodayCalendar["tone"], string> = {
 
 /**
  * The day verdict (the same call the Calendar, alerts and Ask use): tone, best time,
- * what it favours and what to go easy on, the reason, and the chart detail behind it.
+ * what it favours and what to go easy on, and the reason in plain words (no chart-detail drop-down: t97u).
  */
 export function VerdictCard({
   cal,
   why,
-  detail,
   favours,
   avoid,
 }: {
   cal: TodayCalendar;
   why?: string;
-  detail: DetailRow[];
   /** Areas not already named in the headline (each area is said once per screen). */
   favours: string[];
   avoid: string | null;
@@ -71,9 +68,6 @@ export function VerdictCard({
       ) : null}
       {why ? <p className="mt-2 text-xs leading-relaxed text-ink-secondary" data-testid="verdict-why">{why}</p> : null}
       {cal.chandrashtama ? <p className="mt-1 text-xs text-warning-ink">{t("cal.chandrashtamaGloss")}</p> : null}
-      <div className="mt-3">
-        <ChartDetail rows={detail} screen="today" label={t("verdict.chartDetail")} testId="verdict-detail" />
-      </div>
     </section>
   );
 }

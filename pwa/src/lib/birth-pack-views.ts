@@ -153,8 +153,10 @@ export class BirthPackViews {
           factList.find((f) => Number(f.sortOrder) === sortOrder) ??
           factList[sortOrder] ??
           null;
+        // Sentences read as short paragraphs (two per paragraph, three when the body is long),
+        // not one line each: the body is the chapter's one section (t97u).
         const sentences = Array.isArray(p.sentences)
-          ? p.sentences.map(String).join("\n\n")
+          ? paragraphs(p.sentences.map(String).filter(Boolean))
           : p.highlight?.toString() ?? "";
         const strList = (raw: unknown) =>
           Array.isArray(raw) ? raw.map(String).filter(Boolean) : [];
@@ -188,7 +190,6 @@ export class BirthPackViews {
           openEnded: p.openEnded === true,
           ageFrom: numOrUndef(p.ageFrom ?? fact?.ageFrom),
           ageTo: numOrUndef(p.ageTo ?? fact?.ageTo),
-          why: p.why?.toString() ?? "",
           action: p.action?.toString() ?? "",
           lifeStage: p.lifeStage?.toString() ?? "",
           chapterDomains: strList(p.chapterDomains),
@@ -345,4 +346,12 @@ export function normalizePackResponse(j: Record<string, unknown>): BirthPackPayl
         ? (topMeta as PackMeta)
         : undefined,
   };
+}
+
+/** Group a chapter's sentences into short paragraphs. */
+export function paragraphs(sentences: string[]): string {
+  const per = sentences.length >= 7 ? 3 : 2;
+  const out: string[] = [];
+  for (let i = 0; i < sentences.length; i += per) out.push(sentences.slice(i, i + per).join(" "));
+  return out.join("\n\n");
 }

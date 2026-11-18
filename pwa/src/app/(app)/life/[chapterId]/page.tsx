@@ -10,7 +10,6 @@ import { ProseBlock } from "@/components/editorial/prose-block";
 import { LoadingState } from "@/components/editorial/loading-state";
 import { PrimaryButton } from "@/components/editorial/primary-button";
 import { PageHeader } from "@/components/editorial/page-header";
-import { ChartDetail } from "@/components/v5/chart-detail";
 import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { grahaName } from "@/design-system/graha";
@@ -108,17 +107,12 @@ export default function LifeChapterPage() {
   const period = formatPeriod(chapter.periodLabel, chapter.periodStart, chapter.periodEnd, locale);
   const ages = agesText(chapter, t);
   const stage = chapter.lifeStage ? t(`stage.${chapter.lifeStage}`) : "";
-  const v5 = Boolean(chapter.lifeStage || chapter.why || chapter.chapterDomains.length);
+  const v5 = Boolean(chapter.lifeStage || chapter.action || chapter.chapterDomains.length);
   const areas = chapter.chapterDomains.length
     ? chapter.chapterDomains.map((a) => t(`area5.${a}`)).filter((x) => !x.startsWith("area5."))
     : chapter.focusAreas;
   const frame = v5 && chapter.tense === "past" ? t("life5.pastFrame") : v5 && chapter.tense === "future" ? t("life5.futureFrame") : "";
   const showWriting = write === "writing" || (chapter.pending && write === "idle" && needsWrite);
-  const detailRows = [
-    { label: t("chart.md"), value: grahaName(chapter.mahadashaLord, locale), term: "mahadasha" },
-    { label: t("chart.ad"), value: chapter.antardashaLord && chapter.antardashaLord !== chapter.mahadashaLord ? grahaName(chapter.antardashaLord, locale) : "", term: "antardasha" },
-    { label: t("chart.period"), value: period },
-  ];
 
   return (
     <article className="space-y-6" data-testid="chapter-page" data-tense={chapter.tense}>
@@ -171,13 +165,6 @@ export default function LifeChapterPage() {
         </ProseBlock>
       ) : null}
 
-      {chapter.why ? (
-        <p className="rounded-xl border-l-2 border-gold-accent/60 bg-paper px-4 py-3 text-sm leading-relaxed text-ink-secondary" data-testid="chapter-why">
-          <span className="font-semibold text-gold-text">{t("why.label")}: </span>
-          {chapter.why}
-        </p>
-      ) : null}
-
       {chapter.action && chapter.tense !== "past" ? (
         <section className="rounded-2xl border border-gold-accent/40 bg-gold-wash/25 px-4 py-4" data-testid="chapter-action">
           <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">{t("life5.action")}</p>
@@ -185,30 +172,12 @@ export default function LifeChapterPage() {
         </section>
       ) : null}
 
-      {areas.length || (!v5 && (chapter.pressureThemes.length || chapter.domainLenses.length || chapter.transitionNote)) ? (
-        <section className="space-y-4 rounded-2xl border border-line bg-paper p-4">
+      {/* One small "where this shows up" row; the v4 pressure/lens/transition lists are gone (t97u). */}
+      {areas.length ? (
+        <section className="rounded-2xl border border-line bg-paper p-4">
           <ChipRow label={v5 ? t("life5.areas") : t("life.focusAreas")} items={areas} />
-          {!v5 ? <ChipRow label={t("life.pressure")} items={chapter.pressureThemes} /> : null}
-          {!v5 ? <ChipRow label={t("life.lenses")} items={chapter.domainLenses} /> : null}
-          {!v5 && chapter.transitionNote ? (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gold-text">{t("life.transition")}</p>
-              <p className="mt-2 text-sm text-ink-secondary">{chapter.transitionNote}</p>
-            </div>
-          ) : null}
         </section>
       ) : null}
-
-      <ChartDetail
-        rows={detailRows}
-        evidence={[
-          ...(chapter.evidenceLine ? [chapter.evidenceLine] : []),
-          ...(v5 && chapter.transitionNote ? [chapter.transitionNote] : []),
-          ...(locale === "en" ? chapter.evidence : []),
-        ]}
-        screen="life"
-        testId="chapter-detail"
-      />
 
       <div className="grid gap-2 sm:grid-cols-2">
         <PrimaryButton href="/today">{t("life.openToday")}</PrimaryButton>

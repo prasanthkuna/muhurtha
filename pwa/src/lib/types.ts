@@ -53,8 +53,6 @@ export type ChapterView = {
   early: boolean;
   ageFrom?: number;
   ageTo?: number;
-  /** v5: the sub-period lord's role for this person, in plain words. */
-  why: string;
   /** v5: one small thing to do in this chapter (current and future chapters). */
   action: string;
   /** v5: life-stage key for the chapter's ages (twenties, thirties…). */

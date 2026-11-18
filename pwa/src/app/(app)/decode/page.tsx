@@ -17,8 +17,7 @@ import { AfterReadingInstall } from "@/components/pwa/after-reading-install";
 import { clip, rashiGlyph } from "@/lib/share/builders";
 import { fill, nakLabel } from "@/lib/messages-bond";
 import { formatWindowRange } from "@/lib/format-time";
-import { ChartDetail, ExplainTerm } from "@/components/v5/chart-detail";
-import { grahaName } from "@/design-system/graha";
+import { ExplainTerm } from "@/components/explainer/explain-term";
 
 const ADULT_ONLY_DOMAINS = new Set(["career", "money", "business", "relationship"]);
 
@@ -36,18 +35,6 @@ export default function DecodePage() {
     : views.domainReports();
   const luck = views.natalLuck;
   const birthStar = today?.birthStar ? nakLabel(today.birthStar, locale) : null;
-  const current = views.currentChapter();
-  const lords = current
-    ? [current.mahadashaLord, current.antardashaLord && current.antardashaLord !== current.mahadashaLord ? current.antardashaLord : ""]
-        .filter(Boolean).map((l) => grahaName(l, locale)).join(" · ")
-    : "";
-  // Chart refs are English engine strings: shown on English screens only.
-  const evidenceFor = (xs: string[]) => (locale === "en" ? xs : []);
-  const profileDetail = [
-    { label: t("chart.star"), value: birthStar ?? "", term: "nakshatra", termValue: today?.birthStar ?? undefined },
-    { label: t("chart.moon"), value: luck?.moonSignLabel ?? "", term: "moon_sign" },
-    { label: t("chart.lords"), value: lords, term: "mahadasha" },
-  ];
   // The day's verdict (same as Today/Calendar/alerts): tone + the one best time, not a stock star line.
   const vcal = today?.calendar ?? null;
   const todayWhy = vcal
@@ -85,7 +72,6 @@ export default function DecodePage() {
             {views.profileWhy}
           </p>
         ) : null}
-        <ChartDetail rows={profileDetail} evidence={evidenceFor(views.profileEvidence)} screen="decode" testId="decode-chart-detail" />
 
         {today && !isChildStage(activeLifeStage) ? (
           <Link
@@ -140,11 +126,6 @@ export default function DecodePage() {
                   <span className="font-semibold text-gold-text">{t("why.label")}: </span>
                   {d.why}
                 </p>
-              ) : null}
-              {locale === "en" && d.evidence.length ? (
-                <div className="mt-2">
-                  <ChartDetail rows={[]} evidence={d.evidence} screen="decode" testId="decode-area-detail" />
-                </div>
               ) : null}
             </ProseBlock>
           ))}

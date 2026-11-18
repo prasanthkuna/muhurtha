@@ -345,8 +345,7 @@ export function buildReadingSchema(facts: V2Facts, opts: { withLengths: boolean;
       chapter_id: { type: "integer", enum: chIds },
       title: str(V5_LIMITS.chapterTitle, wl, "2-4 words, concrete, no planet names, unique first word"),
       highlight: str(V5_LIMITS.beat, wl, "the beat: one short sentence, max 14 words"),
-      body: str(V5_LIMITS.body.current, wl, "detail: framed by life_stage; past 2-3 sentences (what the chart suggests, no events), current 4-6, future 2-3; summary: \"\""),
-      why: str(V5_LIMITS.why, wl, "one plain sentence: the sub-period lord's role for this person; summary: \"\""),
+      body: str(V5_LIMITS.body.current, wl, "the only text shown for the chapter: framed by life_stage, with one plain reason and one everyday example; past 3-4 sentences (what the chart suggests, no events), current 6-8, future 3-4; summary: \"\""),
       action: str(V5_LIMITS.action, wl, "current/future detail: one concrete thing to do, verb first; past and summary: \"\""),
       share_line: str(LIMITS.share, wl),
       ...cite([1, 4]),
@@ -638,7 +637,6 @@ function sanitizeRaw(c: V2Content, facts: V2Facts): V2Content {
       title: clip(ch.title, V5_LIMITS.chapterTitle),
       highlight: clipSentences(lp(ch.highlight), V5_LIMITS.beat),
       body: summary ? "" : clipSentences(lp(ch.body), V5_LIMITS.body[tense]),
-      why: summary ? "" : clipSentences(lp(ch.why), V5_LIMITS.why),
       action: summary || tense === "past" ? "" : clipSentences(ch.action, V5_LIMITS.action),
       share_line: clip(ch.share_line, LIMITS.share),
       ...ev(ch.evidence_ids),
@@ -1146,7 +1144,7 @@ export function repairPrompt(facts: V2Facts, content: V2Content, v: Validation, 
     ...v.flags.filter((f) => f.section !== "days" || scope.days?.includes(String(f.id))).map((f) => `- ${f.section} ${f.id}: ${f.reasons.join(", ")}`),
     "similar_to/title_repeat/opening_repeat/chip_overused = make it clearly different from the rest; wrong_script = write fully in the target script; clock_time/planet_name/year = remove them; wrong_star = use exactly that day's nakshatra (call it 'your birth star' only if is_birth_star); tone_label = drop 'mixed/careful/supportive tone' and 'a mixed/supportive/rest day' (the app shows the tone) and open with the day's real hook; weekday_in_title = remove the weekday name; tithi_missed = mention the tithi_hint; body_opener_repeat = start the body differently; star_opener_repeat = do not open with the star name, lead with the action or moment and name the star mid-sentence; formula_phrase = drop 'combined with/alongside', say it plainly; screen_repeat = give the line, body, do chips and each window note a different task or angle; title_word_repeat = no word twice in the title; title_lead_repeat = start the title with a different word than other chapters; title_too_long = 2-4 words, at most 28 characters; formula_phrase (stock link) = drop 'నక్షత్రం వల్ల ఈరోజు' / 'thanks to <star>' and give the reason in fresh words; jargon = replace corporate/tech-job words (backend, workflow, bottleneck, operational, stakeholders ...) with everyday words and do not assume a profession; reason_missing = in the line or body name that day's star (or tithi) and say plainly WHY it suits this action (because / so / which means; Telugu కాబట్టి / అందుకే / కావడంతో), without opening the body with the star's name.",
     "stock_star_line = drop '<star> is today's star' / 'today's star is'; give the reason from MEANINGS in fresh words; hint_word = never write 'hint'; slot_opener = start the slot note with what the slot suits, not 'Use this slot/A good slot/Good for'; trait_off_day = remove every mention of their personality trait (this day's angle.trait_ok is false); overused:<word> = do not use that word; ngram_repeat = do not use that phrase; title_formula = no '<Star>'s <Noun>' title; star_misspelled = spell the star/tithi exactly as in FACTS; unsupported_claim:<x> = either cite the EVIDENCE id that states <x> in evidence_ids or remove <x> (never invent a chart fact).",
-    ...(isV5(facts) ? ["lord_chain = drop 'X lord in Y links/connects A with B' and say what it means for the person in plain words; truncated = end on a complete sentence and stay inside the length; opener_repeat = open this chapter differently from the others; stage_missing = frame the chapter by its life_stage and ages first; past_asserted = describe what the chart suggests for that age, never state an event as fact; past_hedge = no 'may have/perhaps you': say what the stretch favoured; action_missing = add ONE concrete thing to do (verb first); why_missing = add the one-sentence plain why; verdict_mismatch = this day's verdict is not for big starts: make the line and do chips fit verdict.tone (finish, review, keep light)."] : []),
+    ...(isV5(facts) ? ["lord_chain = drop 'X lord in Y links/connects A with B' and say what it means for the person in plain words; truncated = end on a complete sentence and stay inside the length; opener_repeat = open this chapter differently from the others; stage_missing = frame the chapter by its life_stage and ages first; past_asserted = describe what the chart suggests for that age, never state an event as fact; past_hedge = no 'may have/perhaps you': say what the stretch favoured; action_missing = add ONE concrete thing to do (verb first); why_missing = add the one-sentence plain why; body_short = write the full body for its tense (past 3-4 sentences, current 6-8, future 3-4) with one plain reason and one everyday example, no filler; verdict_mismatch = this day's verdict is not for big starts: make the line and do chips fit verdict.tone (finish, review, keep light)."] : []),
     `Titles already used elsewhere (do not reuse): ${JSON.stringify(keepTitles.slice(0, 45))}`,
     ...(keepChapterTitles.length
       ? [`Chapter titles in this reading (each rewritten chapter needs a title that is none of these and differs from the other rewritten chapters, with a different first word): ${JSON.stringify(keepChapterTitles)}`]
@@ -1288,7 +1286,7 @@ function lordGuard(c: V2Content, facts: V2Facts): V2Content {
       const i = idx.get(Number(ch.chapter_id)) ?? -1;
       const pairs = [facts.chapters[i - 1], facts.chapters[i], facts.chapters[i + 1]].filter((f) => f && f.md && f.ad).map((f) => [f.md, f.ad] as [string, string]);
       const lp = (x: string | undefined) => (x ? fixLordPairs(x, pairs, facts.locale) : x);
-      return { ...ch, highlight: lp(ch.highlight) ?? ch.highlight, body: lp(ch.body) ?? ch.body, why: lp(ch.why) };
+      return { ...ch, highlight: lp(ch.highlight) ?? ch.highlight, body: lp(ch.body) ?? ch.body };
     }),
   };
 }
@@ -1364,8 +1362,9 @@ export function buildReadingView(raw: V2Content, factsIn: V2Facts, opts: ViewOpt
       tense,
       freePreview: tense === "current" || isFirstFuture,
       ...(v4 ? { pending: Boolean(ch.pending), evidence: (ch.evidence_ids ?? []).map((id) => evRef.get(id)).filter(Boolean) } : {}),
+      // A chapter's reason lives in its body (t97u); an older reading's stored chapter "why" is not
+      // sent (the Ask context falls back to evidenceLine).
       ...(v5 ? {
-        why: ch.why ?? "",
         action: ch.action ?? "",
         lifeStage: stageKey(f.age_from, f.age_to),
         chapterDomains: f.chapter_domains ?? [],

@@ -1259,10 +1259,10 @@ export async function fillDaysV4(admin: SupabaseClient, readingId: string): Prom
   if (drifted.length) {
     const keep = fixedCh.filter((c) => !drifted.includes(Number(c.chapter_id)));
     const base = { ...r.content, chapters: [...(r.content.chapters ?? []), ...keep] };
-    const re = await runParts(admin, r, base, [{ key: "L", scope: { chapters: drifted }, maxTokens: 6000, note: "these life chapters" }], job?.id ?? null);
+    const re = await runParts(admin, r, base, [{ key: "L", scope: { chapters: drifted }, maxTokens: 8000, note: "these life chapters" }], job?.id ?? null);
     out.totals = sumT(out.totals, re.totals);
     let again = re.parts.flatMap((p) => p.chapters ?? []).filter((c) => drifted.includes(Number(c.chapter_id)));
-    // The rewrite gets the same one repair as every new item (claims, stage, why/action).
+    // The rewrite gets the same one repair as every new item (claims, stage, body length, action).
     if (again.length) {
       const rr = await repairNew(admin, r, base as V2Content, { chapters: again }, job?.id ?? null);
       out.totals = sumT(out.totals, rr.totals);

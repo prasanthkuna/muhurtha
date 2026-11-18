@@ -7,7 +7,7 @@ import { useLocale } from "@/context/locale-context";
 import type { PurposeCheckResult } from "@/lib/engine-parsers";
 import { localizedPurposeLabel } from "@/lib/purpose-labels";
 import { formatDisplayDate } from "@/lib/format-date";
-import { factorLabel, statusLabel } from "@/lib/timing-labels";
+import { statusLabel } from "@/lib/timing-labels";
 import { formatWindowRange } from "@/lib/format-time";
 import { ShareCardButton } from "@/components/share/share-button";
 import { clip, purposeGlyph, verdictFromStatus } from "@/lib/share/builders";
@@ -161,21 +161,9 @@ export function PurposeResultCard({
 
       </ProseBlock>
 
-      {result.factors.length > 0 ? (
-        <details className="rounded-2xl border border-line bg-paper px-4 py-3 text-sm">
-          <summary className="cursor-pointer font-medium text-ink">{t("timing.panchangaFactors")}</summary>
-          <ul className="mt-3 space-y-2 text-ink-secondary">
-            {result.factors.map((f, i) => (
-              <li key={`${f.name}-${i}`}>
-                {f.name ? <span className="font-medium text-ink">{factorLabel(t, f.name)}: </span> : null}
-                {f.value}
-              </li>
-            ))}
-          </ul>
-          {result.limitations.length > 0 ? (
-            <p className="mt-3 text-xs text-ink-tertiary">{result.limitations.join(" ")}</p>
-          ) : null}
-        </details>
+      {/* Panchanga factor drop-down removed (t97u): the result above already says it in plain words. */}
+      {result.limitations.length > 0 ? (
+        <p className="px-1 text-xs text-ink-tertiary">{result.limitations.join(" ")}</p>
       ) : null}
     </div>
   );

@@ -6,7 +6,9 @@
  *    with its own life areas (from its lords' houses, not one person-level list), framed by the
  *    life stage for those ages. Past chapters describe what the chart suggests for that age,
  *    never assert events. Current and future chapters carry one plain action.
- *  - A plain-language "why" on profile, areas and chapters; the chart detail stays in evidence.
+ *  - A plain-language "why" on profile and areas; a chapter carries its reason inside the body
+ *    (t97u: the separate chapter "why" repeated the body, so it is no longer written or shown).
+ *    The chart detail stays in evidence (prompt input only, never a user-facing drop-down).
  *  - Day cards written to the engine's one day verdict (calendar.ts scoreDay).
  *  - All chapters written up front (B around now, then L batches in the background).
  *  - A clean prompt: no legacy weekday rules, no lord-chain mandate, one rule per job.
@@ -35,8 +37,11 @@ export const V5_LIMITS = {
   lifeStory: 320,
   chapterTitle: 40,
   beat: 140,
-  /** Body budget by tense: the current chapter gets room; past ones stay short. */
-  body: { past: 420, current: 900, future: 520 },
+  /** Body budget by tense (t97u: the body is the one chapter section, so it got the old "why"
+   * budget and more): the current chapter gets the most room. */
+  body: { past: 600, current: 1250, future: 800 },
+  /** Minimum sentences per tense; fewer (and under half the budget) flags body_short. */
+  bodyMinSentences: { past: 3, current: 5, future: 3 },
 } as const;
 
 // ---------------------------------------------------------------- life stage
@@ -209,10 +214,10 @@ export function v5Rules(f: V2Facts, openersLine: string, banned: string[]): stri
     "A2. areas: each area for the CURRENT chapter, on its own evidence (at least two areas rest on a different evidence item than the profile). headline = the plain verdict; summary = 2 sentences with one concrete thing to do; why = the chart fact in one plain sentence.",
     "L1. Life is one story: each mahadasha is an arc and its sub-periods are beats inside it. arcs[].line = that whole stretch's theme in one sentence for that time of life. life_story = 2 short sentences: where the story has been and what this stretch is building toward (no events).",
     "L2. Every detail chapter is written for its life_stage (the ages given): say what that stage of life usually holds and what this sub-period adds to it, using the chapter's chapter_domains, brings and asks. Put the age frame first ('In your late teens …', 'At thirty-two …').",
-    "L3. Past chapters describe what the chart suggests that stretch favoured or tested for someone that age ('this stretch favoured…', 'the chart points to…'). Never state an event as fact (no 'you got married/moved/were promoted'), and never guess ('you may have', 'perhaps you'). 2-3 sentences.",
-    "L4. Current chapter: 4-6 sentences: what this stretch builds, what it costs, and what comes next and when (the next chapter's period). Future chapters: 2-3 sentences on what to prepare for.",
-    "L5. highlight = the beat: one short sentence (max 14 words) a person could repeat. why = one plain sentence naming the sub-period lord's role for this person from EVIDENCE. action = for current and future detail chapters ONE concrete thing to do in that stretch (a verb first); empty \"\" for past and summary chapters.",
-    "L6. Titles: 2-4 words, concrete to the chapter's areas, no planet names, unique, and no two chapters share a first word or main noun. Summary chapters (kind=summary) get title, highlight and share_line only; body, why and action are \"\".",
+    "L3. Past chapters describe what the chart suggests that stretch favoured or tested for someone that age ('this stretch favoured…', 'the chart points to…'). Never state an event as fact (no 'you got married/moved/were promoted'), and never guess ('you may have', 'perhaps you'). 3-4 sentences.",
+    "L4. The body is the ONLY text shown for a chapter, so it carries everything: the stage frame, what this stretch brings in the chapter's own areas, ONE plain reason (what the sub-period lord does for this person, from EVIDENCE, said the way a friend would, with " + CAUSAL[f.locale] + "), and one everyday example of how it shows up (home, work, money, people, health). Current chapter: 6-8 sentences: what this stretch builds, what it costs, one example, and what comes next and when (the next chapter's period). Future chapters: 3-4 sentences on what it opens up and what to prepare for. Every sentence says something new: no restating the title, the highlight or the action, no filler, no list of areas.",
+    "L5. highlight = the beat: one short sentence (max 14 words) a person could repeat. action = for current and future detail chapters ONE concrete thing to do in that stretch (a verb first), not already said in the body; empty \"\" for past and summary chapters.",
+    "L6. Titles: 2-4 words, concrete to the chapter's areas, no planet names, unique, and no two chapters share a first word or main noun. Summary chapters (kind=summary) get title, highlight and share_line only; body and action are \"\".",
     "L7. No two chapters may open with the same three words; vary how each opens (age frame, the area, a contrast, the person).",
     "D1. Day cards follow the engine's verdict for that date (verdict.tone, verdict.favours, verdict.avoid). line = the verdict in one sentence; on a rest day it says to keep the day light, in different words each rest day; on a mixed day never suggest starting something big unless favours has new_starts; never recommend what verdict.avoid names.",
     "D2. Write the day ABOUT angle.area, suggest angle.action, in angle.tone, opening the way angle.opener says (" + openersLine + "). The reason comes from angle.lead: star -> MEANINGS.stars, tithi -> MEANINGS.tithis, tara -> MEANINGS.taras, yoga -> MEANINGS.yogas; say it in fresh everyday words (" + CAUSAL[f.locale] + "), name the lead fact once mid-sentence, never as a stock line ('<star> is a … star', 'today's star is …'" + (te ? ", 'ఈరోజు నక్షత్రం …'" : hi ? ", 'आज का नक्षत्र …'" : "") + ").",
@@ -318,6 +323,14 @@ export function wrongScript(text: string, locale: ReadingLocale): boolean {
 }
 const opener3 = (t: string) => (t ?? "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean).slice(0, 3).join(" ");
 
+/** A detail chapter body thinner than its tense asks for (few sentences AND under half the budget). */
+export function bodyShort(body: string | undefined, tense: V2ChapterFact["tense"]): boolean {
+  const t = (body ?? "").trim();
+  if (!t) return true;
+  const n = t.split(/(?<=[.!?।])\s+/).filter((x) => x.trim()).length;
+  return n < V5_LIMITS.bodyMinSentences[tense] && t.length < V5_LIMITS.body[tense] * 0.5;
+}
+
 export type V5Flag = { section: "chapters" | "days" | "areas" | "profile" | "arcs"; id: string | number; reason: string };
 
 export function v5Flags(c: Partial<V2Content>, f: V2Facts): V5Flag[] {
@@ -344,7 +357,7 @@ export function v5Flags(c: Partial<V2Content>, f: V2Facts): V5Flag[] {
       if (PAST_ASSERT[L].test(text)) out.push({ section: "chapters", id, reason: "past_asserted" });
       if (PAST_HEDGE[L].test(text)) out.push({ section: "chapters", id, reason: "past_hedge" });
     } else if (!String(ch.action ?? "").trim()) out.push({ section: "chapters", id, reason: "action_missing" });
-    if (!String(ch.why ?? "").trim()) out.push({ section: "chapters", id, reason: "why_missing" });
+    if (bodyShort(ch.body, fx.tense)) out.push({ section: "chapters", id, reason: "body_short" });
   }
   // Every arc needs its line and the reading its life story (the Life map headers and story card).
   const arcKeys = [...new Set(arcsOf(f.chapters).map((x) => x.md))];

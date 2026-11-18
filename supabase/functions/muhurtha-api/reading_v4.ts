@@ -113,7 +113,7 @@ export function planPartsV4(f: V2Facts): V4Plan[] {
   if (isV5(f)) {
     return [
       { key: "A", scope: { profile: true, areas: f.area_ids }, maxTokens: 3200, note: "the personality profile and every life area" },
-      { key: "B", scope: { chapters: req.chapters, arcs: true }, maxTokens: 4200, note: "the previous, current and next life chapters, every arc line and the life story" },
+      { key: "B", scope: { chapters: req.chapters, arcs: true }, maxTokens: 5600, note: "the previous, current and next life chapters, every arc line and the life story" },
       { key: "C", scope: { days: req.days }, maxTokens: 4000, note: "the first seven days" },
       { key: "D", scope: { weeks: f.weeks.map((w) => w.period_key), months: f.months.map((m) => m.period_key), extras: true }, maxTokens: 3000, note: "the weeks, the months, the ask starters, the remedies and the push lines" },
     ];
@@ -142,7 +142,7 @@ export function fillPlansV4(f: V2Facts, c: Partial<V2Content> | null): V4Plan[] 
     todo.sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur) || a - b);
     for (let i = 0; i < todo.length; i += CHAPTER_BATCH_V5) {
       const ids = todo.slice(i, i + CHAPTER_BATCH_V5).sort((a, b) => a - b);
-      out.push({ key: "L", scope: { chapters: ids }, maxTokens: 7000, note: "these life chapters" });
+      out.push({ key: "L", scope: { chapters: ids }, maxTokens: 9000, note: "these life chapters" });
     }
   }
   if (!rest.length) return out;

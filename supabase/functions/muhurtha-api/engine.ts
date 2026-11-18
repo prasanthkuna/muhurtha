@@ -7211,7 +7211,7 @@ function liveReadingCopy(pack: BirthPackRow | null, date: string): LiveContextIn
     profileTitle: safeString(me.title), profileSummary: safeString(me.summary).slice(0, 400),
     strengths: asArray<string>(me.strengths).slice(0, 3), watchouts: asArray<string>(me.watchouts).slice(0, 3),
     chapterTitle: cur ? safeString(cur.title) : undefined, chapterHighlight: cur ? safeString(cur.highlight) : undefined,
-    chapterWhy: cur ? safeString(cur.why) || undefined : undefined, chapterAction: cur ? safeString(cur.action) || undefined : undefined,
+    chapterWhy: cur ? safeString(cur.why) || safeString(cur.evidenceLine) || undefined : undefined, chapterAction: cur ? safeString(cur.action) || undefined : undefined,
     todayTitle: card ? safeString(card.title) : undefined, todayLine: card ? safeString(card.one_line) : undefined,
   };
 }
