@@ -711,7 +711,7 @@ const te: Record<string, string> = {
   "cal.themeLine.reflect": "వదిలేయండి, సింపుల్ చేయండి, మీలోకి చూసుకోండి.",
   "cal.yearLocked": "నెల నెలా మీ ఏడాది Pro లో ఉంది.",
 
-  "today.bond.cta": "Bond ఓపెన్ చేయండి",
+  "today.bond.cta": "బాండ్ తెరవండి",
   "today.bond.add": "మీ పార్ట్‌నర్‌ని యాడ్ చేయండి — మీ ఇద్దరూ ఎలా ఉంటారో చూడండి",
   "life.openDecode": "మీ నక్షత్రం స్టైల్",
   "life.earlyYears": "చిన్నప్పటి రోజులు",
