@@ -1,6 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { estimateTimeline, type TimelineEstimate } from "./timeline_estimate.ts";
-import { nakshatraIndex } from "./vimshottari.ts";
+import { nakshatraIndex, NAKSHATRAS as VIM_NAKSHATRAS } from "./vimshottari.ts";
 import { DateTime } from "luxon";
 import { antardashaFallbackCopy, plainPeriodLabel } from "./copy.ts";
 import { resolveBirthPlace, resolveCoordinates } from "./geo_resolver.ts";
@@ -3389,8 +3389,8 @@ export function buildReadingFacts(
     subject: { name: subjectName || profile.display_name || null, is_account_owner: !subjectName },
     natal: {
       moon_sign: natal?.sign.key ?? null,
-      nakshatra: natal?.nakshatra ?? bi.janma_nakshatra ?? null,
-      pada: natal?.pada ?? bi.nakshatra_pada ?? null,
+      nakshatra: natal?.nakshatra ?? bi.janma_nakshatra ?? (timelineEstimate ? VIM_NAKSHATRAS[timelineEstimate.nak] ?? null : null),
+      pada: natal?.pada ?? bi.nakshatra_pada ?? timelineEstimate?.pada ?? null,
       sun_sign: kernel?.natal.sunSign ?? null,
       birth_time_known: bi.exact_birth_time != null,
       archetype: arch
