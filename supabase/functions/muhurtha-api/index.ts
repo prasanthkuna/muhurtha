@@ -16,6 +16,7 @@ import {
   warmBirthPack,
 } from "./engine.ts";
 import { runWarmup } from "./warmup.ts";
+import { writeChaptersV4 } from "./reading_jobs.ts";
 import { lunaProbe, primaryProvider, readingModel } from "./openai_responses.ts";
 import { maxAttempts, openAiAllowed } from "./llm_policy.ts";
 import { readingEffort } from "./reading_shards.ts";
@@ -277,6 +278,44 @@ Deno.serve(async (req) => {
         ? quickMatch((body.a ?? {}) as Record<string, unknown>, (body.b ?? {}) as Record<string, unknown>)
         : await invitePreview(createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey), String(body.token ?? ""));
       return new Response(JSON.stringify(result), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    if (body.action === "reading_chapters_prepare") {
+      // Write every still-pending v4 life chapter of one reading, the same way opening each
+      // chapter in Life does (writeChaptersV4). Shared cron secret or the service role only.
+      const cronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
+      const given = req.headers.get("x-push-cron-secret") ?? "";
+      if (!(cronSecret && given === cronSecret) && !isServiceRoleRequest(req, serviceKey)) {
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+      const adminSupabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+      const readingId = String(body.reading_id ?? "");
+      const task = (async () => {
+        const { data } = await adminSupabase.from("readings").select("facts, content").eq("id", readingId).maybeSingle();
+        const facts = (data?.facts ?? {}) as { chapters?: { chapter_id: number }[]; current_chapter_id?: number | null };
+        const cur = facts.current_chapter_id ?? 0;
+        const ids = (facts.chapters ?? []).map((c) => Number(c.chapter_id))
+          .sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur) || a - b);
+        const log: unknown[] = [];
+        for (const id of ids) {
+          const { data: now } = await adminSupabase.from("readings").select("content").eq("id", readingId).maybeSingle();
+          const have = new Set((((now?.content ?? {}) as { chapters?: { chapter_id: number }[] }).chapters ?? []).map((c) => Number(c.chapter_id)));
+          if (have.has(id)) continue;
+          const r = await writeChaptersV4(adminSupabase, readingId, id).catch((e) => ({ written: [], error: String(e) }));
+          log.push({ id, ...r });
+        }
+        console.log("[reading_chapters_prepare]", readingId, JSON.stringify(log).slice(0, 3000));
+      })();
+      // deno-lint-ignore no-explicit-any
+      const rt = (globalThis as any).EdgeRuntime;
+      if (rt?.waitUntil) rt.waitUntil(task);
+      else await task;
+      return new Response(JSON.stringify({ started: true, reading_id: readingId }), {
         headers: { ...cors, "Content-Type": "application/json" },
       });
     }
