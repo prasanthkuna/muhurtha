@@ -132,7 +132,10 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === "birth_pack_warm") {
-      if (!isServiceRoleRequest(req, serviceKey)) {
+      // Service role, or the shared cron secret (pg_net from SQL, same as the sweeps).
+      const warmCronSecret = Deno.env.get("PUSH_CRON_SECRET") ?? "";
+      const warmGiven = req.headers.get("x-push-cron-secret") ?? "";
+      if (!(warmCronSecret && warmGiven === warmCronSecret) && !isServiceRoleRequest(req, serviceKey)) {
         return new Response(JSON.stringify({ error: "forbidden" }), {
           status: 403,
           headers: { ...cors, "Content-Type": "application/json" },
