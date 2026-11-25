@@ -2987,7 +2987,45 @@ const FREE_ACCESS: SubscriptionAccess = {
   planInterval: null,
 };
 
+/** Temporary "everyone is Pro" switch: public.app_flags.free_pro_for_all (read via the
+ * public.free_pro_for_all() RPC, cached 30 s per isolate). Real subscriptions still win, and no
+ * rows are written, so switching the flag off restores paid behaviour exactly. */
+const PROMO_ACCESS: SubscriptionAccess = {
+  planCode: "pro",
+  tier: "pro",
+  isPlus: true,
+  isPro: true,
+  provider: "promo",
+  status: "promo",
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+  planInterval: null,
+  subscriptionId: null,
+  startedAt: null,
+};
+let freeProCache: { value: boolean; at: number } | null = null;
+async function freeProForAll(supabase: SupabaseClient): Promise<boolean> {
+  if (freeProCache && Date.now() - freeProCache.at < 30_000) return freeProCache.value;
+  try {
+    const { data, error } = await supabase.rpc("free_pro_for_all");
+    if (error) return freeProCache?.value ?? false;
+    freeProCache = { value: data === true, at: Date.now() };
+    return freeProCache.value;
+  } catch {
+    return freeProCache?.value ?? false;
+  }
+}
+
 async function getSubscriptionAccess(
+  supabase: SupabaseClient,
+  profileId: string,
+): Promise<SubscriptionAccess> {
+  const real = await getPaidSubscriptionAccess(supabase, profileId);
+  if (real.isPro) return real;
+  return (await freeProForAll(supabase)) ? { ...PROMO_ACCESS } : real;
+}
+
+async function getPaidSubscriptionAccess(
   supabase: SupabaseClient,
   profileId: string,
 ): Promise<SubscriptionAccess> {
@@ -3053,6 +3091,7 @@ function buildAccessPayload(access: SubscriptionAccess) {
     planInterval: access.planInterval,
     subscriptionId: access.subscriptionId ?? null,
     startedAt: access.startedAt ?? null,
+    promo: access.provider === "promo",
     limits: {
       askPerDay: limits.ask,
       timingChecksPerDay: limits.timing_check,
@@ -4912,7 +4951,7 @@ async function _handleInternal(
       throw new ActionError("invalid_plan", "Choose monthly or yearly", 400);
     }
     const access = await getSubscriptionAccess(supabase, profile.id);
-    if (access.isPro && !access.cancelAtPeriodEnd) {
+    if (access.isPro && access.provider !== "promo" && !access.cancelAtPeriodEnd) {
       throw new ActionError("already_pro", "You already have Pro.", 409);
     }
     const plan = PRO_PLANS[planCode];
@@ -5030,7 +5069,7 @@ async function _handleInternal(
   if (action === "billing_cancel") {
     const cfg = razorpayConfig();
     const access = await getSubscriptionAccess(supabase, profile.id);
-    if (!access.isPro) throw new ActionError("not_subscribed", "No active plan", 400);
+    if (!access.isPro || access.provider === "promo") throw new ActionError("not_subscribed", "No active plan", 400);
     if (access.provider !== "razorpay") {
       throw new ActionError(
         "manage_elsewhere",
