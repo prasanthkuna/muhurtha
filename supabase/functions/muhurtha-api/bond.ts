@@ -28,6 +28,7 @@ import {
   monthSystemPrompt,
   placeFor,
   validateBond,
+  dropKeyEchoes,
 } from "./bond_core.ts";
 import { ashtakoota, type MoonStar, starFromLon } from "./koota.ts";
 import { natalGrahas } from "./grahas.ts";
@@ -380,7 +381,7 @@ export async function advancePair(admin: SupabaseClient, rowIn: PairRow, opts: {
   } catch {
     content = null;
   }
-  if (content) content = clipBond(content);
+  if (content) content = dropKeyEchoes(clipBond(content));
   const v = validateBond(content, row.locale, row.kind, row.kind === "bond_month" ? row.facts as MonthFacts : undefined);
   if (!content || !v.ok) {
     const why = !content ? `no_content:${resp.status}:${resp.error ?? resp.incomplete_reason ?? ""}` : `invalid:${v.fatal.join(";")}`;

@@ -320,6 +320,20 @@ export function validateBond(content: unknown, locale: BondLocale, kind: "match"
   return { ok: fatal.length === 0, fatal, flags, stats: { chars: all.length, script_share: Math.round(share * 100) / 100, latin_words: latinWords } };
 }
 
+/** The model sometimes echoes a schema key ("weeks", "try_this_week") as a list item: drop
+ * list items that are a bare lowercase identifier (real items are phrases). */
+export function dropKeyEchoes<T>(x: T): T {
+  if (Array.isArray(x)) {
+    return x.filter((v) => !(typeof v === "string" && /^[a-z]+(?:_[a-z]+)*$/.test(v.trim()))).map((v) => dropKeyEchoes(v)) as T;
+  }
+  if (x && typeof x === "object") {
+    const o: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(x)) o[k] = dropKeyEchoes(v);
+    return o as T;
+  }
+  return x;
+}
+
 /** Trim strings to their limits (the strict schema does not carry maxLength). */
 export function clipBond<T>(x: T, max = 600): T {
   if (typeof x === "string") {
