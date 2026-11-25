@@ -7,6 +7,7 @@
  *   for the guide, cached in pair_readings; the engine owns every fact.
  * Every write goes through the service-role client; reads are re-checked against membership.
  */
+import { estimateTimeline } from "./timeline_estimate.ts";
 import { isQuotaCap, maxAttempts, quotaParkMs, retryBackoffMs } from "./llm_policy.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DateTime } from "luxon";
@@ -181,7 +182,10 @@ export function personFrom(bi: BioLite, name: string, base: Omit<CalPlace, "nata
   let approx = false;
   if (meta) star = { nak: meta.idx, pada: meta.pada };
   else {
-    star = starFromLon(moonSiderealLongitudeDeg(noon));
+    // No exact time and no star: the same majority-star estimate the Life timeline uses
+    // (sampled across the birth-time range), so every screen agrees on one star.
+    const est = estimateTimeline(String(bi.date_of_birth).slice(0, 10), zone, bi.time_bucket ?? null);
+    star = est ? { nak: est.estimate.nak, pada: est.estimate.pada } : starFromLon(moonSiderealLongitudeDeg(noon));
     approx = true;
   }
   const lat = bi.birth_lat != null ? Number(bi.birth_lat) : null;
