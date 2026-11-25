@@ -324,6 +324,23 @@ function birthMoonDetails(
   };
 }
 
+/**
+ * Moon sign for the Lucky numbers/days/colours tile. Exact birth time: the ephemeris Moon.
+ * Otherwise the same star + pada the Calendar uses (stored star, or the birth-time-range
+ * estimate): the pada's midpoint fixes the sign. Language-independent, so en/te/hi agree.
+ */
+function luckMoonSign(bi: BioRow | null, profileTimezone: string, locale: AppLocale) {
+  const exact = birthMoonDetails(bi, profileTimezone, locale)?.sign;
+  if (exact || !bi?.date_of_birth) return exact ?? null;
+  try {
+    const star = personFrom(bi as never, "", { zone: resolveBirthZone(bi, profileTimezone), lat: 0, lng: 0 }).star;
+    const lon = star.nak * (360 / 27) + (star.pada - 0.5) * (360 / 108);
+    return rashiDisplay(rashiKeyFromSiderealLon(lon), locale);
+  } catch {
+    return null;
+  }
+}
+
 /** Languages this birth chart already has a ready reading in (other than [locale]), unless one is already being written in [locale]. */
 async function readyReadingLocales(admin: SupabaseClient, profileId: string, birthInputId: string, locale: string): Promise<string[]> {
   try {
@@ -1177,7 +1194,7 @@ async function tryPromoteBackfilledPack(
 
   attachNatalLuckToContent(
     merged as Record<string, unknown>,
-    birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+    luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
     locale,
   );
 
@@ -1476,7 +1493,7 @@ async function loadBirthPack(
     if (v2) {
       attachNatalLuckToContent(
         v2.content as Record<string, unknown>,
-        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
         locale,
       );
       return v2;
@@ -1486,7 +1503,7 @@ async function loadBirthPack(
   if (best) {
     attachNatalLuckToContent(
       best.content as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
       locale,
     );
     return best;
@@ -2235,7 +2252,7 @@ async function continueBirthPackGeneration(
       const model = result.envelope.model;
       attachNatalLuckToContent(
         content as Record<string, unknown>,
-        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
         locale,
       );
       const { data: saved, error: saveError } = await supabase
@@ -2679,7 +2696,7 @@ async function ensureBirthPack(
     if (r.pack) {
       attachNatalLuckToContent(
         r.pack.content as Record<string, unknown>,
-        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
         locale,
       );
     }
@@ -2707,7 +2724,7 @@ async function ensureBirthPack(
     const pack = existing as BirthPackRow;
     attachNatalLuckToContent(
       pack.content as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
       locale,
     );
     await persistNotificationScheduleBestEffort(supabase, pack, profile, bi, locale, timing);
@@ -2718,7 +2735,7 @@ async function ensureBirthPack(
   if (cached && countTodayCards(cached.content) >= PACK_DAILY_DAYS) {
     attachNatalLuckToContent(
       cached.content as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
       locale,
     );
     await persistNotificationScheduleBestEffort(supabase, cached, profile, bi, locale, timing);
@@ -2737,7 +2754,7 @@ async function ensureBirthPack(
   if (isClientServablePack(exactRow)) {
     attachNatalLuckToContent(
       exactRow.content as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
       locale,
     );
     await persistNotificationScheduleBestEffort(supabase, exactRow, profile, bi, locale, timing);
@@ -2770,7 +2787,7 @@ async function ensureBirthPack(
         if (promotedRow?.status === "ready") {
           attachNatalLuckToContent(
             promotedRow.content as Record<string, unknown>,
-            birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+            luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
             locale,
           );
           await persistNotificationScheduleBestEffort(
@@ -2788,7 +2805,7 @@ async function ensureBirthPack(
       if (resumed && isClientServablePack(resumed)) {
         attachNatalLuckToContent(
           resumed.content as Record<string, unknown>,
-          birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+          luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
           locale,
         );
         return resumed;
@@ -2818,14 +2835,14 @@ async function ensureBirthPack(
     if (isClientServablePack(inFlight)) {
       attachNatalLuckToContent(
         inFlight.content as Record<string, unknown>,
-        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
         locale,
       );
       const resumed = await maybeResumeBirthPackGeneration(continuationCtx, inFlight);
       if (resumed && isClientServablePack(resumed)) {
         attachNatalLuckToContent(
           resumed.content as Record<string, unknown>,
-          birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+          luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
           locale,
         );
         return resumed;
@@ -2845,7 +2862,7 @@ async function ensureBirthPack(
     if (isClientServablePack(waited)) {
       attachNatalLuckToContent(
         waited.content as Record<string, unknown>,
-        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
         locale,
       );
       await persistNotificationScheduleBestEffort(supabase, waited, profile, bi, locale, timing);
@@ -2855,7 +2872,7 @@ async function ensureBirthPack(
     if (isClientServablePack(bestAfterWait)) {
       attachNatalLuckToContent(
         bestAfterWait.content as Record<string, unknown>,
-        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
         locale,
       );
       await persistNotificationScheduleBestEffort(supabase, bestAfterWait, profile, bi, locale, timing);
@@ -2889,7 +2906,7 @@ async function ensureBirthPack(
   if (isClientServablePack(afterFirstPhase)) {
     attachNatalLuckToContent(
       afterFirstPhase.content as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
       locale,
     );
     scheduleBirthPackAdvanceIfNeeded(continuationCtx, afterFirstPhase);
@@ -2909,7 +2926,7 @@ async function ensureBirthPack(
   if (isClientServablePack(partial)) {
     attachNatalLuckToContent(
       partial.content as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
       locale,
     );
     return partial;
@@ -2919,7 +2936,7 @@ async function ensureBirthPack(
   if (isClientServablePack(bestAfterGeneration)) {
     attachNatalLuckToContent(
       bestAfterGeneration.content as Record<string, unknown>,
-      birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+      luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
       locale,
     );
     await persistNotificationScheduleBestEffort(
@@ -5634,7 +5651,7 @@ async function _handleInternal(
       packMeta,
       access: buildAccessPayload(access),
       natalLuck: buildNatalLuck(
-        birthMoonDetails(bi, profile.current_timezone ?? "Asia/Kolkata", locale)?.sign,
+        luckMoonSign(bi, profile.current_timezone ?? "Asia/Kolkata", locale),
         locale,
       ),
     };
@@ -5856,7 +5873,7 @@ async function _handleInternal(
       domainLenses: planner.domainLenses,
       planner,
       provenance: provenance!,
-      natalLuck: buildNatalLuck(natalMoon?.sign, locale),
+      natalLuck: buildNatalLuck(natalMoon?.sign ?? luckMoonSign(bi, tz, locale), locale),
     };
 
     return result;
