@@ -214,14 +214,25 @@ export const BOND_BANNED: Record<BondLocale, string[]> = {
 // ═══════════════════════════════════════════════════════════════════ TELUGU VOICE (isolated)
 // The Telugu tone is being revamped separately; change ONLY this block for Telugu voice.
 const TELUGU_VOICE =
-  "Telugu voice: write the way young Telugu couples text each other — warm, casual, everyday Telugu in Telugu script, " +
-  "with common English words (date, plan, mood, call, sorry) left in English where that is how people actually talk. " +
-  "Respectful (meeru) when addressing the reader; never preachy, never Sanskrit-heavy.";
+  "Telugu voice: warm, casual but respectful everyday Telugu, the way a caring elder or a close friend talks to a couple (మీరు, never నువ్వు); never preachy, never Sanskrit-heavy. " +
+  "NO ENGLISH AT ALL: every word in Telugu script. No English words, no Roman letters, no romanized Telugu, no English words written in Telugu letters when a natural Telugu word exists. " +
+  "Names: write both first names in Telugu script (e.g. Kiran -> కిరణ్, Ananya -> అనన్య). " +
+  "Use these Telugu words: Kuja/Mangal dosha -> కుజ దోషం; Guna Milan / Ashtakoota -> అష్టకూట పొంతన; match / compatibility -> పొంతన; vibe -> మనసు కలవడం; understanding -> అర్థం చేసుకోవడం; " +
+  "care -> శ్రద్ధ; flow -> సాఫీగా సాగడం; balance -> సమతుల్యం; harmony -> సామరస్యం; energy -> ఉత్సాహం; mood -> మనసు స్థితి; plan -> ఏర్పాటు; date / time together -> కలిసి గడిపే సమయం; call -> ఫోన్ చేయడం; sorry -> క్షమించమనడం; " +
+  "planets: Sun సూర్యుడు, Moon చంద్రుడు, Mars కుజుడు, Mercury బుధుడు, Jupiter గురువు, Venus శుక్రుడు, Saturn శని, Rahu రాహువు, Ketu కేతువు; " +
+  "signs: Aries మేషం, Taurus వృషభం, Gemini మిథునం, Cancer కర్కాటకం, Leo సింహం, Virgo కన్య, Libra తుల, Scorpio వృశ్చికం, Sagittarius ధనుస్సు, Capricorn మకరం, Aquarius కుంభం, Pisces మీనం; " +
+  "kootas: varna వర్ణ, vashya వశ్య, tara తార, yoni యోని, graha maitri గ్రహ మైత్రి, gana గణ, bhakoot భకూట, nadi నాడి. " +
+  "FACTS are in English for the engine only: never copy an English word from FACTS into the text.";
 // ═══════════════════════════════════════════════════════════════════ end TELUGU VOICE
 
 function voiceRules(locale: BondLocale): string {
   if (locale === "te") return TELUGU_VOICE;
-  if (locale === "hi") return "Hindi voice: warm everyday Hindi in Devanagari, respectful aap form, never tum/tu; common English words are fine.";
+  if (locale === "hi") {
+    return "Hindi voice: warm everyday Hindi in Devanagari, respectful aap form, never tum/tu; natural spoken Hindi, not Sanskrit-heavy. " +
+      "NO ENGLISH AT ALL: every word in Devanagari. No English words, no Roman letters, no romanized Hindi. Write both first names in Devanagari. " +
+      "Use: Kuja/Mangal dosha -> मंगल दोष; Guna Milan / Ashtakoota -> गुण मिलान; match -> मेल; understanding -> समझ; vibe -> तालमेल; planets and signs by their Hindi names (मंगल, शुक्र, सिंह, कुंभ ...). " +
+      "FACTS are in English for the engine only: never copy an English word from FACTS into the text.";
+  }
   return "English voice: warm, plain, modern; short sentences.";
 }
 
@@ -303,7 +314,10 @@ export function validateBond(content: unknown, locale: BondLocale, kind: "match"
     for (const d of (c.key_days as { date: string }[]) ?? []) if (!allowed.has(d.date)) fatal.push(`key_day:${d.date}`);
   }
   if (/\b\d{1,2}(\.\d)?\s*\/\s*36\b/.test(String(c.headline ?? "") + String(c.share_line ?? ""))) flags.push("score_in_headline");
-  return { ok: fatal.length === 0, fatal, flags, stats: { chars: all.length, script_share: Math.round(share * 100) / 100 } };
+  // te/hi: count stray Roman-letter words (the prompt allows none); flagged, not fatal.
+  const latinWords = re ? (all.match(/[A-Za-z]{2,}/g) ?? []).length : 0;
+  if (latinWords > 0) flags.push(`latin_words:${latinWords}`);
+  return { ok: fatal.length === 0, fatal, flags, stats: { chars: all.length, script_share: Math.round(share * 100) / 100, latin_words: latinWords } };
 }
 
 /** Trim strings to their limits (the strict schema does not carry maxLength). */

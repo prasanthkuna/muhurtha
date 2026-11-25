@@ -15,12 +15,11 @@ import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { grahaSymbol, normalizeGraha } from "@/design-system/graha";
 import type { BirthPackViews } from "@/lib/birth-pack-views";
-import { formatPeriod } from "@/lib/format-date";
+import { chapterMonth, chapterPeriod } from "@/lib/format-date";
 import type { AppLocale } from "@/lib/locale";
 import type { ChapterView } from "@/lib/types";
 import { cn } from "@/components/ui/cn";
 import { fill } from "@/lib/messages-bond";
-import { formatMonthYear } from "@/lib/format-date";
 import { grahaName } from "@/design-system/graha";
 
 /** An early-years row ending after this age covers adult years too ("Earlier years"). */
@@ -55,8 +54,8 @@ function SummaryRow({
   const locked = c.proLocked && !isPro;
   // A row cut at age 80 keeps going: never show the cut as the period's end.
   const period = c.openEnded && c.periodStart
-    ? fill(t("life.fromDate"), { date: formatMonthYear(c.periodStart, locale) })
-    : formatPeriod(c.periodLabel, c.periodStart, c.periodEnd, locale);
+    ? fill(t("life.fromDate"), { date: chapterMonth(c.periodStart, locale, c.approxDates) })
+    : chapterPeriod(c, locale);
   const lords = (c.mdLords.length ? c.mdLords : [c.mahadashaLord]).filter(Boolean);
   // "Early years" is childhood; an early row that runs into adulthood (older charts) is "Earlier years".
   const earlyLabel = (c.ageTo ?? 0) > EARLY_MAX_AGE ? t("life.earlierYears") : t("life.earlyYears");
@@ -121,7 +120,7 @@ function ChapterRow({
   hideAnchor?: boolean;
 }) {
   const locked = c.proLocked && !isPro;
-  const period = formatPeriod(c.periodLabel, c.periodStart, c.periodEnd, locale);
+  const period = chapterPeriod(c, locale);
   const isNow = c.tense === "current";
   const ages = agesLabel(c, t);
   return (
@@ -269,12 +268,31 @@ function StoryCard({ text, t }: { text: string; t: (key: string) => string }) {
   );
 }
 
+/** Estimated timeline (birth-time range, no star): a short plain note, no drop-down. */
+function ApproxNote({
+  est,
+  t,
+}: {
+  est: { uncertaintyMonths: number; split: boolean; star: string; secondStar: string | null } | null;
+  t: (key: string) => string;
+}) {
+  if (!est) return null;
+  return (
+    <div className="rounded-2xl border border-line bg-paper px-4 py-3 text-sm leading-relaxed text-ink-secondary" data-testid="life-approx-note">
+      <p>{fill(t("life.approxNote"), { months: Math.max(1, est.uncertaintyMonths) })}</p>
+      {est.secondStar ? <p className="mt-1">{fill(t("life.approxSplit"), { star: est.star, second: est.secondStar })}</p> : null}
+      {est.split ? <p className="mt-1">{t("life.approxThemes")}</p> : null}
+      <p className="mt-1 text-xs text-ink-tertiary">{t("life.approxTip")}</p>
+    </div>
+  );
+}
+
 /** The current chapter: stage, title, the one-line beat, what it asks of you and the next turn. */
 function NowCard({ c, locale, t }: { c: ChapterView; locale: AppLocale; t: (key: string) => string }) {
   const ages = agesLabel(c, t);
   const lords = [c.mahadashaLord, c.antardashaLord && c.antardashaLord !== c.mahadashaLord ? c.antardashaLord : ""]
     .filter(Boolean).map((l) => grahaName(l, locale)).join(" · ");
-  const next = c.periodEnd ? formatMonthYear(c.periodEnd, locale) : "";
+  const next = c.themeOnly ? "" : c.periodEnd ? chapterMonth(c.periodEnd, locale, c.approxDates) : "";
   return (
     <Link
       href={`/life/${c.id}`}
@@ -418,6 +436,7 @@ export default function LifeIndexPage() {
       <Link href="/decode" className="-mt-2 inline-flex text-sm font-semibold text-gold-text underline-offset-4 hover:underline" data-testid="life-open-decode">
         {t("life.openDecode")} →
       </Link>
+      <ApproxNote est={views.timelineEstimate()} t={t} />
       {arcs.length > 0 ? (
         <>
           <StoryCard text={views.lifeStory} t={t} />
@@ -436,12 +455,7 @@ export default function LifeIndexPage() {
           <ChapterHeroCard
             chapter={{
               ...currentChapter,
-              periodLabel: formatPeriod(
-                currentChapter.periodLabel,
-                currentChapter.periodStart,
-                currentChapter.periodEnd,
-                locale,
-              ),
+              periodLabel: chapterPeriod(currentChapter, locale),
             }}
             currentLabel={t("life.currentBadge")}
           />
@@ -481,7 +495,7 @@ export default function LifeIndexPage() {
         onClose={() => setLockedChapter(null)}
         chapterLabel={
           lockedChapter
-            ? formatPeriod(lockedChapter.periodLabel, lockedChapter.periodStart, lockedChapter.periodEnd, locale)
+            ? chapterPeriod(lockedChapter, locale)
             : undefined
         }
       />

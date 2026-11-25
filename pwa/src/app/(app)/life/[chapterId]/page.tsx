@@ -13,7 +13,7 @@ import { PageHeader } from "@/components/editorial/page-header";
 import { useAppData, useEngineBody } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { grahaName } from "@/design-system/graha";
-import { formatPeriod } from "@/lib/format-date";
+import { chapterPeriod } from "@/lib/format-date";
 import { fill } from "@/lib/messages-bond";
 import { ShareCardButton } from "@/components/share/share-button";
 import { clip, grahaGlyph } from "@/lib/share/builders";
@@ -104,7 +104,7 @@ export default function LifeChapterPage() {
     );
   }
 
-  const period = formatPeriod(chapter.periodLabel, chapter.periodStart, chapter.periodEnd, locale);
+  const period = chapterPeriod(chapter, locale);
   const ages = agesText(chapter, t);
   const stage = chapter.lifeStage ? t(`stage.${chapter.lifeStage}`) : "";
   const v5 = Boolean(chapter.lifeStage || chapter.action || chapter.chapterDomains.length);

@@ -71,6 +71,21 @@ export class BirthPackViews {
   }
 
   /** v5: two sentences on where the story has been and what this stretch builds toward. */
+  /** Set when the Life timeline is estimated from a birth-time range (no exact time, no star). */
+  timelineEstimate(): { confidence: number; uncertaintyMonths: number; split: boolean; star: string; secondStar: string | null; secondShare: number; basis: string } | null {
+    const e = this.content.timeline_estimate as Record<string, unknown> | undefined;
+    if (!e || typeof e !== "object") return null;
+    return {
+      confidence: Number(e.confidence ?? 0),
+      uncertaintyMonths: Number(e.uncertaintyMonths ?? 0),
+      split: e.split === true,
+      star: e.star?.toString() ?? "",
+      secondStar: e.secondStar ? e.secondStar.toString() : null,
+      secondShare: Number(e.secondShare ?? 0),
+      basis: e.basis?.toString() ?? "time_range",
+    };
+  }
+
   get lifeStory(): string {
     return this.content.life_story?.toString() ?? "";
   }
@@ -194,6 +209,8 @@ export class BirthPackViews {
           lifeStage: p.lifeStage?.toString() ?? "",
           chapterDomains: strList(p.chapterDomains),
           arcMd: p.arcMd?.toString() ?? "",
+          approxDates: p.approxDates === true,
+          themeOnly: p.themeOnly === true,
         } satisfies ChapterView;
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);

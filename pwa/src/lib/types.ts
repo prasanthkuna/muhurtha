@@ -44,6 +44,10 @@ export type ChapterView = {
   transitionNote: string;
   periodStart?: string;
   periodEnd?: string;
+  /** Timeline estimated from a birth-time range: boundaries read "around <month year>". */
+  approxDates?: boolean;
+  /** Split-star estimate near today: show themes instead of dates. */
+  themeOnly?: boolean;
   /** "summary" = one compact row for a whole mahadasha (or the early years); default "detail". */
   kind: "detail" | "summary";
   /** Summary rows: every mahadasha lord in the span. */

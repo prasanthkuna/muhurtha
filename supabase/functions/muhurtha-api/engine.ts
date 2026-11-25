@@ -1,4 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { estimateTimeline, type TimelineEstimate } from "./timeline_estimate.ts";
+import { nakshatraIndex } from "./vimshottari.ts";
 import { DateTime } from "luxon";
 import { antardashaFallbackCopy, plainPeriodLabel } from "./copy.ts";
 import { resolveBirthPlace, resolveCoordinates } from "./geo_resolver.ts";
@@ -3249,6 +3251,7 @@ export function buildReadingFacts(
   const lords = segments.length ? vimshottariLordsAt(segments, refInstant) : null;
   const kernel = buildKernelForBirthInput(bi, profile, locale, refInstant, lords?.mdLord, lords?.adLord);
   const plans = buildLifeTimelinePlans(bi, profile, locale, refInstant, kernel);
+  const timelineEstimate = computeTimeline(bi, profile.current_timezone ?? "Asia/Kolkata").estimate ?? null;
   const natal = birthMoonDetails(bi, tz, locale);
   const age = calculateAge(bi.date_of_birth);
   const isChild = Number.isFinite(age) && age < 13;
@@ -3374,6 +3377,7 @@ export function buildReadingFacts(
   return {
     schema_version: 2,
     facts_version: chart ? (useV5 ? 5 : 4) : 3,
+    ...(timelineEstimate ? { timeline_estimate: timelineEstimate } : {}),
     ...(chart ? { chart, story } : {}),
     meanings: meaningsFor(days),
     locale: locale as V2Facts["locale"],
@@ -4378,11 +4382,27 @@ function vimshottariEpochUtc(bi: BioRow, zone: string): Date {
   return parseBirthDate(String(bi.date_of_birth).slice(0, 10));
 }
 
+const estimateCache = new Map<string, ReturnType<typeof estimateTimeline>>();
+
+/** Birth-time range (or unknown time) and no star: the sampled majority-star estimate. */
+function timelineEstimateFor(bi: BioRow, zone: string) {
+  if (bi.exact_birth_time || nakshatraIndex(bi.janma_nakshatra) != null || !bi.date_of_birth) return null;
+  // Day-level key: the current-mahadasha share only moves on period boundaries.
+  const key = [bi.date_of_birth, bi.time_bucket ?? "", zone, new Date().toISOString().slice(0, 10)].join("|");
+  if (!estimateCache.has(key)) {
+    if (estimateCache.size > 500) estimateCache.clear();
+    estimateCache.set(key, estimateTimeline(String(bi.date_of_birth), zone, bi.time_bucket));
+  }
+  return estimateCache.get(key) ?? null;
+}
+
 function computeTimeline(
   bi: BioRow,
   profileTimezone: string,
-): { segments: MdSegment[]; nk: number | null; moonFraction: number | null } {
+): { segments: MdSegment[]; nk: number | null; moonFraction: number | null; estimate?: TimelineEstimate } {
   const zone = resolveBirthZone(bi, profileTimezone);
+  const est = timelineEstimateFor(bi, zone);
+  if (est) return { segments: est.segments, nk: est.nk, moonFraction: est.moonFraction, estimate: est.estimate };
   const epoch = vimshottariEpochUtc(bi, zone);
   const moonUtc = birthInstantUtc(bi, zone);
   const moonLon = moonUtc != null ? moonSiderealLongitudeDeg(moonUtc) : null;

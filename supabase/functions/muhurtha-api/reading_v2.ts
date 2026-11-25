@@ -128,6 +128,8 @@ export type V2Facts = {
   generation_date: string;
   timezone: string;
   is_child: boolean;
+  /** Birth-time range / unknown time with no star: the sampled estimate the timeline is dated from. */
+  timeline_estimate?: import("./timeline_estimate.ts").TimelineEstimate | null;
   age: number | null;
   life_stage: string;
   subject: { name: string | null; is_account_owner: boolean };
@@ -465,6 +467,7 @@ export function buildSystemPrompt(facts: V2Facts): string {
     "Voice: warm, specific, everyday, a little playful. Short sentences. Second person ('you') for the account owner; for another person use their name.",
     VOICE_BLOCK[facts.locale],
     DATE_RULE,
+    ...(facts.timeline_estimate ? [APPROX_RULE] : []),
     "Rules:",
     "1. The engine owns all facts. Never write clock times, durations in hours, years, dates, ages or planet/graha names in days, weekdays, weeks, months or push. Planet names are allowed only inside chapters and profile, and only when they help.",
     ...(isV3(facts) ? dayRulesV3(facts) : [
@@ -487,6 +490,8 @@ export function buildSystemPrompt(facts: V2Facts): string {
   ].join("\n");
 }
 
+const APPROX_RULE = "APPROXIMATE TIMELINE: the birth time is only a range, so every chapter period is an estimate (FACTS.timeline_estimate). In chapter text never name a month, never pin a change to an exact year, and never say 'exactly' or 'on'; speak of stretches and ages ('in your early thirties', 'around the end of this stretch'). When you mention the next chapter, say it comes 'around' that time.";
+
 /** v5: one clean prompt (the shared, cached prefix for every part). */
 function buildSystemPromptV5(facts: V2Facts): string {
   const lang = LANGUAGE_NAME[facts.locale];
@@ -498,8 +503,15 @@ function buildSystemPromptV5(facts: V2Facts): string {
     "Voice: warm, specific, everyday. Short sentences. 'You' for the account owner; for another person use their name.",
     VOICE_BLOCK[facts.locale],
     DATE_RULE,
+    ...(facts.timeline_estimate ? [APPROX_RULE] : []),
     ...v5Rules(facts, OPENERS_LINE, banned),
   ].join("\n");
+}
+
+const STAR_HI = ["अश्विनी", "भरणी", "कृत्तिका", "रोहिणी", "मृगशिरा", "आर्द्रा", "पुनर्वसु", "पुष्य", "आश्लेषा", "मघा", "पूर्व फाल्गुनी", "उत्तर फाल्गुनी", "हस्त", "चित्रा", "स्वाति", "विशाखा", "अनुराधा", "ज्येष्ठा", "मूल", "पूर्वाषाढ़ा", "उत्तराषाढ़ा", "श्रवण", "धनिष्ठा", "शतभिषा", "पूर्व भाद्रपद", "उत्तर भाद्रपद", "रेवती"];
+function estStarName(idx: number, locale: string): string {
+  const en = Object.keys(NAKSHATRA_TE)[idx] ?? "";
+  return locale === "te" ? NAKSHATRA_TE[en] ?? en : locale === "hi" ? STAR_HI[idx] ?? en : en;
 }
 
 // ---------------------------------------------------------------- grounding hints (engine-owned)
@@ -1332,6 +1344,10 @@ export function buildReadingView(raw: V2Content, factsIn: V2Facts, opts: ViewOpt
     : [...(c.chapters ?? [])].filter((ch) => chFacts.has(Number(ch.chapter_id))))
     .sort((a, b) => Number(a.chapter_id) - Number(b.chapter_id)) as (V2Content["chapters"][number] & { pending?: boolean })[];
   const evRef = new Map((facts.chart?.evidence ?? []).map((e) => [e.id, e.ref]));
+  const est = facts.timeline_estimate ?? null;
+  // Split star (roughly 50/50): boundaries within the uncertainty of today read as themes, not dates.
+  const nearMs = Math.max(12, est?.uncertainty_months ?? 0) * 30.44 * 86_400_000;
+  const nearNow = (iso?: string | null) => Boolean(iso) && Math.abs(Date.parse(iso!) - now) <= nearMs;
   let firstFutureSeen = false;
   const journeyPhases = chapters.map((ch) => {
     const f = chFacts.get(Number(ch.chapter_id))!;
@@ -1360,6 +1376,7 @@ export function buildReadingView(raw: V2Content, factsIn: V2Facts, opts: ViewOpt
       domainLenses: f.lenses,
       shareHook: ch.share_line,
       tense,
+      ...(est ? { approxDates: true, ...(est.split && (nearNow(f.start_iso) || nearNow(f.end_iso)) ? { themeOnly: true } : {}) } : {}),
       freePreview: tense === "current" || isFirstFuture,
       ...(v4 ? { pending: Boolean(ch.pending), evidence: (ch.evidence_ids ?? []).map((id) => evRef.get(id)).filter(Boolean) } : {}),
       // A chapter's reason lives in its body (t97u); an older reading's stored chapter "why" is not
@@ -1430,6 +1447,19 @@ export function buildReadingView(raw: V2Content, factsIn: V2Facts, opts: ViewOpt
     ...(v4 ? { chart_evidence: { houses_from: facts.chart!.ref, confidence: facts.chart!.confidence, profile: (c.profile?.evidence_ids ?? []).map((id) => evRef.get(id)).filter(Boolean) } } : {}),
     journey_phases: journeyPhases,
     journey_phase_facts: journeyFacts,
+    ...(est ? {
+      timeline_estimate: {
+        basis: est.basis,
+        confidence: est.confidence,
+        starShare: est.star_share,
+        mdShare: est.md_share,
+        uncertaintyMonths: est.uncertainty_months,
+        split: est.split,
+        star: estStarName(est.nak, facts.locale),
+        secondStar: est.second_nak != null && est.second_share >= 0.15 ? estStarName(est.second_nak, facts.locale) : null,
+        secondShare: est.second_share,
+      },
+    } : {}),
     today_cards: todayCards,
     weekly_cards: weekly,
     monthly_cards: monthly,

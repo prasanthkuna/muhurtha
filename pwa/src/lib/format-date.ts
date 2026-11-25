@@ -66,3 +66,28 @@ function localizeMonthNames(label: string, locale: AppLocale): string {
       : dt.toLocaleString({ month: "short" });
   });
 }
+
+const AROUND: Record<AppLocale, (d: string) => string> = {
+  en: (d) => `around ${d}`,
+  te: (d) => `సుమారు ${d}`,
+  hi: (d) => `लगभग ${d}`,
+};
+
+/** One boundary month, "around Mar 2031" when the timeline is estimated from a birth-time range. */
+export function chapterMonth(value: string | null | undefined, locale: AppLocale, approx?: boolean): string {
+  const d = formatMonthYear(value, locale);
+  return d && approx ? AROUND[locale](d) : d;
+}
+
+/** A chapter's period for display. Estimated timelines say "around <month year>" at both ends;
+ *  boundaries too close to call (split star, near today) show the chapter's themes instead. */
+export function chapterPeriod(
+  c: { periodLabel: string; periodStart?: string; periodEnd?: string; approxDates?: boolean; themeOnly?: boolean; focusAreas?: string[] },
+  locale: AppLocale = "en",
+): string {
+  if (c.themeOnly && c.focusAreas?.length) return c.focusAreas.slice(0, 2).join(" · ");
+  if (c.approxDates && c.periodStart && c.periodEnd && /^\d{4}-\d{2}/.test(c.periodStart) && /^\d{4}-\d{2}/.test(c.periodEnd)) {
+    return `${chapterMonth(c.periodStart, locale, true)} – ${chapterMonth(c.periodEnd, locale, true)}`;
+  }
+  return formatPeriod(c.periodLabel, c.periodStart, c.periodEnd, locale);
+}
