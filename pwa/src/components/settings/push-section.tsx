@@ -228,7 +228,7 @@ export function PushSection() {
       ) : null}
       {on ? <p className="px-1 text-xs text-ink-tertiary">{t("settings.pushSpamHelp")}</p> : null}
       {status && !on && status.permission === "default" && pushWantedByDefault() && !msg ? (
-        <p className="px-1 text-sm text-ink-secondary" data-testid="push-default-note">{t("pushDefault.body")}</p>
+        <p className="px-1 text-sm text-ink-secondary" data-testid="push-default-note">{t("pushDefault.settingsNote")}</p>
       ) : null}
       {status?.permission === "denied" && !msg ? (
         <p className="px-1 text-sm text-warning-ink">{t("settings.pushBlockedHelp")}</p>
