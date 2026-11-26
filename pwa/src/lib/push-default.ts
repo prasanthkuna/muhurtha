@@ -61,7 +61,8 @@ export async function shouldOfferPush(): Promise<boolean> {
   const perm = permissionState();
   if (perm === "denied" || perm === "unsupported") return false;
   if (perm === "granted" && (await currentSubscription().catch(() => null))) return false;
-  if (perm === "granted") return false; // handled silently by autoEnablePush
+  // Granted but not subscribed means the silent auto-subscribe failed: the card's button
+  // retries without any browser prompt (same snooze limits).
   const s = promptState();
   if (s.n >= MAX_DISMISSALS) return false;
   if (s.n > 0 && Date.now() - s.at < SNOOZE_MS) return false;

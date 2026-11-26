@@ -26,7 +26,7 @@ export function PushDefaultCard() {
           logProduct("push_prompt_view", { surface: "decode" });
         }
       });
-    }, 1500);
+    }, 4000);
     return () => {
       live = false;
       window.clearTimeout(id);
