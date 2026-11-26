@@ -14,6 +14,7 @@ import { useLocale } from "@/context/locale-context";
 import { isChildStage } from "@/lib/life-stage";
 import { ShareCardButton } from "@/components/share/share-button";
 import { AfterReadingInstall } from "@/components/pwa/after-reading-install";
+import { PushDefaultCard } from "@/components/engagement/push-default-card";
 import { clip, rashiGlyph } from "@/lib/share/builders";
 import { fill, nakLabel } from "@/lib/messages-bond";
 import { formatWindowRange } from "@/lib/format-time";
@@ -91,6 +92,7 @@ export default function DecodePage() {
         ) : null}
       </div>
 
+      {!isChildStage(activeLifeStage) ? <PushDefaultCard /> : null}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gold-text">{t("decode.strengths")}</h2>

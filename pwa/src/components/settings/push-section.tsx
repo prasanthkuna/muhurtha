@@ -17,6 +17,7 @@ import {
   DEFAULT_PREFS,
 } from "@/lib/web-push";
 import { InstallChip } from "@/components/pwa/install-chip";
+import { pushWantedByDefault, setPushChoice } from "@/lib/push-default";
 import { usePwaInstall } from "@/lib/pwa-install";
 
 function StatusRow({ label, value, tone }: { label: string; value: string; tone?: "ok" | "warn" }) {
@@ -73,8 +74,10 @@ export function PushSection() {
     try {
       if (on) {
         await disablePush();
+        setPushChoice("off");
       } else {
         await enablePush(locale, profileTimezone || "Asia/Kolkata", status?.prefs);
+        setPushChoice("on");
         setMsg({ text: t("settings.pushEnabled"), tone: "ok" });
       }
     } catch (e) {
@@ -224,6 +227,9 @@ export function PushSection() {
         </>
       ) : null}
       {on ? <p className="px-1 text-xs text-ink-tertiary">{t("settings.pushSpamHelp")}</p> : null}
+      {status && !on && status.permission === "default" && pushWantedByDefault() && !msg ? (
+        <p className="px-1 text-sm text-ink-secondary" data-testid="push-default-note">{t("pushDefault.body")}</p>
+      ) : null}
       {status?.permission === "denied" && !msg ? (
         <p className="px-1 text-sm text-warning-ink">{t("settings.pushBlockedHelp")}</p>
       ) : null}

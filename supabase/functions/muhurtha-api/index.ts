@@ -43,6 +43,7 @@ const FUNNEL_EVENTS = new Set([
   "onboarding_submit", "reading_ready", "install_prompt_view", "install_accept", "share_landing_view",
   "share_cta", "share_whatsapp", "match_prefill", "paywall_view", "paywall_cta", "pro_purchased",
   "pro_welcome_view", "pro_welcome_cta", "moved_sheet_view", "moved_sheet_action",
+  "push_prompt_view", "push_prompt_accept", "push_prompt_later", "push_prompt_fail", "push_auto_enabled",
 ]);
 
 const cors: Record<string, string> = {

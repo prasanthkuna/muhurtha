@@ -5,6 +5,7 @@ import { useLocale } from "@/context/locale-context";
 import { useAppData, type PackPreparing } from "@/context/app-data-context";
 import { MYTH_COUNT } from "@/lib/messages-reading";
 import { currentSubscription, enablePush, permissionState, pushSupported } from "@/lib/web-push";
+import { autoEnablePush, pushWantedByDefault, setPushChoice } from "@/lib/push-default";
 import { ChartFactsCard } from "@/components/v5/states";
 
 /**
@@ -173,7 +174,11 @@ export function NavagrahaLoader({ preparing, name }: { preparing: PackPreparing;
   useEffect(() => {
     void (async () => {
       if (!pushSupported() || permissionState() === "denied") return;
-      const sub = await currentSubscription().catch(() => null);
+      let sub = await currentSubscription().catch(() => null);
+      // On by default: permission already granted → subscribe without another tap.
+      if (!sub && permissionState() === "granted" && pushWantedByDefault()) {
+        if (await autoEnablePush(locale, profileTimezone || "Asia/Kolkata")) sub = await currentSubscription().catch(() => null);
+      }
       setNotify(sub && permissionState() === "granted" ? "on" : "offer");
     })();
   }, []);
@@ -190,6 +195,7 @@ export function NavagrahaLoader({ preparing, name }: { preparing: PackPreparing;
     setNotify("busy");
     try {
       await enablePush(locale, profileTimezone || "Asia/Kolkata");
+      setPushChoice("on");
       setNotify("on");
     } catch {
       setNotify("offer");

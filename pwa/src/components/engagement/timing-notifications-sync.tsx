@@ -6,6 +6,8 @@ import { useAppData } from "@/context/app-data-context";
 import { useLocale } from "@/context/locale-context";
 import { clearScheduledNotifications, setNotificationsEnabled } from "@/lib/timing-notifications";
 import { resubscribed, syncPushSubscription } from "@/lib/web-push";
+import { autoEnablePush } from "@/lib/push-default";
+import { logProduct } from "@/lib/product-events";
 import { claimAttribution } from "@/lib/share/attribution";
 
 const LEGACY_KEY = "muh_timing_notifications_v1";
@@ -62,6 +64,16 @@ export function TimingNotificationsSync() {
   useEffect(() => {
     void syncPushSubscription(locale, profileTimezone || "Asia/Kolkata");
   }, [locale, profileTimezone]);
+
+  // Notifications are on by default: a phone that already allowed them gets subscribed
+  // (once per app load) unless the user turned them off in Settings.
+  useEffect(() => {
+    if (!userId) return;
+    void autoEnablePush(locale, profileTimezone || "Asia/Kolkata").then((ok) => {
+      if (ok) logProduct("push_auto_enabled", {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;

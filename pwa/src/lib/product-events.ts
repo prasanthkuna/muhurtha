@@ -5,7 +5,8 @@ export type ProductEvent =
   | "welcome_view" | "welcome_locale" | "teaser_submit" | "teaser_result" | "signin_click" | "onboarding_view"
   | "onboarding_submit" | "reading_ready" | "install_prompt_view" | "install_accept" | "share_landing_view"
   | "share_cta" | "share_whatsapp" | "match_prefill" | "paywall_view" | "paywall_cta" | "pro_purchased"
-  | "pro_welcome_view" | "pro_welcome_cta" | "moved_sheet_view" | "moved_sheet_action";
+  | "pro_welcome_view" | "pro_welcome_cta" | "moved_sheet_view" | "moved_sheet_action"
+  | "push_prompt_view" | "push_prompt_accept" | "push_prompt_later" | "push_prompt_fail" | "push_auto_enabled";
 
 const ANON_KEY = "muh_anon_id_v1";
 
